@@ -371,6 +371,7 @@ struct MediaDetailsColumn: View {
     private func stats(_ media: Media) -> some View {
         if model.isRemote {
             PostActionBar(media: media, size: 22)
+            LikedByLine(media: media)
         }
         if !media.countsHidden, let n = media.viewCount, n > 0 {
             Text("\(n.compact) plays").font(.system(size: 12)).foregroundStyle(.secondary)

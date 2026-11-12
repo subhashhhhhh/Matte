@@ -87,7 +87,40 @@ final class StoryViewerModel {
             }
         }
         app?.feed?.markSeen(reel.id)
+        markSeenSoon(item, reelId: reel.id)
+        preloadAhead()
         Task { await fetch(around: reelIndex) }
+    }
+
+    @ObservationIgnored private var markedSeen = Set<String>()
+    @ObservationIgnored private var seenTask: Task<Void, Never>?
+
+    /// Logs the item as watched on Instagram once it has been on screen for a second (skipping
+    /// past doesn't count), once per item.
+    private func markSeenSoon(_ item: Media, reelId: String) {
+        seenTask?.cancel()
+        guard !markedSeen.contains(item.pk) else { return }
+        seenTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard let self, !Task.isCancelled, self.item?.pk == item.pk else { return }
+            self.markedSeen.insert(item.pk)
+            do { try await self.client.markStorySeen(reelId: reelId, media: item) } catch {
+                self.markedSeen.remove(item.pk)
+            }
+        }
+    }
+
+    /// Downloads the next few items (this account's and the next one's first) so they show at once.
+    private func preloadAhead() {
+        var urls: [URL] = []
+        let items = reel.items
+        for i in (itemIndex + 1)..<min(items.count, itemIndex + 3) {
+            if let u = items[i].image(minWidth: 720) { urls.append(u) }
+        }
+        if reels.indices.contains(reelIndex + 1), let first = reels[reelIndex + 1].items.first, let u = first.image(minWidth: 720) {
+            urls.append(u)
+        }
+        Task { await ImagePipeline.shared.prefetch(urls) }
     }
 
     func next() {

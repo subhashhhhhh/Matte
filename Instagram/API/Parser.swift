@@ -36,6 +36,20 @@ nonisolated enum Parser {
         m.hasLiked = j["has_liked"].bool ?? false
         m.hasSaved = j["has_viewer_saved"].bool ?? false
         m.countsHidden = j["like_and_view_counts_disabled"].bool ?? false
+        for context in j["social_context"].array where context["social_context_type"].string == "liked_by" {
+            m.likedBy = context["social_context_facepile_users"].array.compactMap(user)
+            m.likedByCount = context["social_context_users_count"].int
+        }
+        if m.likedBy.isEmpty {
+            // Pictures only (no names): still worth the bubbles.
+            m.likedBy = j["facepile_top_likers"].array.compactMap { u in
+                guard let id = idString(u["pk"]) ?? idString(u["id"]) else { return nil }
+                return User(id: id, username: u["username"].string ?? "", fullName: "",
+                            avatar: u["profile_pic_url"].string.flatMap(URL.init(string:)))
+            }
+        }
+        m.topLikers = j["top_likers"].array.compactMap(\.string)
+        m.repostCount = j["media_repost_count"].int
         m.images = renditions(j["image_versions2"]["candidates"])
         m.videos = renditions(j["video_versions"])
         m.hasAudio = j["has_audio"].bool ?? true

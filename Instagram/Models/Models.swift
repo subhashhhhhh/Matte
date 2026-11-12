@@ -46,6 +46,12 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     var hasSaved = false
     /// The owner hides like and view counts (`likeCount` is then only friends' likes).
     var countsHidden = false
+    /// People you follow who liked it (Instagram's "Liked by … and others" bubbles).
+    var likedBy: [User] = []
+    var likedByCount: Int?
+    /// Usernames Instagram names as likers when it has no profile pictures for them.
+    var topLikers: [String] = []
+    var repostCount: Int?
     var images: [Rendition] = []
     var videos: [Rendition] = []
     var hasAudio = true

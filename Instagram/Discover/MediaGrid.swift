@@ -59,7 +59,7 @@ struct GridTile: View {
             }
             .clipped()
             .animation(.easeOut(duration: 0.35), value: hovering)
-            .photoFlightTile(media.pk)
+            .photoFlightTile(media)
             .overlay(alignment: .topTrailing) {
                 Group {
                     if media.children.count > 1 {
