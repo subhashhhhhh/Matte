@@ -4,7 +4,9 @@ import OSLog
 /// The DM inbox and the open conversation.
 @Observable
 final class InboxModel {
-    private(set) var threads: [DMThread] = []
+    private(set) var threads: [DMThread] = [] {
+        didSet { if !Self.isTesting { DMNotifier.setBadge(unreadCount) } }
+    }
     private(set) var isLoading = false
     private(set) var loadFailed = false
     var selectedId: String? {
@@ -33,6 +35,59 @@ final class InboxModel {
     init(app: AppModel, client: IGClient) {
         self.app = app
         self.client = client
+        guard !Self.isTesting else { return }
+        // Messages arrive (and notify) whichever page is open: load the inbox and connect the
+        // real-time socket shortly after launch.
+        DMNotifier.shared.open = { [weak self] id in self?.openFromNotification(id) }
+        DMNotifier.shared.start()
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            await self?.loadIfNeeded()
+        }
+        activeObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
+                                                                queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.appBecameActive() }
+        }
+    }
+
+    /// Unit tests build models without the app around them: no notifications, Dock badge or
+    /// background loading there.
+    nonisolated static let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        || NSClassFromString("XCTestCase") != nil
+    @ObservationIgnored private var activeObserver: NSObjectProtocol?
+
+    private func openFromNotification(_ threadId: String) {
+        app?.openChat(threadId)
+        DMNotifier.shared.clear(thread: threadId)
+    }
+
+    /// Back in the app: the open chat counts as seen now.
+    private func appBecameActive() {
+        guard let conversation, app?.destination == .messages else { return }
+        DMNotifier.shared.clear(thread: conversation.thread.id)
+        Task { await conversation.markReadIfVisible() }
+    }
+
+    /// Whether you're looking at this chat right now (the app in front, on Messages, chat open).
+    func isWatching(_ threadId: String) -> Bool {
+        NSApp.isActive && app?.destination == .messages && conversation?.thread.id == threadId
+            && NSApp.keyWindow != nil
+    }
+
+    /// A notification for a new message from someone else, unless you're looking at that chat.
+    private func notifyIfNeeded(_ threadId: String, _ message: DMMessage) async {
+        guard !Self.isTesting, !isWatching(threadId), Date.now.timeIntervalSince(message.sentAt) < 600 else { return }
+        var thread = threads.first { $0.id == threadId }
+        if thread == nil {
+            await refresh()
+            thread = threads.first { $0.id == threadId }
+        }
+        guard let thread, !thread.isMuted else { return }
+        // Not our own messages (sent from another device, echoed back).
+        let me: String? = if let id = thread.viewerMessagingId { id } else { await client.page.messagingId }
+        guard let me, message.senderId != me else { return }
+        if case .notice = message.body { return }
+        DMNotifier.shared.notify(thread: thread, message: message, sender: thread.users.first { $0.messagingId == message.senderId })
     }
 
     var selected: DMThread? { threads.first { $0.id == selectedId } }
@@ -43,6 +98,18 @@ final class InboxModel {
         await refresh()
         startRealtime()
         startPolling()
+        #if DEBUG
+        // `-IGTestNotification YES`: post a local notification for the first chat (checks the
+        // notification and click-to-open path; nothing is sent to Instagram).
+        if UserDefaults.standard.bool(forKey: "IGTestNotification"), let t = threads.first {
+            let other = t.users.first?.messagingId ?? "0"
+            DMNotifier.shared.notify(thread: t, message: DMMessage(id: "test-\(Int(Date.now.timeIntervalSince1970))", senderId: other,
+                                                                   sentAt: .now, body: .text("Test notification")),
+                                     sender: t.users.first)
+            try? await Task.sleep(for: .seconds(2))
+            DMNotifier.shared.logDelivered()
+        }
+        #endif
     }
 
     func refresh() async {
@@ -101,6 +168,7 @@ final class InboxModel {
         guard let thread = selected else { return }
         conversation = ConversationModel(inbox: self, thread: thread, client: client)
         if let i = threads.firstIndex(where: { $0.id == thread.id }) { threads[i].isUnread = false }
+        if !Self.isTesting { DMNotifier.shared.clear(thread: thread.id) }
     }
 
     func report(_ error: Error) { app?.report(error) }
@@ -156,6 +224,7 @@ final class InboxModel {
         case .message(let id, let message):
             conversation(id)?.receive(message)
             bumpRow(id, with: message)
+            await notifyIfNeeded(id, message)
         case .messageDeleted(let id, let messageId):
             conversation(id)?.remove(messageId)
             refreshInboxSoon()
@@ -351,7 +420,7 @@ final class ConversationModel {
         if changed {
             messages.sort { $0.sentAt < $1.sentAt }
             newestToken += 1
-            await markRead()
+            await markReadIfVisible()
         }
     }
 
@@ -370,8 +439,15 @@ final class ConversationModel {
         }
         if message.senderId != viewerId {
             setPeerTyping(false)
-            Task { await markRead() }
+            Task { await markReadIfVisible() }
         }
+    }
+
+    /// Marks the chat read only while you can see it (the app in front); otherwise when you
+    /// come back to it.
+    func markReadIfVisible() async {
+        guard InboxModel.isTesting || inbox?.isWatching(thread.id) == true else { return }
+        await markRead()
     }
 
     func remove(_ messageId: String) {
