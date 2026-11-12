@@ -62,7 +62,7 @@ final class StoryEditorModel {
     @ObservationIgnored private var textBefore: StoryDoc?
     @ObservationIgnored private var textIsNew = false
     @ObservationIgnored private var lastText = StoryText()
-    @ObservationIgnored private var images: [UUID: (kind: StoryItem.Kind, ppu: CGFloat, image: CGImage, size: CGSize)] = [:]
+    @ObservationIgnored private var images: [UUID: (kind: StoryItem.Kind, ppu: CGFloat, piece: Piece)] = [:]
     @ObservationIgnored private var filterTask: Task<Void, Never>?
     @ObservationIgnored private var exportTask: Task<Void, Never>?
     @ObservationIgnored private var exported: (doc: StoryDoc, media: PreparedMedia)?
@@ -249,12 +249,21 @@ final class StoryEditorModel {
 
     /// A text item or sticker as an image, made again only when its content changes or it
     /// grows much bigger than it was drawn for.
-    func image(for item: StoryItem) -> (image: CGImage, size: CGSize)? {
+    func image(for item: StoryItem) -> Piece? {
         let want = min(4, (displayPPU * max(1, item.scale) * 4).rounded(.up) / 4)
-        if let c = images[item.id], c.kind == item.kind, c.ppu >= want * 0.8 { return (c.image, c.size) }
+        if let c = images[item.id], c.kind == item.kind, c.ppu >= want * 0.8 { return c.piece }
         guard let r = StoryRenderer.image(of: item.kind, ppu: want) else { return nil }
-        images[item.id] = (item.kind, want, r.image, r.size)
-        return r
+        let piece = Piece(image: r.image, size: r.size, inset: r.inset)
+        images[item.id] = (item.kind, want, piece)
+        return piece
+    }
+
+    /// A piece's raster, its size in units, and the margin around what's visible.
+    struct Piece {
+        var image: CGImage
+        var size: CGSize
+        var inset: CGFloat
+        var box: CGSize { CGSize(width: size.width - 2 * inset, height: size.height - 2 * inset) }
     }
 
     private func redrawDrawing() {

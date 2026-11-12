@@ -727,7 +727,7 @@ private struct EmptyStoryPicker: View {
             .background(RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [7, 6]))
                 .foregroundStyle(.white.opacity(targeted ? 0.4 : 0.12))
-                .padding(40))
+                .padding(.horizontal, 160).padding(.top, 52).padding(.bottom, 40))
             .onDrop(of: [.fileURL], isTargeted: $targeted) { providers in
                 Task {
                     if let url = await CreateSheet.urls(from: providers).first(where: CreateMedia.isMedia) { await model.load(url) }

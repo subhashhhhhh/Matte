@@ -40,7 +40,7 @@ struct StoryCanvas: View {
             guides
             if let id = model.selection, dragging == nil, model.mode == .normal,
                let item = model.doc.items.first(where: { $0.id == id }) {
-                SelectionFrame(item: transform(item), box: model.image(for: item)?.size ?? .zero, k: k,
+                SelectionFrame(item: transform(item), box: model.image(for: item)?.box ?? .zero, k: k,
                                onHandle: { handle($0, item: item) }, onHandleEnd: { endItemGesture(item.id) })
             }
             if dragging != nil { trashZone }
@@ -140,7 +140,7 @@ struct StoryCanvas: View {
                     .resizable()
                     .interpolation(.high)
                     .frame(width: r.size.width * k, height: r.size.height * k)
-                    .contentShape(Rectangle())
+                    .contentShape(Rectangle().inset(by: r.inset * k))
                     .scaleEffect(t.scale * (trashing ? 0.35 : 1))
                     .rotationEffect(.radians(t.rotation))
                     .opacity(trashing ? 0.6 : 1)
@@ -216,7 +216,7 @@ struct StoryCanvas: View {
     /// The corner handle: distance from the centre scales, the angle turns.
     private func handle(_ location: CGPoint, item: StoryItem) {
         let base = itemBase ?? ItemLive(id: item.id, center: item.center, scale: item.scale, rotation: item.rotation)
-        let box = model.image(for: item)?.size ?? CGSize(width: 100, height: 100)
+        let box = model.image(for: item)?.box ?? CGSize(width: 100, height: 100)
         if itemBase == nil { itemBase = base }
         let start = CGPoint(x: box.width / 2 * base.scale, y: box.height / 2 * base.scale)
         let startAngle = atan2(start.y, start.x) + base.rotation

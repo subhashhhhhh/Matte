@@ -19,6 +19,12 @@ import AVFoundation
 enum DebugStoryEditor {
     static func openIfAsked(_ app: AppModel) {
         let d = UserDefaults.standard
+        // `-IGShowCreateMenu YES`: the "+" menu. `-IGDropTest video|photo`: as if a generated
+        // test file were dropped on the window.
+        if d.bool(forKey: "IGShowCreateMenu") { app.showCreateMenu = true }
+        if let kind = d.string(forKey: "IGDropTest") {
+            Task { if let url = try? await makeMedia(kind) { app.dropped([url]) } }
+        }
         guard let kind = d.string(forKey: "IGStoryEditor") else { return }
         app.openStoryEditor()
         guard let model = app.storyEditor else { return }

@@ -33,6 +33,9 @@ nonisolated enum StoryRenderer {
     /// coordinates, the frame and each line's highlight rectangle.
     struct Layout {
         var size: CGSize
+        /// Room around the visible piece (for a glow) that isn't part of it: hit testing and
+        /// the selection frame use the box inset by this much on each side.
+        var inset: CGFloat
         var frame: CTFrame
         var lineRects: [CGRect]
         var fontSize: CGFloat
@@ -50,13 +53,17 @@ nonisolated enum StoryRenderer {
         switch kind {
         case .text(let t):
             let s = t.style.uppercased ? t.string.uppercased() : t.string
-            return layout(s, font: font(t.style), color: foreground(t), alignment: t.alignment, lineSpacing: t.style == .neon ? -0.1 : 0)
+            return layout(s, font: font(t.style), color: foreground(t), alignment: t.alignment, lineSpacing: t.style == .neon ? -0.1 : 0,
+                          pad: 0.5, visible: 0.3)
         case .sticker(let e):
-            return layout(e, font: emojiFont(), color: .white, alignment: .center, lineSpacing: 0)
+            return layout(e, font: emojiFont(), color: .white, alignment: .center, lineSpacing: 0, pad: 0.1, visible: 0.05)
         }
     }
 
-    static func layout(_ string: String, font: CTFont, color: StoryColor, alignment: StoryAlignment, lineSpacing: CGFloat) -> Layout? {
+    /// `pad` and `visible`: the box's margin around the text, and how much of it counts as the
+    /// piece, as fractions of the font size.
+    static func layout(_ string: String, font: CTFont, color: StoryColor, alignment: StoryAlignment, lineSpacing: CGFloat,
+                       pad padRatio: CGFloat, visible: CGFloat) -> Layout? {
         let text = string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
         var align: CTTextAlignment = switch alignment {
@@ -82,7 +89,7 @@ nonisolated enum StoryRenderer {
         let setter = CTFramesetterCreateWithAttributedString(attributed)
         let fit = CTFramesetterSuggestFrameSizeWithConstraints(setter, CFRange(location: 0, length: 0), nil,
                                                                CGSize(width: textWrap, height: .greatestFiniteMagnitude), nil)
-        let pad = (fontSize * 0.5).rounded(.up)
+        let pad = (fontSize * padRatio).rounded(.up)
         let textW = ceil(fit.width) + 2, textH = ceil(fit.height) + 2
         let size = CGSize(width: textW + 2 * pad, height: textH + 2 * pad)
         let path = CGPath(rect: CGRect(x: pad, y: pad, width: textW, height: textH), transform: nil)
@@ -99,7 +106,7 @@ nonisolated enum StoryRenderer {
             guard width > 0 else { continue }
             rects.append(CGRect(x: pad + o.x - hpad, y: pad + o.y - descent - vpad, width: width + 2 * hpad, height: ascent + descent + 2 * vpad))
         }
-        return Layout(size: size, frame: frame, lineRects: rects, fontSize: fontSize)
+        return Layout(size: size, inset: max(0, pad - fontSize * visible), frame: frame, lineRects: rects, fontSize: fontSize)
     }
 
     /// The item's box in units (before its scale), for hit testing and handles.
@@ -156,14 +163,14 @@ nonisolated enum StoryRenderer {
     }
 
     /// An item alone, as an image `ppu` pixels per unit, and its box in units.
-    static func image(of kind: StoryItem.Kind, ppu: CGFloat) -> (image: CGImage, size: CGSize)? {
+    static func image(of kind: StoryItem.Kind, ppu: CGFloat) -> (image: CGImage, size: CGSize, inset: CGFloat)? {
         guard let l = layout(kind) else { return nil }
         let w = Int((l.size.width * ppu).rounded(.up)), h = Int((l.size.height * ppu).rounded(.up))
         guard let ctx = context(width: w, height: h) else { return nil }
         ctx.translateBy(x: 0, y: CGFloat(h))
         ctx.scaleBy(x: ppu, y: -ppu)
         draw(kind, layout: l, in: ctx, ppu: ppu)
-        return ctx.makeImage().map { ($0, l.size) }
+        return ctx.makeImage().map { ($0, l.size, l.inset) }
     }
 
     // MARK: Drawing strokes
