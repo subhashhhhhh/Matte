@@ -519,11 +519,13 @@ final class StoryVideo {
         let box = filter
         Task { [weak self] in
             // Filtered as it plays: the same presets the export uses, at the video's own size.
-            guard let comp = try? await AVVideoComposition.videoComposition(with: asset, applyingCIFiltersWithHandler: { request in
+            // (Without it the video still plays, just unfiltered.)
+            if let comp = try? await AVVideoComposition.videoComposition(with: asset, applyingCIFiltersWithHandler: { request in
                 let f = box.value.withLock { $0 }
                 request.finish(with: f.apply(request.sourceImage), context: nil)
-            }) else { return }
-            item.videoComposition = comp
+            }) {
+                item.videoComposition = comp
+            }
             self?.play()
         }
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in

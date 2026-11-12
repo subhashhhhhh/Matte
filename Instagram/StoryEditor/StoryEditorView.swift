@@ -533,6 +533,7 @@ private struct TrimBar: View {
                 }
             }
             .frame(height: height)
+            .coordinateSpace(.named("trim"))
             HStack {
                 Text(Self.time(model.doc.trimStart)).monospacedDigit()
                 Spacer()
@@ -558,7 +559,7 @@ private struct TrimBar: View {
             .offset(x: x)
             .contentShape(Rectangle().inset(by: -8))
             .pointerStyle(.frameResize(position: start ? .leading : .trailing))
-            .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("trim"))
                 .onChanged { v in
                     if !dragging { dragging = true; model.beginGesture() }
                     let t = min(max(Double(v.location.x / width) * total, 0), total)
