@@ -120,7 +120,9 @@ struct SharedPane: View {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 4)], spacing: 4) {
                         ForEach(items) { item in
-                            SharedThumb(item: item).onTapGesture { open(item) }
+                            SharedThumb(item: item)
+                                .onTapGesture { open(item) }
+                                .contextMenu { SharedItemMenu(item: item) { open(item) } }
                         }
                     }
                     .padding(8)
@@ -222,6 +224,7 @@ private struct SharedViewer: View {
             let height = min(maxHeight, maxWidth / aspect)
             MediaStage(media: media)
                 .frame(width: height * aspect, height: height)
+                .contextMenu { PostMenu(media: media) }
                 .frame(maxWidth: .infinity)
         } else if model.failed {
             VStack(spacing: 10) {
@@ -236,6 +239,37 @@ private struct SharedViewer: View {
                 .frame(width: min(maxWidth, maxHeight * 9 / 16), height: maxHeight)
                 .overlay { Spinner(size: 18) }
                 .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+/// Right-click on a shared item. The post itself isn't loaded yet, so this offers what works
+/// without it; opening the item gives the full post menu.
+private struct SharedItemMenu: View {
+    let item: SharedItem
+    let open: () -> Void
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        Button("Open", action: open)
+        switch item.request {
+        case .share(let share):
+            if let url = share.targetURL {
+                Divider()
+                Button("Copy Link") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                    app.show("Link copied")
+                }
+                Button("Open on Instagram") { NSWorkspace.shared.open(url) }
+            }
+        case .attachment(let a):
+            if let url = a.url {
+                Divider()
+                Button(a.kind == .video ? "Download Video" : "Download Photo") {
+                    app.actions?.download(url: url, video: a.kind == .video)
+                }
+            }
         }
     }
 }

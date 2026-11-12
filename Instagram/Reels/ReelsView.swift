@@ -210,6 +210,7 @@ struct ReelsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu { if let reel = model.reel { PostMenu(media: reel) } }
         .overlay(alignment: .topTrailing) { MuteButton().padding(12) }
+        .overlay(alignment: .topLeading) { if let reel = model.reel { RepostBubbles(media: reel, compact: true).id(reel.pk) } }
     }
 
     private func info(_ reel: Media, caption showsCaption: Bool) -> some View {
@@ -373,6 +374,9 @@ struct ScrollWheelCatcher: NSViewRepresentable {
                 lockedUntil = .now.addingTimeInterval(0.45)
             }
         }
+
+        /// Only listens for scrolling; never takes clicks from the views above it.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
         func stop() {
             if let monitor { NSEvent.removeMonitor(monitor) }

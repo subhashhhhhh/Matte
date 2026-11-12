@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import AppKit
 
 /// Like, save, send, copy and download for any post or reel. Likes and saves show at once and
@@ -201,29 +202,65 @@ final class PostActions {
             var saved = 0
             for (i, item) in items.enumerated() {
                 let video = item.isVideo
-                guard let url = video ? item.videos.max(by: { $0.width < $1.width })?.url
-                                      : item.images.max(by: { $0.width < $1.width })?.url else { continue }
+                guard let url = video ? item.bestVideoURL : item.bestImageURL else { continue }
                 let suffix = items.count > 1 ? "-\(i + 1)" : ""
-                let name = "\(owner)-\(m.code ?? m.pk)\(suffix).\(video ? "mp4" : "jpg")"
-                do {
-                    let (temp, _) = try await URLSession.shared.download(from: url)
-                    let downloads = try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-                    let dest = downloads.appending(path: name)
-                    try? FileManager.default.removeItem(at: dest)
-                    try FileManager.default.moveItem(at: temp, to: dest)
-                    saved += 1
-                } catch {
-                    app?.report(error)
-                }
+                if await save(url, as: "\(owner)-\(m.code ?? m.pk)\(suffix).\(video ? "mp4" : "jpg")") { saved += 1 }
             }
             if saved > 0 { app?.show(saved == 1 ? "Saved to Downloads" : "\(saved) files saved to Downloads") }
         }
+    }
+
+    /// Saves one file (a story item, a DM photo or video) to Downloads.
+    func download(url: URL, video: Bool, name: String? = nil) {
+        let file = (name ?? "instagram-\(Int(Date.now.timeIntervalSince1970))") + (video ? ".mp4" : ".jpg")
+        Task { if await save(url, as: file) { app?.show("Saved to Downloads") } }
+    }
+
+    /// Saves one frame of a video as a photo (a video story "as a photo").
+    func downloadFrame(of url: URL, at seconds: Double, name: String) {
+        Task {
+            do {
+                let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+                generator.appliesPreferredTrackTransform = true
+                generator.requestedTimeToleranceBefore = .zero
+                generator.requestedTimeToleranceAfter = .zero
+                let (image, _) = try await generator.image(at: CMTime(seconds: max(0, seconds), preferredTimescale: 600))
+                let rep = NSBitmapImageRep(cgImage: image)
+                guard let data = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.95]) else { return }
+                let dest = try Self.downloads().appending(path: name + ".jpg")
+                try? FileManager.default.removeItem(at: dest)
+                try data.write(to: dest)
+                app?.show("Saved to Downloads")
+            } catch {
+                app?.report(error)
+            }
+        }
+    }
+
+    private func save(_ url: URL, as name: String) async -> Bool {
+        do {
+            let (temp, _) = try await URLSession.shared.download(from: url)
+            let dest = try Self.downloads().appending(path: name)
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.moveItem(at: temp, to: dest)
+            return true
+        } catch {
+            app?.report(error)
+            return false
+        }
+    }
+
+    private static func downloads() throws -> URL {
+        try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     }
 
     func send(_ m: Media) { app?.sharing = m }
 }
 
 extension Media {
+    var bestVideoURL: URL? { videos.max(by: { $0.width < $1.width })?.url }
+    var bestImageURL: URL? { images.max(by: { $0.width < $1.width })?.url }
+
     /// The link Instagram's own "Copy link" gives: /reel/ for reels, /p/ otherwise.
     var shareURL: URL? {
         guard let code else { return nil }
@@ -421,6 +458,8 @@ struct LikedByLine: View {
 /// "Add a thought…" (and opens it right after you repost).
 struct RepostBubbles: View {
     let media: Media
+    /// Smaller, for feed cards and the Reels player (fewer people, smaller avatars).
+    var compact = false
     @Environment(AppModel.self) private var app
     @State private var editing = false
     @State private var draft = ""
@@ -431,9 +470,10 @@ struct RepostBubbles: View {
             let me = app.viewerId
             // Your own note counts as yours even if this post's state hasn't caught up (reposted elsewhere).
             let mine = actions.state(media).reposted || media.repostNotes.contains { $0.userId == me }
-            let others = media.repostNotes.filter { $0.userId != me }.prefix(mine ? 4 : 5)
+            let limit = compact ? 3 : 5
+            let others = media.repostNotes.filter { $0.userId != me }.prefix(mine ? limit - 1 : limit)
             let myText = actions.thoughts[media.pk] ?? media.repostNotes.first { $0.userId == me }?.text
-            HStack(alignment: .bottom, spacing: 10) {
+            HStack(alignment: .bottom, spacing: compact ? 6 : 10) {
                 if mine, let user = app.me {
                     VStack(spacing: 6) {
                         thoughtBubble(myText)
@@ -442,13 +482,16 @@ struct RepostBubbles: View {
                 }
                 ForEach(Array(others), id: \.id) { note in
                     VStack(spacing: 6) {
-                        if let text = note.text { Text(text).font(.system(size: 12)).bubble() }
+                        if let text = note.text {
+                            Text(text).font(.system(size: compact ? 11 : 12)).lineLimit(compact ? 2 : nil)
+                                .frame(maxWidth: compact ? 120 : nil).bubble()
+                        }
                         bubbleAvatar(note.user?.avatar)
                     }
                     .opensProfile(note.user?.username.isEmpty == false ? note.user : nil)
                 }
             }
-            .padding(14)
+            .padding(compact ? 10 : 14)
             .animation(Motion.pop, value: mine)
             .onChange(of: actions.thoughtPrompt) {
                 if actions.thoughtPrompt == media.pk { editing = true; actions.thoughtPrompt = nil }
@@ -462,7 +505,7 @@ struct RepostBubbles: View {
             TextField("Add a thought…", text: $draft)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5))
-                .frame(width: 170)
+                .frame(width: compact ? 140 : 170)
                 .focused($focused)
                 .onSubmit { commit() }
                 .onKeyPress(.escape) { editing = false; return .handled }
@@ -476,7 +519,7 @@ struct RepostBubbles: View {
                     .font(.system(size: 12.5))
                     .foregroundStyle(text == nil ? .secondary : .primary)
                     .lineLimit(2)
-                    .frame(maxWidth: 170)
+                    .frame(maxWidth: compact ? 140 : 170)
                     .bubble()
             }
             .buttonStyle(.pressable)
@@ -492,12 +535,12 @@ struct RepostBubbles: View {
     }
 
     private func bubbleAvatar(_ url: URL?) -> some View {
-        Avatar(url: url, size: 40)
-            .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 2))
+        Avatar(url: url, size: compact ? 28 : 40)
+            .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: compact ? 1.5 : 2))
             .overlay(alignment: .bottomTrailing) {
-                IGGlyph(icon: .repost, size: 11)
+                IGGlyph(icon: .repost, size: compact ? 8 : 11)
                     .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
+                    .frame(width: compact ? 14 : 20, height: compact ? 14 : 20)
                     .background(Circle().fill(Color(red: 0.55, green: 0.36, blue: 0.96)))
                     .offset(x: 4, y: 4)
             }

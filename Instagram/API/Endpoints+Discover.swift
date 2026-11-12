@@ -10,6 +10,9 @@ extension IGClient {
         "PolarisProfileStoryHighlightsTrayContentQuery": "26970053832668570",
         "PolarisProfileReelsTabContentQuery": "28280418711631396",
         "PolarisProfileTaggedTabContentQuery": "28196060226733657",
+        // Reposts tab: recorded on instagram.com (capall, 2026-11-12); the refetch pages it.
+        "PolarisProfileRepostsTabContentQuery": "30181329728133667",
+        "PolarisProfileRepostsTabContentRefetchQuery": "29026538273621969",
         "PolarisProfileSavedTabContentQuery": "27584326974521636",
         "PolarisKeywordSearchExplorePageRelayQuery": "37324993597144881",
         "usePolarisFollowMutation": "26508036048874888",

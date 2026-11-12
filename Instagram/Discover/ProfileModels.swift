@@ -156,13 +156,14 @@ final class MediaFeed {
 // MARK: - Profile
 
 enum ProfileTab: String, CaseIterable, Identifiable {
-    case posts, reels, tagged, saved
+    case posts, reels, reposts, tagged, saved
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .posts: "Posts"
         case .reels: "Reels"
+        case .reposts: "Reposts"
         case .tagged: "Tagged"
         case .saved: "Saved"
         }
@@ -182,6 +183,7 @@ final class ProfileModel: Identifiable {
     }
     let posts: MediaFeed
     private(set) var reels: MediaFeed
+    private(set) var reposts: MediaFeed
     private(set) var tagged: MediaFeed
     /// Saved posts, for the selected collection (your own page only).
     private(set) var saved: MediaFeed
@@ -208,6 +210,7 @@ final class ProfileModel: Identifiable {
         let username = user.username, id = user.id
         posts = MediaFeed(client: client, onError: report) { try await client.profilePosts(username: username, after: $0) }
         reels = MediaFeed(client: client, onError: report) { try await client.profileReels(userId: id, after: $0) }
+        reposts = MediaFeed(client: client, onError: report) { try await client.profileReposts(userId: id, after: $0) }
         tagged = MediaFeed(client: client, onError: report) { try await client.profileTagged(userId: id, after: $0) }
         saved = MediaFeed(client: client, onError: report) { try await client.savedPosts(maxId: $0) }
     }
@@ -216,12 +219,13 @@ final class ProfileModel: Identifiable {
         switch tab {
         case .posts: posts
         case .reels: reels
+        case .reposts: reposts
         case .tagged: tagged
         case .saved: saved
         }
     }
 
-    var tabs: [ProfileTab] { isMe ? ProfileTab.allCases : [.posts, .reels, .tagged] }
+    var tabs: [ProfileTab] { isMe ? ProfileTab.allCases : [.posts, .reels, .reposts, .tagged] }
 
     /// Private and not followed: only the header shows.
     var isLocked: Bool { profile?.isPrivate == true && profile?.following != true && !isMe }
@@ -350,7 +354,7 @@ final class ProfileModel: Identifiable {
 
     /// One of your posts was deleted.
     func remove(pk: String) {
-        for feed in [posts, reels, tagged, saved] { feed.remove(pk: pk) }
+        for feed in [posts, reels, reposts, tagged, saved] { feed.remove(pk: pk) }
         snapshotSaved = false
         if let n = profile?.postCount { profile?.postCount = max(0, n - 1) }
     }

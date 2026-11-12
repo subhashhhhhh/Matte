@@ -76,6 +76,7 @@ struct PostTile: View {
         .frame(width: w, height: w / Self.mediaAspect(post))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .photoFlightTile(post, radius: 10)
+        .overlay(alignment: .bottomLeading) { RepostBubbles(media: post, compact: true) }
         .overlay(alignment: .topTrailing) {
             if post.children.count > 1 {
                 badge("square.on.square.fill", text: "\(post.children.count)")

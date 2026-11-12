@@ -77,6 +77,7 @@ struct ProfileView: View {
         switch model.tab {
         case .posts: ("camera", "No posts yet")
         case .reels: ("play.rectangle", "No reels yet")
+        case .reposts: ("arrow.2.squarepath", model.isMe ? "Posts you repost show up here" : "No reposts yet")
         case .tagged: ("person.crop.square", "No photos of \(user.username)")
         case .saved: ("bookmark", "Nothing saved yet")
         }
@@ -294,6 +295,7 @@ struct ProfileTabBar: View {
         switch tab {
         case .posts: Image(systemName: "square.grid.3x3").font(.system(size: 12, weight: .semibold))
         case .reels: IGGlyph(icon: selected ? .reelsFilled : .reels, size: 13)
+        case .reposts: IGGlyph(icon: .repost, size: 13)
         case .tagged: Image(systemName: "person.crop.square").font(.system(size: 12, weight: .semibold))
         case .saved: IGGlyph(icon: selected ? .saveFilled : .save, size: 13)
         }

@@ -1,8 +1,21 @@
 import SwiftUI
 import AVFoundation
 
-/// Draws an AVPlayer with a plain layer: no system controls.
-struct PlayerLayerView: NSViewRepresentable {
+/// Draws an AVPlayer with a plain layer: no system controls. Clicks (and right-clicks) land on
+/// a SwiftUI area above the layer, so taps and context menus attached around it work: a bare
+/// AppKit view would swallow right-clicks and the post menu would never open over a video.
+struct PlayerLayerView: View {
+    let player: AVPlayer?
+    var gravity: AVLayerVideoGravity = .resizeAspect
+
+    var body: some View {
+        PlayerLayer(player: player, gravity: gravity)
+            .allowsHitTesting(false)
+            .overlay { Color.clear.contentShape(Rectangle()) }
+    }
+}
+
+private struct PlayerLayer: NSViewRepresentable {
     let player: AVPlayer?
     var gravity: AVLayerVideoGravity = .resizeAspect
 
@@ -31,6 +44,8 @@ struct PlayerLayerView: NSViewRepresentable {
             playerLayer.backgroundColor = .clear
         }
         required init?(coder: NSCoder) { fatalError() }
+        /// Never the target of a click: SwiftUI handles them (taps, the context menu).
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }
 

@@ -268,6 +268,41 @@ final class StoryViewerModel {
         }
     }
     @ObservationIgnored private var pausedForDelete = false
+
+    /// A menu (right-click, More) is open: the story waits, as it does while you hold it on the phone.
+    var menuOpen = false {
+        didSet {
+            guard menuOpen != oldValue else { return }
+            if menuOpen {
+                if !paused { togglePause(); pausedForMenu = true }
+            } else if pausedForMenu {
+                if paused { togglePause() }
+                pausedForMenu = false
+            }
+        }
+    }
+    @ObservationIgnored private var pausedForMenu = false
+
+    /// The story item's link, as "Copy link" gives it.
+    var itemURL: URL? {
+        guard let item else { return nil }
+        return URL(string: "https://www.instagram.com/stories/\(reel.user.username)/\(item.pk)/")
+    }
+
+    /// Saves the current story: its photo or video, or (`frame`) the video's current frame as a photo.
+    func download(frame: Bool = false) {
+        guard let item, let actions = app?.actions else { return }
+        let name = "\(reel.user.username)-story-\(item.pk)"
+        if item.isVideo, let url = item.bestVideoURL {
+            if frame {
+                actions.downloadFrame(of: url, at: video?.player.currentTime().seconds ?? 0, name: name)
+            } else {
+                actions.download(url: url, video: true, name: name)
+            }
+        } else if let url = item.bestImageURL {
+            actions.download(url: url, video: false, name: name)
+        }
+    }
     private(set) var deleting = false
 
     /// Deletes the current story after the confirmation, then plays on (or closes if it was
@@ -568,6 +603,9 @@ struct StoryViewer: View {
                 }
             }
         }
+        .contextMenu { StoryMenu(model: model) }
+        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in model.menuOpen = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in model.menuOpen = false }
         .overlay { HeartBurst(trigger: model.likeBurst) }
         .overlay(alignment: .bottom) {
             if model.showingViewers {
@@ -626,7 +664,7 @@ struct StoryViewer: View {
                 }
                 .buttonStyle(.pressable)
                 .help("More")
-                .contextMenu { Button("Delete Story…") { model.confirmingDelete = true } }
+                .contextMenu { StoryMenu(model: model) }
             }
         }
         .foregroundStyle(.white)
@@ -850,5 +888,39 @@ private struct HeartBurst: View {
         var scale: CGFloat = 0.2
         var opacity: Double = 0
         var tilt: Double = 0
+    }
+}
+
+/// Right-click on a story: like, send, link, and saving it (a video story also as a photo of
+/// the frame it's paused on).
+private struct StoryMenu: View {
+    let model: StoryViewerModel
+
+    var body: some View {
+        if let item = model.item {
+            if model.canReply {
+                Button(model.isLiked ? "Unlike" : "Like") { model.toggleLike() }
+            }
+            Button("Send to…") { model.share() }
+            if let url = model.itemURL {
+                Divider()
+                Button("Copy Link") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                }
+                Button("Open on Instagram") { NSWorkspace.shared.open(url) }
+            }
+            Divider()
+            if item.isVideo {
+                Button("Download Video") { model.download() }
+                Button("Download as Photo") { model.download(frame: true) }
+            } else {
+                Button("Download Photo") { model.download() }
+            }
+            if model.canDelete {
+                Divider()
+                Button("Delete Story…") { model.confirmingDelete = true }
+            }
+        }
     }
 }

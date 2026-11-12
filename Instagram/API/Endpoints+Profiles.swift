@@ -36,6 +36,29 @@ extension IGClient {
         return Parser.mediaConnection(data, root: "xdt_api__v1__usertags__user_id__feed_connection", nodeIsMedia: true)
     }
 
+    /// Reposts tab, as recorded: the first page by `user_id`, later pages by `id` + `max_id`.
+    func profileReposts(userId: String, after cursor: String? = nil) async throws -> Page<Media> {
+        var vars: [String: JSON] = [
+            "__relay_internal__pv__PolarisShortDramaEnabledrelayprovider": true,
+            "__relay_internal__pv__PolarisSEOIsCrawlerrelayprovider": false,
+        ]
+        let name: String
+        if let cursor {
+            name = "PolarisProfileRepostsTabContentRefetchQuery"
+            vars["max_id"] = .string(cursor)
+            vars["id"] = .string(userId)
+        } else {
+            name = "PolarisProfileRepostsTabContentQuery"
+            vars["user_id"] = .string(userId)
+        }
+        let data = try await profileQuery(name, variables: .object(vars))
+        defer { MemoryRelief.soon() }
+        let timeline = data["fetch__XDTUserDict"]["user_reposts_timeline"]
+        let items = timeline["repost_grid_items"].array.compactMap { Parser.media($0["media"]) }
+        let next = timeline["repost_next_max_id"].string
+        return Page(items: items, cursor: next, hasMore: timeline["repost_more_available"].bool == true && next != nil)
+    }
+
     // MARK: Highlights
 
     func highlights(userId: String) async throws -> [Highlight] {
