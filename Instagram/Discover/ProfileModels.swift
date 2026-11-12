@@ -172,17 +172,6 @@ final class ProfileModel: Identifiable {
         reels = MediaFeed(client: client, onError: report) { try await client.profileReels(userId: id, after: $0) }
         tagged = MediaFeed(client: client, onError: report) { try await client.profileTagged(userId: id, after: $0) }
         saved = MediaFeed(client: client, onError: report) { try await client.savedPosts(maxId: $0) }
-        #if DEBUG
-        let d = UserDefaults.standard
-        if d.string(forKey: "IGOpen") == "post" {
-            // `-IGOpenIndex N`: the Nth post, or the first collab post with `-IGOpenIndex collab`.
-            posts.onFirstPage = { [posts] in
-                let raw = d.string(forKey: "IGOpenIndex")
-                let index = raw == "collab" ? posts.browser.items.firstIndex { !$0.coauthors.isEmpty } : Int(raw ?? "0")
-                posts.browser.open(at: index ?? 0)
-            }
-        }
-        #endif
     }
 
     var activeFeed: MediaFeed {
@@ -204,8 +193,18 @@ final class ProfileModel: Identifiable {
         started = true
         #if DEBUG
         // `-IGProfileTab reels|tagged|saved` and `-IGProfileList followers|following` (screenshots).
-        if let raw = UserDefaults.standard.string(forKey: "IGProfileTab"), let t = ProfileTab(rawValue: raw) { tab = t }
-        if let list = UserDefaults.standard.string(forKey: "IGProfileList") { openFollowList(followers: list == "followers") }
+        let d = UserDefaults.standard
+        if let raw = d.string(forKey: "IGProfileTab"), let t = ProfileTab(rawValue: raw) { tab = t }
+        if let list = d.string(forKey: "IGProfileList") { openFollowList(followers: list == "followers") }
+        if d.string(forKey: "IGOpen") == "post" {
+            // `-IGOpenIndex N`: the Nth post of the tab, or the first collab post with `-IGOpenIndex collab`.
+            let feed = activeFeed
+            feed.onFirstPage = { [feed] in
+                let raw = d.string(forKey: "IGOpenIndex")
+                let index = raw == "collab" ? feed.browser.items.firstIndex { !$0.coauthors.isEmpty } : Int(raw ?? "0")
+                feed.browser.open(at: index ?? 0)
+            }
+        }
         #endif
         async let header: Void = loadHeader()
         async let grid: Void = activeFeed.loadIfNeeded()
@@ -223,6 +222,13 @@ final class ProfileModel: Identifiable {
 
     private func loadHighlights() async {
         highlights = (try? await client.highlights(userId: user.id)) ?? []
+        #if DEBUG
+        // `-IGOpenHighlight N`: play the Nth highlight (screenshots).
+        let n = UserDefaults.standard.integer(forKey: "IGOpenHighlight")
+        if UserDefaults.standard.object(forKey: "IGOpenHighlight") != nil, highlights.indices.contains(n) {
+            openHighlight(highlights[n])
+        }
+        #endif
     }
 
     private func loadCollections() async {
