@@ -50,6 +50,12 @@ nonisolated enum Parser {
         }
         m.topLikers = j["top_likers"].array.compactMap(\.string)
         m.repostCount = j["media_repost_count"].int
+        m.repostNotes = j["media_notes"]["items"].array.compactMap { n in
+            guard let id = idString(n["id"]), let user = idString(n["user_id"]) else { return nil }
+            return RepostNote(id: id, userId: user)
+        }
+        m.trackingToken = j["organic_tracking_token"].string
+        m.loggingToken = j["logging_info_token"].string
         m.images = renditions(j["image_versions2"]["candidates"])
         m.videos = renditions(j["video_versions"])
         m.hasAudio = j["has_audio"].bool ?? true
@@ -144,6 +150,7 @@ nonisolated enum Parser {
         thread.lastActivity = ms(t["last_activity_timestamp_ms"])
         thread.isMuted = t["is_muted"].bool ?? false
         thread.isPinned = t["is_pin"].bool ?? false
+        thread.pinnedMessageIds = t["pinned_messages"].array.compactMap { $0["message_id"].string ?? $0["id"].string }
         let folder = t["system_folder"].string ?? ""
         thread.isRequest = folder == "PENDING" || folder == "SPAM"
         thread.imageURL = t["thread_image_url"].string.flatMap(URL.init(string:))

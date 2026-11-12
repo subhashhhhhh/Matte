@@ -69,6 +69,10 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `-IGCapture <dir> -IGCaptureInteractive YES`: a visible, signed-in instagram.com window; the user
   performs a write action themselves (watch a story, like…) and closes it; every request is recorded.
   Prefer this over guessing write mutations from the scripts (the scripts' "obvious" one can be wrong).
+- `-IGDryRunWrites <dir>`: every write (GraphQL mutation, REST POST, DM upload) is written to `<dir>`
+  as JSON (tokens redacted) instead of sent, and fails with "Dry run". `-IGProbeWrites YES -IGDryRunWrites <dir>
+  -IGProbeOut <file>` runs every write Matte makes with made-up ids, for diffing against a recording.
+  Every write was matched to two recordings of instagram.com on 2026-11-12 (shape and doc ids).
 - `-IGCapture <dir> [-IGCapturePages '/,/reels/'] [-IGCaptureSeconds 12]` — loads the site in an
   off-screen web view with the session and records the web app's own API requests, and the
   first 40 WebSocket frames each way (hex) as `ws-send-*`/`ws-recv-*`.

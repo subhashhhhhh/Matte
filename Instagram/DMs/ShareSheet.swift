@@ -11,6 +11,9 @@ struct ShareSheet: View {
     @State private var sending = false
     @FocusState private var searchFocused: Bool
 
+    /// A story item (it expires) goes as a story share.
+    private var isStory: Bool { media.expiresAt != nil }
+
     private var threads: [DMThread] {
         let all = app.inbox?.threads ?? []
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
@@ -49,7 +52,7 @@ struct ShareSheet: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Send to").font(.system(size: 15, weight: .bold))
                 if let u = media.user?.username {
-                    Text("\(media.productType == "clips" ? "Reel" : "Post") by \(u)").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text("\(isStory ? "Story" : media.productType == "clips" ? "Reel" : "Post") by \(u)").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
             Spacer()
@@ -153,7 +156,19 @@ struct ShareSheet: View {
         var failures = 0
         for id in selected {
             do {
-                try await client.share(media, toThread: id)
+                // A one-to-one chat goes to the person (recorded: `recipient_users` and no thread);
+                // a group to the chat.
+                let thread = app.inbox?.threads.first { $0.id == id }
+                let target: IGClient.ShareTarget = if let t = thread, !t.isGroup, t.users.count == 1, let u = t.users.first {
+                    .user(u.id)
+                } else {
+                    .thread(id)
+                }
+                if isStory, let owner = media.user?.id {
+                    try await client.shareStory(media, reelId: owner, to: target)
+                } else {
+                    try await client.share(media, to: target)
+                }
                 if !text.isEmpty {
                     _ = try await client.sendText(text, thread: id, offlineId: OfflineThreadingId.next())
                 }

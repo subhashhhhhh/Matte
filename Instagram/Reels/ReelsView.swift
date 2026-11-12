@@ -239,6 +239,10 @@ struct ReelsView: View {
                     countLabel(reel.commentCount)
                 }
                 .help("Comments")
+                VStack(spacing: 4) {
+                    RepostButton(reposted: state.reposted, size: 26) { actions.toggleRepost(reel) }
+                    countLabel(state.repostCount)
+                }
                 glyphButton(.share, help: "Send to…") { actions.send(reel) }
                 glyphButton(state.saved ? .saveFilled : .save, help: state.saved ? "Remove from saved" : "Save") {
                     actions.toggleSave(reel)

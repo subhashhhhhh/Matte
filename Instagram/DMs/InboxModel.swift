@@ -285,6 +285,7 @@ final class InboxModel {
     }
 
     func report(_ error: Error) { app?.report(error) }
+    func show(_ message: String) { app?.show(message) }
 
     // MARK: Real-time
 
@@ -699,24 +700,32 @@ final class ConversationModel {
     /// Forwards `m` into the chats `targets`; returns how many failed.
     func forward(_ m: DMMessage, to targets: [String]) async -> Int {
         let own = m.senderId == viewerId
+        // instagram.com names the source chat by its long id (recorded on a reel forward).
+        let origin = thread.longId ?? thread.id
         var failures = 0
         for target in targets {
             do {
                 switch m.body {
                 case .text(let t):
-                    try await client.forwardText(t, from: thread.id, ownMessage: own, to: target)
+                    try await client.forwardText(t, from: origin, ownMessage: own, to: target)
                 case .media(let attachments):
                     for a in attachments where a.kind == .image || a.kind == .video {
                         guard let id = a.id else { continue }
-                        try await client.forwardAttachment(id, messageId: m.id, from: thread.id, ownMessage: own, to: target)
+                        try await client.forwardAttachment(id, messageId: m.id, from: origin, ownMessage: own, to: target)
                     }
                 case .share(let s, let text):
-                    // A shared post goes on as its link (Instagram shows it as a card).
-                    if let url = s.targetURL {
-                        try await client.forwardText(url.absoluteString, from: thread.id, ownMessage: own, to: target)
+                    if !s.isStory, let pk = s.mediaPk {
+                        // As instagram.com forwards a shared reel (recorded): the share mutation,
+                        // naming the chat it came from. Posts the same way with the media share.
+                        var media = Media(id: pk, pk: pk, kind: .image)
+                        media.productType = s.isReel ? "clips" : "feed"
+                        try await client.share(media, to: .thread(target), forwardedFrom: origin, own: own)
+                    } else if let url = s.targetURL {
+                        // A shared story goes on as its link (Instagram shows it as a card).
+                        try await client.forwardText(url.absoluteString, from: origin, ownMessage: own, to: target)
                     }
                     if let text, !text.isEmpty {
-                        try await client.forwardText(text, from: thread.id, ownMessage: own, to: target)
+                        try await client.forwardText(text, from: origin, ownMessage: own, to: target)
                     }
                 default:
                     break
@@ -809,6 +818,22 @@ final class ConversationModel {
             try await client.react(removing ? nil : emoji, previous: mine?.emoji, to: message.id, thread: thread.id)
         } catch {
             if let j = messages.firstIndex(where: { $0.id == message.id }) { messages[j].reactions = message.reactions }
+            inbox?.report(error)
+        }
+    }
+
+    func isPinned(_ message: DMMessage) -> Bool { thread.pinnedMessageIds.contains(message.id) }
+
+    /// Pins a message to the top of the chat, or unpins it; undone if Instagram refuses.
+    func togglePin(_ message: DMMessage) async {
+        let before = thread.pinnedMessageIds
+        let pin = !isPinned(message)
+        if pin { thread.pinnedMessageIds.append(message.id) } else { thread.pinnedMessageIds.removeAll { $0 == message.id } }
+        do {
+            try await client.setPinned(pin, message: message.id, thread: thread.id)
+            inbox?.show(pin ? "Pinned" : "Unpinned")
+        } catch {
+            thread.pinnedMessageIds = before
             inbox?.report(error)
         }
     }

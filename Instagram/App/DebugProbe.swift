@@ -147,6 +147,67 @@ enum DebugProbe {
                     }
                 }
                 json = ["scripts": .integer(Int64(scripts.count))]
+            } else if d.bool(forKey: "IGProbeWrites") {
+                // `-IGProbeWrites YES -IGDryRunWrites <folder>`: runs every write Matte makes with
+                // made-up ids. The dry run writes each request to the folder and sends nothing.
+                guard d.string(forKey: "IGDryRunWrites") != nil else { fail("-IGProbeWrites needs -IGDryRunWrites <folder>") }
+                var post = Media(id: "1000000000000000001_2000000001", pk: "1000000000000000001", kind: .image)
+                post.productType = "feed"; post.trackingToken = "TRACKING"; post.loggingToken = "LOGGING"
+                var reel = post; reel.productType = "clips"
+                var story = Media(id: "1000000000000000002_2000000002", pk: "1000000000000000002", kind: .image)
+                story.user = User(id: "2000000002", username: "someone", fullName: "")
+                story.expiresAt = .now.addingTimeInterval(3600); story.takenAt = .now
+                let thread = "1000000000000001", longThread = "340282366841710300000000000000000001"
+                var msg = DMMessage(id: "mid.$TEST", senderId: "1", sentAt: .now, body: .text("x"))
+                msg.offlineId = nil
+                let calls: [(String, () async throws -> Void)] = [
+                    ("like", { try await client.setLiked(true, media: post) }),
+                    ("unlike", { try await client.setLiked(false, media: post) }),
+                    ("save", { try await client.setSaved(true, media: post) }),
+                    ("unsave", { try await client.setSaved(false, media: post) }),
+                    ("repost", { _ = try await client.repost(media: post) }),
+                    ("unrepost", { try await client.deleteRepost(noteId: "900000000000001") }),
+                    ("repost text", { try await client.updateRepost(noteId: "900000000000001", text: "t") }),
+                    ("comment", { _ = try await client.postComment("c", media: post.pk) }),
+                    ("comment reply", { _ = try await client.postComment("r", media: post.pk, replyTo: "18000000000000001") }),
+                    ("comment like", { try await client.setCommentLiked(true, comment: "18000000000000001") }),
+                    ("comment unlike", { try await client.setCommentLiked(false, comment: "18000000000000001") }),
+                    ("comment delete", { try await client.deleteComment("18000000000000001", media: post.pk) }),
+                    ("story seen", { try await client.markStorySeen(reelId: "2000000002", media: story) }),
+                    ("story like", { try await client.setStoryLiked(true, media: story) }),
+                    ("story unlike", { try await client.setStoryLiked(false, media: story) }),
+                    ("story reply", { try await client.replyToStory(mediaId: story.pk, reelId: "2000000002", ownerId: "2000000002", text: nil, emoji: "😍") }),
+                    ("story share", { try await client.shareStory(story, reelId: "2000000002", to: .user("2000000003")) }),
+                    ("share post", { try await client.share(post, to: .user("2000000003")) }),
+                    ("share reel", { try await client.share(reel, to: .user("2000000003")) }),
+                    ("forward reel", { try await client.share(reel, to: .thread(thread), forwardedFrom: longThread, own: true) }),
+                    ("text", { _ = try await client.sendText("hi", thread: thread, offlineId: OfflineThreadingId.next()) }),
+                    ("reply", { _ = try await client.sendText("hi", thread: thread, replyTo: "mid.$TEST", offlineId: OfflineThreadingId.next()) }),
+                    ("new chat", { try await client.startChat(with: "2000000003", text: "hi") }),
+                    ("forward text", { try await client.forwardText("hi", from: longThread, ownMessage: true, to: thread) }),
+                    ("react", { try await client.react("😍", to: "mid.$TEST", thread: thread) }),
+                    ("unreact", { try await client.react(nil, previous: "😍", to: "mid.$TEST", thread: thread) }),
+                    ("edit", { try await client.editMessage("mid.$TEST", thread: thread, text: "e") }),
+                    ("pin", { try await client.setPinned(true, message: "mid.$TEST", thread: thread) }),
+                    ("unpin", { try await client.setPinned(false, message: "mid.$TEST", thread: thread) }),
+                    ("mark read", { try await client.markRead(longThreadId: longThread, message: msg) }),
+                    ("unsend", { try await client.unsend("mid.$TEST", longThreadId: longThread) }),
+                    ("media send", { _ = try await client.sendMedia(attachmentId: "1000000000000003", thread: thread, offlineId: OfflineThreadingId.next()) }),
+                    ("follow", { _ = try await client.setFollowing(true, userId: "2000000003") }),
+                    ("unfollow", { _ = try await client.setFollowing(false, userId: "2000000003") }),
+                    ("activity seen", { try await client.markActivitySeen() }),
+                ]
+                var results: [String: JSON] = [:]
+                for (label, call) in calls {
+                    do { try await call(); results[label] = "sent?!" } catch { results[label] = .string(error.localizedDescription) }
+                }
+                let tmp = FileManager.default.temporaryDirectory.appending(path: "probe-\(UUID().uuidString).jpg")
+                try Data([0xFF, 0xD8, 0xFF, 0xD9]).write(to: tmp)
+                do { _ = try await client.uploadDMAttachment(file: tmp, mimeType: "image/jpeg", isVideo: false) } catch {
+                    results["upload"] = .string(error.localizedDescription)
+                }
+                try? FileManager.default.removeItem(at: tmp)
+                json = .object(results)
             } else if d.bool(forKey: "IGProbePage") {
                 await client.reloadAppPage(keepHTML: true)
                 let dir = outURL.deletingLastPathComponent()

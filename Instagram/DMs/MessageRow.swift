@@ -76,6 +76,7 @@ struct MessageRow: View {
                     if model.canEdit(message) {
                         Button("Edit") { model.beginEdit(message) }
                     }
+                    Button(model.isPinned(message) ? "Unpin" : "Pin") { Task { await model.togglePin(message) } }
                     if mine {
                         Divider()
                         Button("Unsend", role: .destructive) { Task { await model.unsend(message) } }

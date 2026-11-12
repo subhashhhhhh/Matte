@@ -25,18 +25,19 @@ extension IGClient {
 
     // MARK: Photos and videos
 
-    /// Uploads a photo or video for a DM and returns its attachment id. The web app uses
-    /// Meta's resumable upload service (`rupload.instagram.com/messenger_image|messenger_video/<uuid>`),
-    /// falling back to `/ajax/mercury/upload.php`.
+    /// Uploads a photo or video for a DM and returns its attachment id. instagram.com uploads a
+    /// photo to `/ajax/mercury/upload.php` (recorded) and sends the returned `fbid` as
+    /// `attachment_fbid`; Meta's resumable upload service (`rupload.instagram.com`, from the
+    /// scripts) is the fallback.
     func uploadDMAttachment(file: URL, mimeType: String, isVideo: Bool) async throws -> String {
         do {
-            return try await rupload(file: file, mimeType: mimeType, isVideo: isVideo)
+            return try await mercuryUpload(file: file, mimeType: mimeType)
         } catch let error as IGError where error == .signedOut {
             throw error
         } catch {
             Logger(subsystem: "com.subhash.Instagram", category: "DMs")
-                .info("rupload failed (\(error.localizedDescription, privacy: .public)); trying mercury")
-            return try await mercuryUpload(file: file, mimeType: mimeType)
+                .info("mercury upload failed (\(error.localizedDescription, privacy: .public)); trying rupload")
+            return try await rupload(file: file, mimeType: mimeType, isVideo: isVideo)
         }
     }
 
@@ -80,6 +81,9 @@ extension IGClient {
         r.setValue(viewer, forHTTPHeaderField: "ig-u-ds-user-id")
         r.setValue("FILE_ATTACHMENT", forHTTPHeaderField: isVideo ? "video_type" : "image_type")
         r.setValue(mimeType, forHTTPHeaderField: "Content-Type")
+        #if DEBUG
+        try Self.dryRun("rupload", form: [:], path: url.path())
+        #endif
         let (data, response) = try await http.upload(for: r, fromFile: file)
         // Instagram may rotate the csrftoken (or other cookies) on this response too.
         if let reply = response as? HTTPURLResponse, let url = reply.url {
@@ -99,8 +103,22 @@ extension IGClient {
 
     private func mercuryUpload(file: URL, mimeType: String) async throws -> String {
         await prepare()
-        let url = URL(string: Self.origin + "/ajax/mercury/upload.php?" + (await uploadQuery()))!
+        // Recorded: the page's form fields in the query (no `av`) plus the route, and of the
+        // API headers only X-ASBD-ID, X-FB-LSD and X-FB-Entry-Nonce (no csrf token or app id).
+        var query = page.commonForm(counter: String(Int.random(in: 40...900), radix: 36), userId: await session.userId)
+        query["av"] = nil
+        query["__crn"] = "comet.igweb.PolarisDirectInboxRoute"
+        let url = URL(string: Self.origin + "/ajax/mercury/upload.php?"
+            + query.sorted { $0.key < $1.key }.map { "\($0.key)=\(Self.percentEncode($0.value))" }.joined(separator: "&"))!
         var r = try await uploadRequest(url)
+        r.setValue(nil, forHTTPHeaderField: "x-csrftoken")
+        r.setValue(nil, forHTTPHeaderField: "x-ig-app-id")
+        if let nonce = page.entryNonce { r.setValue(nonce, forHTTPHeaderField: "X-FB-Entry-Nonce") }
+        #if DEBUG
+        var shown = query
+        for (k, _) in r.allHTTPHeaderFields ?? [:] where k != "Cookie" { shown["header:" + k] = "" }
+        try Self.dryRun("mercury_upload", form: shown, path: "/ajax/mercury/upload.php")
+        #endif
         let boundary = "----WebKitFormBoundary" + String((0..<16).map { _ in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".randomElement()! })
         r.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         // Built in a temporary file so a video is never held in memory twice.
@@ -148,7 +166,7 @@ extension IGClient {
     func editMessage(_ messageId: String, thread id: String, text: String) async throws {
         _ = try await dmCall("IGDirectEditMessageMutation", variables: [
             "body": ["sensitive_string_value": .string(text)], "offline_threading_id": .string(OfflineThreadingId.next()),
-            "target_item_id": "", "target_message_id": .string(messageId), "thread_id": .string(id),
+            "target_item_id": nil, "target_message_id": .string(messageId), "thread_id": .string(id),
         ])
     }
 
@@ -175,7 +193,7 @@ extension IGClient {
         try await dmCall("IGDirectTextSendMutation", variables: [
             "commands": nil, "forwarded_from_thread_id": forwardedFrom.map(JSON.string) ?? .null,
             "ig_thread_igid": thread.map(JSON.string) ?? .null,
-            "is_forwarded_from_own_message": own.map(JSON.bool) ?? .null, "mentioned_user_ids": nil, "mentions": nil,
+            "is_forwarded_from_own_message": own.map(JSON.bool) ?? .null, "mentioned_user_ids": [], "mentions": [],
             "offline_threading_id": .string(OfflineThreadingId.next()),
             "recipient_igids": recipient.map { .array([.string($0)]) } ?? .null,
             "replied_to_client_context": nil, "replied_to_item_id": nil, "reply_to_message_id": nil, "sampled": nil,
