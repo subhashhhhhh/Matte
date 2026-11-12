@@ -143,15 +143,16 @@ extension IGClient {
 
     /// Tells Instagram you watched a story item (you then appear in its viewers). Exactly what
     /// instagram.com sends when a story is shown (recorded 2026-11-12): `PolarisStoriesV3SeenMutation`
-    /// with the bare media pk and every value as a string. `reelId` is the owner's id, or "highlight:…".
+    /// with the ids as strings and the two times as numbers (Unix seconds; recorded 4 times).
+    /// `reelId` is the owner's id, or "highlight:…".
     func markStorySeen(reelId: String, media: Media) async throws {
         let name = "PolarisStoriesV3SeenMutation"
         await prepare()
         let owner = media.user?.id ?? (reelId.hasPrefix("highlight:") ? "" : reelId)
         let result = try await graphQL(name, variables: [
             "reelId": .string(reelId), "reelMediaId": .string(media.pk), "reelMediaOwnerId": .string(owner),
-            "reelMediaTakenAt": .string(String(Int64(media.takenAt?.timeIntervalSince1970 ?? 0))),
-            "viewSeenAt": .string(String(Int64(Date.now.timeIntervalSince1970))),
+            "reelMediaTakenAt": .integer(Int64(media.takenAt?.timeIntervalSince1970 ?? 0)),
+            "viewSeenAt": .integer(Int64(Date.now.timeIntervalSince1970)),
         ], docId: knownOperations()[name] ?? "26234228992942885")
         guard !result["xdt_mark_story_reel_seen"].isNull else { throw IGError.badResponse }
     }

@@ -198,6 +198,7 @@ actor IGClient {
             form["variables"] = String(decoding: (try? variables.data()) ?? Data("{}".utf8), as: UTF8.self)
             form["server_timestamps"] = "true"
             form["doc_id"] = docId
+            form.merge(Self.mutationContext(name)) { $1 }
 
             var request = URLRequest(url: URL(string: Self.origin + Self.graphQLPath)!)
             request.httpMethod = "POST"
@@ -209,6 +210,9 @@ actor IGClient {
                 let shown = form.sorted { $0.key < $1.key }.map { "\($0.key)=\(secret.contains($0.key) ? "<\($0.value.count) chars>" : $0.value)" }
                 try? shown.joined(separator: "\n").write(to: URL(fileURLWithPath: dir).appending(path: "form-\(name).txt"), atomically: true, encoding: .utf8)
             }
+            #endif
+            #if DEBUG
+            if name.hasSuffix("Mutation") { try Self.dryRun(name, form: form, path: Self.graphQLPath) }
             #endif
             request.setValue(name, forHTTPHeaderField: "x-fb-friendly-name")
             if let lsd = page.lsd { request.setValue(lsd, forHTTPHeaderField: "x-fb-lsd") }
@@ -231,7 +235,54 @@ actor IGClient {
         }
     }
 
+    /// The page context instagram.com adds to its mutations (recorded 2026-11-12): the route
+    /// they're sent from (`__crn`), and on DM sends the messaging flow id
+    /// (`qpl_active_flow_ids`, also in `fb_api_analytics_tags`). Queries get nothing extra.
+    nonisolated static func mutationContext(_ name: String) -> [String: String] {
+        guard name.hasSuffix("Mutation") else { return [:] }
+        let route: String
+        if name.contains("Story") || name.contains("Stories") {
+            route = "PolarisStoriesV3Route"
+        } else if name.hasPrefix("IGD") || name.hasPrefix("useIGD") {
+            route = name == "IGDirectMediaShareMutation" ? "PolarisFeedRoute" : "PolarisDirectInboxRoute"
+        } else if name.contains("Follow") {
+            route = "PolarisProfilePostsTabRoute"
+        } else {
+            route = "PolarisFeedRoute"
+        }
+        var f = ["__crn": "comet.igweb." + route]
+        let flows: [String: String] = [
+            "IGDirectTextSendMutation": "25313175,354954279", "IGDirectReelShareMutation": "25313175,354954279",
+            "useIGDMarkThreadAsReadMutation": "354954279", "useIGDMarkThreadAsReadValidationMutation": "354954279",
+            "IGDirectEditMessageMutation": "354954279", "IGDirectMediaSendMutation": "354954279",
+            "IGDirectMediaShareMutation": "354954279", "IGDirectReactionSendMutation": "354954279",
+            "IGDirectStoryShareMutation": "354954279", "IGDirectStoryShareReplyMutation": "354954279",
+        ]
+        if let ids = flows[name] {
+            f["qpl_active_flow_ids"] = ids
+            f["fb_api_analytics_tags"] = "[\"qpl_active_flow_ids=\(ids)\"]"
+        }
+        return f
+    }
+
     #if DEBUG
+    /// `-IGDryRunWrites <folder>` (Debug): every write (GraphQL mutation, REST POST, DM upload)
+    /// is written to the folder as JSON (name, path, form with tokens redacted, variables)
+    /// instead of being sent, and fails with "Dry run". For comparing Matte's requests with
+    /// recordings of instagram.com without touching the account.
+    nonisolated static func dryRun(_ name: String, form: [String: String], path: String) throws {
+        guard let dir = UserDefaults.standard.string(forKey: "IGDryRunWrites") else { return }
+        let secret: Set = ["fb_dtsg", "lsd", "jazoest", "av", "__hs", "__hsi", "__rev", "__spin_r", "__spin_t", "__s"]
+        var shown: [String: JSON] = [:]
+        for (k, v) in form { shown[k] = .string(secret.contains(k) ? "<redacted>" : v) }
+        var entry: [String: JSON] = ["name": .string(name), "path": .string(path), "form": .object(shown)]
+        if let v = form["variables"], let vars = try? JSON(data: Data(v.utf8)) { entry["variables"] = vars }
+        let safe = name.replacingOccurrences(of: "/", with: "_")
+        let url = URL(fileURLWithPath: dir).appending(path: "\(Int(Date.now.timeIntervalSince1970 * 1000))-\(UUID().uuidString.prefix(4))-\(safe).json")
+        try? JSON.object(entry).data().write(to: url)
+        throw IGError.http(-1, "Dry run: \(name) not sent")
+    }
+
     /// Sends a captured web form as is (debug comparison of our form against the web app's).
     func replay(form: [String: String], path: String) async throws -> JSON {
         await prepare()
@@ -269,6 +320,9 @@ actor IGClient {
             if form["jazoest"] == nil, let jazoest = common["jazoest"] { form["jazoest"] = jazoest }
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
             request.httpBody = Self.formBody(form)
+            #if DEBUG
+            if method == .post { try Self.dryRun(comps.path, form: form, path: comps.path) }
+            #endif
         }
         let json = try await send(request, path: comps.path)
         dump(comps.path.replacingOccurrences(of: "/", with: "_"), json)
