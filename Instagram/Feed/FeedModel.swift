@@ -49,7 +49,7 @@ final class FeedModel {
         if let t = await trayTask { tray = t }
         // Feed pages are short (ads and suggestions are left out): fill a few grid rows.
         var tries = 0
-        while posts.count < 12, hasMore, tries < 3 {
+        while posts.count < 8, hasMore, tries < 3 {
             tries += 1
             await loadMore()
         }
