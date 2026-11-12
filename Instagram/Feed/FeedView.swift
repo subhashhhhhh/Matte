@@ -43,7 +43,10 @@ struct FeedView: View {
         }
         .overlay {
             if let opened = model.opened {
-                PostLightbox(model: opened, feed: model)
+                PostLightbox(model: opened,
+                             canPrevious: (model.openedIndex ?? 0) > 0,
+                             canNext: (model.openedIndex ?? 0) < model.posts.count - 1,
+                             step: { model.step($0) }, close: { model.closeOpened() })
                     .transition(.opacity)
             }
         }
@@ -95,9 +98,12 @@ private struct Masonry: View {
 
 /// A post opened over the grid: the media as large as the window allows, the caption and
 /// comments beside it. ←/→ step through the feed, Esc closes.
-private struct PostLightbox: View {
+struct PostLightbox: View {
     let model: MediaDetailModel
-    let feed: FeedModel
+    let canPrevious: Bool
+    let canNext: Bool
+    let step: (Int) -> Void
+    let close: () -> Void
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -109,7 +115,7 @@ private struct PostLightbox: View {
             let aspect = media.map { max(0.5, min(1.91, $0.aspect)) } ?? 1
             let stageH = min(maxStageH, maxStageW / aspect)
             ZStack {
-                Color.black.opacity(0.82).onTapGesture { feed.closeOpened() }
+                Color.black.opacity(0.82).onTapGesture { close() }
                 HStack(spacing: 0) {
                     if let media {
                         MediaStage(media: media, cornerRadius: 0)
@@ -122,15 +128,15 @@ private struct PostLightbox: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .shadow(color: .black.opacity(0.35), radius: 30)
                 HStack {
-                    arrow("chevron.left", enabled: (feed.openedIndex ?? 0) > 0) { feed.step(-1) }
+                    arrow("chevron.left", enabled: canPrevious) { step(-1) }
                     Spacer()
-                    arrow("chevron.right", enabled: (feed.openedIndex ?? 0) < feed.posts.count - 1) { feed.step(1) }
+                    arrow("chevron.right", enabled: canNext) { step(1) }
                 }
                 .padding(.horizontal, 20)
                 VStack {
                     HStack {
                         Spacer()
-                        Button { feed.closeOpened() } label: {
+                        Button { close() } label: {
                             Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                                 .frame(width: 34, height: 34)
                         }
@@ -147,8 +153,8 @@ private struct PostLightbox: View {
         .focusEffectDisabled()
         .focused($focused)
         .onAppear { focused = true }
-        .onKeyPress(.leftArrow) { feed.step(-1); return .handled }
-        .onKeyPress(.rightArrow) { feed.step(1); return .handled }
+        .onKeyPress(.leftArrow) { if canPrevious { step(-1) }; return .handled }
+        .onKeyPress(.rightArrow) { if canNext { step(1) }; return .handled }
         .task { await model.start() }
     }
 

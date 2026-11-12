@@ -250,8 +250,11 @@ struct StoryViewer: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Avatar(url: model.reel.user.avatar, size: 30)
-            Text(model.reel.user.username).font(.system(size: 13, weight: .semibold))
+            HStack(spacing: 8) {
+                Avatar(url: model.reel.user.avatar, size: 30)
+                Text(model.reel.user.username).font(.system(size: 13, weight: .semibold))
+            }
+            .opensProfile(model.reel.user)
             if let t = model.item?.takenAt {
                 Text(t.shortAge).font(.system(size: 13)).opacity(0.75)
             }

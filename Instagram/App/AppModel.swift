@@ -2,12 +2,13 @@ import SwiftUI
 import OSLog
 
 enum Destination: String, CaseIterable, Identifiable {
-    case home, reels, messages
+    case home, explore, reels, messages
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .home: "Home"
+        case .explore: "Explore"
         case .reels: "Reels"
         case .messages: "Messages"
         }
@@ -16,6 +17,7 @@ enum Destination: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .home: "house"
+        case .explore: "safari"
         case .reels: "play.rectangle.on.rectangle"
         case .messages: "paperplane"
         }
@@ -24,6 +26,7 @@ enum Destination: String, CaseIterable, Identifiable {
     var glyph: (outline: IGIcon, filled: IGIcon) {
         switch self {
         case .home: (.home, .homeFilled)
+        case .explore: (.explore, .exploreFilled)
         case .reels: (.reels, .reelsFilled)
         case .messages: (.direct, .directFilled)
         }
@@ -32,8 +35,9 @@ enum Destination: String, CaseIterable, Identifiable {
     var shortcut: KeyEquivalent {
         switch self {
         case .home: "1"
-        case .reels: "2"
-        case .messages: "3"
+        case .explore: "2"
+        case .reels: "3"
+        case .messages: "4"
         }
     }
 }
@@ -48,8 +52,16 @@ final class AppModel {
     private(set) var client: IGClient?
     var showSignIn = false
     var destination: Destination = .messages {
-        didSet { visited.insert(destination) }
+        didSet {
+            visited.insert(destination)
+            profiles = []
+        }
     }
+    /// Profiles opened on top of the current page, newest last (Back pops one).
+    private(set) var profiles: [ProfileModel] = []
+    /// The signed-in account (filled in after sign-in).
+    private(set) var me: User?
+    private(set) var viewerId: String?
     /// Pages opened at least once: only these are built (a page never visited loads nothing).
     private(set) var visited: Set<Destination> = [.messages]
     /// The story viewer, when open.
@@ -66,6 +78,8 @@ final class AppModel {
     private(set) var feed: FeedModel?
     private(set) var reels: ReelsModel?
     private(set) var inbox: InboxModel?
+    private(set) var explore: ExploreModel?
+    private(set) var search: SearchModel?
 
     @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "App")
 
@@ -86,6 +100,40 @@ final class AppModel {
         reels = ReelsModel(app: self, client: client)
         inbox = InboxModel(app: self, client: client)
         actions = PostActions(app: self, client: client)
+        explore = ExploreModel(app: self, client: client)
+        search = SearchModel(client: client)
+        Task {
+            guard let id = await client.session.userId else { return }
+            viewerId = id
+            me = try? await client.profile(id: id).user
+            #if DEBUG
+            // `-IGOpenProfileFor <query>`: search and open the first person found (screenshots).
+            if let q = UserDefaults.standard.string(forKey: "IGOpenProfileFor"),
+               let user = try? await client.search(q, sessionId: UUID().uuidString.lowercased()).users.first {
+                openProfile(user)
+            }
+            #endif
+        }
+    }
+
+    // MARK: Navigation
+
+    func openProfile(_ user: User) {
+        guard let client else { return }
+        stories?.close()
+        if profiles.last?.user.id == user.id { return }
+        profiles.append(ProfileModel(user: user, app: self, client: client))
+    }
+
+    func closeProfile() {
+        guard !profiles.isEmpty else { return }
+        profiles.removeLast()
+        MemoryRelief.soon()
+    }
+
+    func openChat(_ threadId: String) {
+        destination = .messages
+        inbox?.selectedId = threadId
     }
 
     func completeSignIn(_ cookies: [StoredCookie]) {
@@ -104,6 +152,11 @@ final class AppModel {
         feed = nil
         reels = nil
         inbox = nil
+        explore = nil
+        search = nil
+        profiles = []
+        me = nil
+        viewerId = nil
         actions = nil
         sharing = nil
         stories = nil

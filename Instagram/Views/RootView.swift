@@ -14,8 +14,11 @@ struct RootView: View {
             case .signedIn:
                 HStack(spacing: 0) {
                     Sidebar()
-                    content
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    VStack(spacing: 0) {
+                        TopBar().zIndex(1)
+                        content
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
             }
             if let media = app.sharing {
@@ -60,14 +63,25 @@ struct RootView: View {
                 FeedView(model: feed).opacity(app.destination == .home ? 1 : 0)
                     .allowsHitTesting(app.destination == .home)
             }
-            if let reels = app.reels, app.destination == .reels {
+            if let explore = app.explore, app.visited.contains(.explore) {
+                ExploreView(model: explore).opacity(app.destination == .explore ? 1 : 0)
+                    .allowsHitTesting(app.destination == .explore)
+            }
+            if let reels = app.reels, app.destination == .reels, app.profiles.isEmpty {
                 ReelsView(model: reels)
             }
             if let inbox = app.inbox, app.visited.contains(.messages) {
                 MessagesView(model: inbox).opacity(app.destination == .messages ? 1 : 0)
                     .allowsHitTesting(app.destination == .messages)
             }
+            // A profile opened from anywhere covers the page until you go back.
+            if let profile = app.profiles.last {
+                ProfileView(model: profile)
+                    .id(profile.id)
+                    .background(Theme.background)
+                    .transition(.opacity)
+            }
         }
-        .padding(.top, 28)
+        .animation(.easeOut(duration: 0.15), value: app.profiles.count)
     }
 }

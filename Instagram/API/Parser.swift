@@ -60,11 +60,13 @@ nonisolated enum Parser {
     // MARK: Feed and reels
 
     /// A Relay connection of `{node: {media: …}}` edges (home feed, reels).
-    static func mediaConnection(_ data: JSON, root: String) -> Page<Media> {
+    /// `nodeIsMedia`: each edge's node is the post itself (profiles) rather than a unit
+    /// holding it under `media` (feed, reels).
+    static func mediaConnection(_ data: JSON, root: String, nodeIsMedia: Bool = false) -> Page<Media> {
         let conn = data.first(root) ?? .null
         let items = conn["edges"].array.compactMap { edge -> Media? in
             let node = edge["node"]
-            let m = node["media"]
+            let m = nodeIsMedia ? node : node["media"]
             // Ads and suggestion units: no plain `media`, or one marked as an ad.
             guard !m.isNull, node["ad"].isNull, m["ad_id"].isNull, m["product_type"].string != "ad" else { return nil }
             return media(m)

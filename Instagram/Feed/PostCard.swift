@@ -54,9 +54,12 @@ struct PostTile: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Avatar(url: post.user?.avatar, size: 24)
-            Text(post.user?.username ?? "").font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
-            if post.user?.isVerified == true { VerifiedBadge(size: 10) }
+            HStack(spacing: 8) {
+                Avatar(url: post.user?.avatar, size: 24)
+                Text(post.user?.username ?? "").font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
+                if post.user?.isVerified == true { VerifiedBadge(size: 10) }
+            }
+            .opensProfile(post.user)
             Spacer(minLength: 0)
             if let t = post.takenAt {
                 Text(t.shortAge).font(.system(size: 11.5)).foregroundStyle(.secondary)
@@ -107,7 +110,7 @@ struct PostTile: View {
 }
 
 /// A silent looping preview while the pointer rests on a video post.
-private struct HoverPreview: View {
+struct HoverPreview: View {
     let url: URL
     @State private var video: LoopingVideo?
 

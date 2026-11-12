@@ -212,3 +212,33 @@ extension DMShare {
         return nil
     }
 }
+
+// MARK: - Profiles, search
+
+/// A profile's header: who they are and their counts.
+nonisolated struct Profile: Hashable, Sendable {
+    var user: User
+    var biography: String?
+    var category: String?
+    var externalURL: URL?
+    var postCount: Int?
+    var followerCount: Int?
+    var followingCount: Int?
+    var mutualFollowers: Int?
+    var isPrivate = false
+    var following = false
+    var followedBy = false
+    var hdAvatar: URL?
+}
+
+/// What the search box finds.
+nonisolated struct SearchResults: Sendable {
+    var users: [User] = []
+    var hashtags: [Hashtag] = []
+}
+
+nonisolated struct Hashtag: Hashable, Sendable, Identifiable {
+    var id: String { name }
+    var name: String
+    var mediaCount: Int?
+}

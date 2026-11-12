@@ -183,6 +183,7 @@ struct ReelsView: View {
                 Text(reel.user?.username ?? "").font(.system(size: 13, weight: .semibold))
                 if reel.user?.isVerified == true { VerifiedBadge(size: 11) }
             }
+            .opensProfile(reel.user)
             if showsCaption, let caption = reel.caption, !caption.isEmpty {
                 Text(caption).font(.system(size: 12.5)).lineLimit(2)
             }

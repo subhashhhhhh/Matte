@@ -255,6 +255,15 @@ struct ConversationView: View {
                                        showAvatar: showsAvatar(at: i))
                                 .id(message.id)
                         }
+                        if let status = deliveryStatus {
+                            Text(status)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                .padding(.trailing, 6)
+                                .padding(.top, 2)
+                                .transition(.opacity)
+                        }
                         if model.peerTyping { TypingRow(thread: model.thread).id("typing") }
                         Color.clear.frame(height: 8).id("bottom")
                     }
@@ -305,6 +314,7 @@ struct ConversationView: View {
     private var header: some View {
         HStack(spacing: 10) {
             ThreadAvatar(thread: model.thread, size: 34)
+                .opensProfile(model.thread.isGroup ? nil : model.thread.users.first)
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.thread.title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
                 if !model.thread.isGroup, let u = model.thread.users.first, u.fullName != model.thread.title {
@@ -322,6 +332,19 @@ struct ConversationView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 56)
+    }
+
+    /// "Sent" / "Seen" / "Seen by …" under your last message, when it's the newest in the chat,
+    /// from each person's read position.
+    private var deliveryStatus: String? {
+        guard let last = model.messages.last, let me = model.viewerId, last.senderId == me,
+              !last.pending, !last.failed else { return nil }
+        let readers = model.thread.readUpTo.filter { $0.key != me && $0.value >= last.sentAt }.map(\.key)
+        guard !readers.isEmpty else { return "Sent" }
+        guard model.thread.isGroup else { return "Seen" }
+        if readers.count >= model.thread.users.count { return "Seen by everyone" }
+        let names = readers.compactMap { model.user(for: $0)?.username }
+        return names.isEmpty ? "Seen by \(readers.count)" : "Seen by " + ListFormatter.localizedString(byJoining: names)
     }
 
     /// A time label before a message that comes 30+ minutes after the previous one.

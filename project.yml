@@ -19,6 +19,7 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: Support/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Matte
         INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Subhash"
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

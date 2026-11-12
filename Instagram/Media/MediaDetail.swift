@@ -238,16 +238,19 @@ struct MediaDetailsColumn: View {
 
     private func author(_ media: Media) -> some View {
         HStack(spacing: 10) {
-            Avatar(url: media.user?.avatar, size: 34)
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    Text(media.user?.username ?? "").font(.system(size: 13.5, weight: .semibold))
-                    if media.user?.isVerified == true { VerifiedBadge(size: 11) }
-                }
-                if let t = media.takenAt {
-                    Text(t.shortAge).font(.system(size: 11.5)).foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Avatar(url: media.user?.avatar, size: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Text(media.user?.username ?? "").font(.system(size: 13.5, weight: .semibold))
+                        if media.user?.isVerified == true { VerifiedBadge(size: 11) }
+                    }
+                    if let t = media.takenAt {
+                        Text(t.shortAge).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                    }
                 }
             }
+            .opensProfile(media.user)
             Spacer()
         }
     }
@@ -268,10 +271,10 @@ struct CommentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Avatar(url: comment.user?.avatar, size: 28)
+            Avatar(url: comment.user?.avatar, size: 28).opensProfile(comment.user)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(comment.user?.username ?? "").font(.system(size: 12.5, weight: .semibold))
+                    Text(comment.user?.username ?? "").font(.system(size: 12.5, weight: .semibold)).opensProfile(comment.user)
                     if let t = comment.createdAt {
                         Text(t.shortAge).font(.system(size: 11.5)).foregroundStyle(.secondary)
                     }
