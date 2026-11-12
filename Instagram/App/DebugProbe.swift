@@ -36,6 +36,14 @@ enum DebugProbe {
                 } else {
                     json = try await client.rest(.get, path, query: query)
                 }
+            } else if d.bool(forKey: "IGProbeArchive") {
+                // Read-only: archive days and the first days' stories (counts only), and the edit form.
+                let days = try await client.archiveDays()
+                let reels = try await client.archiveReels(Array(days.days.prefix(3).map(\.id)))
+                let form = try await client.editableProfile()
+                json = ["days": .integer(Int64(days.days.count)), "more": .bool(days.next != nil),
+                        "stories": .array(reels.values.map { .integer(Int64($0.count)) }),
+                        "formHasUsername": .bool(!form.username.isEmpty)]
             } else if let name = raw("IGProbeGQL") {
                 let vars = try JSON(data: Data((raw("IGProbeVars") ?? "{}").utf8))
                 json = ["data": try await client.graphQL(name, variables: vars, docId: raw("IGProbeDoc"))]

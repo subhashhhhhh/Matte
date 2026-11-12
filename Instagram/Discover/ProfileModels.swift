@@ -33,11 +33,13 @@ nonisolated struct SavedCollection: Hashable, Sendable, Identifiable {
 enum StackPage: Identifiable {
     case profile(ProfileModel)
     case hashtag(HashtagModel)
+    case archive(ArchiveModel)
 
     var id: String {
         switch self {
         case .profile(let m): "user:" + m.user.id
         case .hashtag(let m): "tag:" + m.name.lowercased()
+        case .archive: "archive"
         }
     }
 }
@@ -50,6 +52,7 @@ struct StackPageView: View {
         switch page {
         case .profile(let model): ProfileView(model: model)
         case .hashtag(let model): HashtagView(model: model)
+        case .archive(let model): ArchiveView(model: model)
         }
     }
 }
@@ -269,7 +272,7 @@ final class ProfileModel: Identifiable {
         cache.trim(prefix: "profile-", keep: Self.cachedProfiles)
     }
 
-    private func loadHeader() async {
+    func loadHeader() async {
         do {
             profile = try await client.profile(id: user.id)
             headerFresh = true

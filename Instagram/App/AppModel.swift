@@ -134,6 +134,9 @@ final class AppModel {
             me = try? await client.profile(id: id).user
             #if DEBUG
             // `-IGOpenMyStory YES`: open your own story (to check the viewer list).
+            // `-IGOpenArchive YES` / `-IGOpenMe YES`: open your archive / your profile.
+            if UserDefaults.standard.bool(forKey: "IGOpenArchive") { openArchive() }
+            if UserDefaults.standard.bool(forKey: "IGOpenMe"), let me { openProfile(me) }
             if UserDefaults.standard.bool(forKey: "IGOpenMyStory"), let me {
                 openStories([StoryReel(id: me.id, user: me, seen: true)], at: 0)
             }
@@ -167,6 +170,12 @@ final class AppModel {
         let page = StackPage.hashtag(HashtagModel(name: name, app: self, client: client))
         if profiles.last?.id == page.id { return }
         profiles.append(page)
+    }
+
+    /// Your story archive, on top of the current page.
+    func openArchive() {
+        guard let client, profiles.last?.id != "archive" else { return }
+        profiles.append(.archive(ArchiveModel(app: self, client: client)))
     }
 
     func closeProfile() {

@@ -301,7 +301,8 @@ actor IGClient {
     enum Method: String, Sendable { case get = "GET", post = "POST" }
 
     /// `/api/v1/…` on www.instagram.com (`path` starts with `/api/v1/`, or is relative to it).
-    func rest(_ method: Method, _ path: String, query: [String: String] = [:], form: [String: String]? = nil) async throws -> JSON {
+    func rest(_ method: Method, _ path: String, query: [String: String] = [:], form: [String: String]? = nil,
+              headers extraHeaders: [String: String] = [:]) async throws -> JSON {
         await prepare()
         let full = path.hasPrefix("/") ? path : "/api/v1/" + path
         guard var comps = URLComponents(string: Self.origin + full) else { throw IGError.api("Bad path \(path)") }
@@ -312,6 +313,7 @@ actor IGClient {
         }
         var request = URLRequest(url: comps.url!)
         request.httpMethod = method.rawValue
+        for (k, v) in extraHeaders { request.setValue(v, forHTTPHeaderField: k) }
         if let form {
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
             request.httpBody = Self.formBody(form)
@@ -522,6 +524,8 @@ nonisolated struct WebPageConfig: Sendable {
     var jazoest: String?
     /// `BootloaderConfig.nonce`, sent as `X-FB-Entry-Nonce` on GraphQL requests.
     var entryNonce: String?
+    /// `fb_dtsg_ag`: the token the web app's older "ajax" GETs carry (the archive).
+    var asyncGetToken: String?
     /// `IGDMqttWebDeviceID.clientId`: the inbox query and the DM socket send it.
     var dmDeviceId: String?
     /// `CurrentUserInitialData.IG_USER_EIMU`: our own messaging id (DM senders are named by it).
@@ -565,6 +569,7 @@ nonisolated struct WebPageConfig: Sendable {
         viewerFbid = first(#""PolarisViewer",\[\],\{"data":\{[^{}]*?"fbid":"(\d+)""#) ?? first(#""NON_FACEBOOK_USER_ID":"(\d+)""#)
         viewerId = first(#""PolarisViewer",\[\],\{"data":\{.*?\},"id":"(\d+)"\}"#)
         entryNonce = first(#""BootloaderConfig",\[\],\{[^}]*?"nonce":"([^"]+)""#)
+        asyncGetToken = first(#""async_get_token":"([^"]+)""#)
         if let c = first(#"[?&]__comet_req=(\d+)"#) { cometReq = c }
         if let pr = first(#""SiteData",\[\],\{[^}]*?"pr":([\d.]+)"#) { dpr = pr }
         let srcs = NSRegularExpression(#"<script[^>]+src="(https://static\.cdninstagram\.com/rsrc\.php/[^"]+)""#).captures(in: html)

@@ -4,6 +4,7 @@ import SwiftUI
 /// (Posts, Reels, Tagged, and Saved on your own page).
 struct ProfileView: View {
     @State private var flight = PhotoFlight()
+    @State private var editing = false
     let model: ProfileModel
     @Environment(AppModel.self) private var app
 
@@ -44,6 +45,22 @@ struct ProfileView: View {
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y > 60 } action: { model.posts.browser.scrolledAway = $1 }
         .overlay { BrowserLightbox(browser: model.activeFeed.browser) }
         .photoFlightHost(flight)
+        .overlay {
+            if editing {
+                EditProfileSheet(onSaved: { Task { await model.loadHeader() } }, onClose: { editing = false })
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: editing)
+        #if DEBUG
+        // `-IGEditProfile YES`: open the edit form on your own profile (it only loads; nothing is saved).
+        .task {
+            if UserDefaults.standard.bool(forKey: "IGEditProfile") {
+                while model.profile == nil { try? await Task.sleep(for: .milliseconds(200)) }
+                if model.isMe { editing = true }
+            }
+        }
+        #endif
         .overlay {
             if let list = model.followList {
                 FollowListPanel(model: list) { model.followList = nil }
@@ -138,6 +155,12 @@ struct ProfileView: View {
     private var actions: some View {
         if let p = model.profile, !model.isMe {
             FollowButton(profile: p, confirming: model.confirmingUnfollow, busy: model.followBusy) { model.followTapped() }
+        }
+        if model.isMe {
+            Button("Edit profile") { editing = true }
+                .buttonStyle(.secondaryPill)
+            Button("Archive") { app.openArchive() }
+                .buttonStyle(.secondaryPill)
         }
         if let thread = app.inbox?.threads.first(where: { !$0.isGroup && $0.users.first?.id == user.id }) {
             Button("Message") { app.openChat(thread.id) }
