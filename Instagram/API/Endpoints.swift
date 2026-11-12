@@ -62,6 +62,10 @@ extension IGClient {
 
     /// The inbox's first page, and the sequence id the real-time socket resumes from.
     func inbox() async throws -> (threads: [DMThread], cursor: String?, hasMore: Bool, seqId: String?) {
+        // The device id comes from the page config: read it before building the variables
+        // (an empty one makes the query fail with a server error).
+        await prepare()
+        if page.dmDeviceId == nil { await scanPage("/direct/inbox/") }
         let data = try await dmQuery("PolarisDirectInboxQuery", variables: [
             "device_id_for_iris_subscription": .string(page.dmDeviceId ?? ""),
             "__relay_internal__pv__IGDIsProfessionalAccountGKrelayprovider": false,
