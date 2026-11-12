@@ -186,6 +186,9 @@ final class AppModel {
         cache?.end()
         cache = nil
         ResponseCache.clearAll()
+        // Nothing of this account may show for the next one: opened posts, cached images (DM photos too).
+        MediaDetailModel.clearCache()
+        Task { await ImagePipeline.shared.clearAll() }
         inbox?.stop()
         client = nil
         feed = nil

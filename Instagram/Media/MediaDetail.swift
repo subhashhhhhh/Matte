@@ -94,9 +94,16 @@ final class MediaDetailModel: Identifiable {
     private static var recent: [String: MediaDetailModel] = [:]
     private static var order: [String] = []
 
+    /// Forgets every cached post (sign-out: the next account must not see this one's).
+    static func clearCache() {
+        recent = [:]
+        order = []
+    }
+
     /// The cached model for `pk`, or a new one (kept for the next 40 posts).
     static func cached(pk: String, media: Media? = nil, client: IGClient?, fallbackURL: URL? = nil) -> MediaDetailModel {
-        if let hit = recent[pk] {
+        // Only reuse a post loaded by the same signed-in client (never another account's).
+        if let hit = recent[pk], hit.client === client {
             order.removeAll { $0 == pk }
             order.append(pk)
             if hit.media == nil, let media { hit.media = media }

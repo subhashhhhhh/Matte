@@ -22,6 +22,8 @@ actor ImagePipeline {
     private var prefetching = 0
     private let disk: URL
     private let diskBudget: Int
+    /// Bytes written since the last trim: the disk cache is trimmed as it grows, not only at launch.
+    private var writtenSinceTrim = 0
     private let log = Logger(subsystem: "com.subhash.Instagram", category: "Images")
 
     init(memoryBudgetMB: Int = 96, diskBudgetMB: Int = 400) {
@@ -137,6 +139,13 @@ actor ImagePipeline {
         downloads[key] = task
         let data = await task.value
         downloads[key] = nil
+        if let data {
+            writtenSinceTrim += data.count
+            if writtenSinceTrim > diskBudget / 5 {
+                writtenSinceTrim = 0
+                Self.trim(disk, to: diskBudget)
+            }
+        }
         return data
     }
 
