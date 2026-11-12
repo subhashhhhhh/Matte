@@ -18,7 +18,10 @@ nonisolated struct DGWParameters: Sendable {
     /// The typing subscription's doc id.
     var typingDocId: String
 
-    /// `wss://gateway.instagram.com/ws/<path>` with the query the web app sends (same order).
+    /// Where the sockets connect. Replaceable so tests can run a fake gateway.
+    nonisolated(unsafe) static var gatewayBase = "wss://gateway.instagram.com/ws/"
+
+    /// `<gatewayBase><path>` with the query the web app sends (same order).
     func url(_ path: String, streamGroup: Bool = false, loggingId: Bool = false) -> URL {
         var items: [(String, String)] = [
             ("x-dgw-appid", appId), ("x-dgw-appversion", "0"), ("x-dgw-authtype", "6:0"), ("x-dgw-version", "5"),
@@ -29,7 +32,7 @@ nonisolated struct DGWParameters: Sendable {
         if streamGroup { items.append(("x-dgw-app-stream-group", "group1")) }
         let query = items.map { "\($0.0)=\(IGClient.percentEncode($0.1))" }.joined(separator: "&")
             .replacingOccurrences(of: "%3A", with: ":")
-        return URL(string: "wss://gateway.instagram.com/ws/\(path)?\(query)")!
+        return URL(string: "\(Self.gatewayBase)\(path)?\(query)")!
     }
 
     /// The handshake headers a browser sends from www.instagram.com.
@@ -112,7 +115,7 @@ actor DGWSocket {
     /// Opens the connection. Incoming frames (other than keepalives, which are handled here)
     /// arrive on the stream, which finishes when the socket closes; `closed` then says why.
     func open() -> AsyncStream<DGWFrame> {
-        let (stream, continuation) = AsyncStream.makeStream(of: DGWFrame.self, bufferingPolicy: .bufferingNewest(512))
+        let (stream, continuation) = AsyncStream.makeStream(of: DGWFrame.self, bufferingPolicy: .unbounded)
         self.continuation = continuation
         task.resume()
         lastHeard = .now

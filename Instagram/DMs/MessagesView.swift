@@ -44,7 +44,19 @@ struct MessagesView: View {
         }
         .animation(.smooth(duration: 0.25), value: viewer?.id)
         .onChange(of: model.selectedId) { closeViewer() }
-        .task { await model.loadIfNeeded() }
+        .task {
+            await model.loadIfNeeded()
+            #if DEBUG
+            // `-IGOpenThread N`: open the Nth chat at launch, only if it's already read (opening
+            // an unread chat would mark it read).
+            let n = UserDefaults.standard.integer(forKey: "IGOpenThread")
+            if UserDefaults.standard.object(forKey: "IGOpenThread") != nil, model.threads.indices.contains(n),
+               !model.threads[n].isUnread {
+                try? await Task.sleep(for: .seconds(3))
+                model.selectedId = model.threads[n].id
+            }
+            #endif
+        }
     }
 
     @ViewBuilder
@@ -207,6 +219,8 @@ struct ConversationView: View {
     @Environment(\.sharedPaneToggle) private var togglePane
     @Environment(\.sharedPaneShown) private var paneShown
     @State private var atBottom = true
+    /// Set once the chat has opened at the newest message.
+    @State private var settled = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -218,6 +232,9 @@ struct ConversationView: View {
                         if model.hasOlder {
                             Color.clear.frame(height: 1)
                                 .onAppear {
+                                    // Not while the chat is still settling at the bottom: on open, the
+                                    // top is briefly on screen, and loading then would leave you mid-chat.
+                                    guard settled else { return }
                                     // Keep the message you were reading in place as older ones are added above.
                                     let anchor = model.messages.first?.id
                                     Task {
@@ -243,26 +260,41 @@ struct ConversationView: View {
                     }
                     .padding(.horizontal, 16)
                 }
-                // Only the first layout starts at the bottom; later size changes (the shared column
-                // opening or closing, images loading) leave the scroll position alone.
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .scrollIndicators(.never)
-                .onScrollGeometryChange(for: Bool.self) { g in
-                    g.contentOffset.y + g.containerSize.height >= g.contentSize.height - 120
-                } action: { _, bottom in
-                    atBottom = bottom
+                // Stick to the bottom: whenever the content or the view changes size (a chat opening,
+                // rows being measured, a new message, the shared column opening), go back to the
+                // newest message if you were at it just before. Scrolled up, your place is left alone.
+                .onScrollGeometryChange(for: ChatGeometry.self) { g in
+                    ChatGeometry(content: g.contentSize.height, offset: g.contentOffset.y, container: g.containerSize.height,
+                                 width: g.containerSize.width)
+                } action: { old, new in
+                    atBottom = new.isAtBottom
+                    let resized = new.content != old.content || new.container != old.container || new.width != old.width
+                    if resized, !settled || old.isAtBottom {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
                 }
                 // Follow new messages only when you're already at the bottom, or when it's yours.
                 .onChange(of: model.messages.last?.id) { old, new in
                     guard old != new else { return }
                     let mine = model.messages.last?.senderId == model.viewerId
-                    guard old == nil || atBottom || mine else { return }
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
-                }
-                .onChange(of: model.peerTyping) {
-                    if model.peerTyping, atBottom {
-                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                    if old == nil {
+                        // First load: jump (no animation), again once lazy rows have real heights,
+                        // and only then allow loading older messages.
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                        Task {
+                            for delay in [80, 200, 400] {
+                                try? await Task.sleep(for: .milliseconds(delay))
+                                proxy.scrollTo("bottom", anchor: .bottom)
+                            }
+                            settled = true
+                        }
+                        return
                     }
+                    // Your own message always brings you down; others' only if you were there
+                    // (the size change above already handled that case).
+                    if mine { withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) } }
                 }
             }
             .overlay { if model.isLoading && model.messages.isEmpty { Spinner(size: 20) } }
@@ -330,4 +362,13 @@ private struct TypingRow: View {
         .padding(.top, 4)
         .onAppear { phase = true }
     }
+}
+
+/// The chat scroll view's size and position, to tell "was at the newest message" before a change.
+private struct ChatGeometry: Equatable {
+    var content: CGFloat
+    var offset: CGFloat
+    var container: CGFloat
+    var width: CGFloat
+    var isAtBottom: Bool { offset + container >= content - 24 }
 }

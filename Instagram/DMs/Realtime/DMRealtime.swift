@@ -64,7 +64,7 @@ actor DMRealtime {
         self.client = client
         self.seqId = seqId
         self.snapshotAt = snapshotAt
-        (events, continuation) = AsyncStream.makeStream(of: DMRealtimeEvent.self, bufferingPolicy: .bufferingNewest(1000))
+        (events, continuation) = AsyncStream.makeStream(of: DMRealtimeEvent.self, bufferingPolicy: .unbounded)
     }
 
     func start(typing: Bool = true) {
@@ -96,11 +96,23 @@ actor DMRealtime {
 
     // MARK: Main stream
 
+    /// A connection only counts as working (and resets the retry backoff) once it has stayed up
+    /// this long: one that connects and then drops at once, again and again, must back off too.
+    nonisolated static let stableAfter: Duration = .seconds(45)
+
+    /// Seconds to wait before retry number `failures` (1, 2, 4 … 60, plus up to 20% jitter).
+    nonisolated static func backoff(failures: Int) -> Double {
+        guard failures > 0 else { return 1 }
+        let base = min(pow(2, Double(min(failures, 10))), 60)
+        return base + Double.random(in: 0...(base * 0.2))
+    }
+
     private func mainLoop() async {
         var failures = 0
         var attempt = 0
         var freshPage = false
         while !Task.isCancelled && !unauthorized {
+            let started = ContinuousClock.now
             let result = await runMain(retry: attempt, freshPage: freshPage)
             attempt += 1
             let wasSubscribed = isSubscribed
@@ -118,15 +130,15 @@ actor DMRealtime {
                 mainTask = nil
                 return
             case .ended(let wasConnected):
-                if wasConnected {
+                if wasConnected, ContinuousClock.now - started >= Self.stableAfter {
                     failures = 0
                     try? await Task.sleep(for: .seconds(1))
                 } else {
                     failures += 1
                     if !wasSubscribed && failures == 1 { continuation.yield(.disconnected) }
                     // A failing connect may be a stale page config (device id, build): reread it.
-                    freshPage = failures % 3 == 0
-                    try? await Task.sleep(for: .seconds(min(pow(2, Double(min(failures, 10))), 60)))
+                    freshPage = !wasConnected && failures % 3 == 0
+                    try? await Task.sleep(for: .seconds(Self.backoff(failures: failures)))
                 }
             }
         }
@@ -272,11 +284,13 @@ actor DMRealtime {
     private func typingLoop() async {
         var failures = 0
         while !Task.isCancelled && !unauthorized {
+            let started = ContinuousClock.now
             let (connected, close) = await runTyping()
             guard !Task.isCancelled else { return }
             if close?.isUnauthorized == true { return }
-            failures = connected ? 0 : failures + 1
-            try? await Task.sleep(for: .seconds(connected ? 1 : min(pow(2, Double(min(failures, 10))), 60)))
+            let stable = connected && ContinuousClock.now - started >= Self.stableAfter
+            failures = stable ? 0 : failures + 1
+            try? await Task.sleep(for: .seconds(Self.backoff(failures: failures)))
         }
     }
 
