@@ -43,6 +43,7 @@ struct FeedView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollIndicators(.never)
+                .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y > 60 } action: { model.scrolledAway = $1 }
             }
         }
         .overlay {

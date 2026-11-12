@@ -293,3 +293,15 @@ nonisolated struct Hashtag: Hashable, Sendable, Identifiable {
     var name: String
     var mediaCount: Int?
 }
+
+// MARK: - Cached on disk (ResponseCache)
+
+// Synthesized: a field added later makes older cache files fail to decode, which the cache
+// treats as a miss (it never fails the app).
+extension User: Codable {}
+extension Rendition: Codable {}
+extension Media.Kind: Codable {}
+extension Media: Codable {}
+extension StoryReel: Codable {}
+extension DMThread: Codable {}
+extension Profile: Codable {}

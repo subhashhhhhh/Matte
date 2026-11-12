@@ -54,6 +54,8 @@ final class FeedModel {
             posts = []
             cursor = nil
             hasMore = true
+            stale = false
+            showCached()
             Task {
                 // A load for the previous feed may still be running: let it finish (its result
                 // is dropped), then load this one.
@@ -93,6 +95,12 @@ final class FeedModel {
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let client: IGClient
     @ObservationIgnored private var loadedOnce = false
+    /// `posts` came from the cache: no cursor yet, page 1 must load before paging on.
+    @ObservationIgnored private(set) var stale = false
+    /// The grid is scrolled down (set by the view): fresh results mustn't replace what's shown.
+    @ObservationIgnored var scrolledAway = false
+    private var cache: ResponseCache? { app?.cache }
+    static let cachedPosts = 24
 
     init(app: AppModel, client: IGClient) {
         self.app = app
@@ -102,7 +110,36 @@ final class FeedModel {
     func loadIfNeeded() async {
         guard !loadedOnce else { return }
         loadedOnce = true
+        showCached()
         await refresh()
+    }
+
+    /// Shows the last saved first page (and stories tray) until the fresh one arrives.
+    private func showCached() {
+        guard let cache else { return }
+        if posts.isEmpty, let hit = cache.load([Media].self, "feed-" + source.rawValue)?.value.cacheable(Self.cachedPosts), !hit.isEmpty {
+            posts = hit
+            stale = true
+        }
+        if tray.isEmpty, let hit = cache.load([StoryReel].self, "tray", maxAge: 86_400)?.value {
+            tray = hit
+        }
+    }
+
+    /// Takes in a fresh first page. Over cached posts the user is looking at (scrolled down, or
+    /// a post open), it's added after them instead, so nothing moves.
+    /// Returns whether the shown list was replaced.
+    private func adopt(_ fresh: [Media]) -> Bool {
+        if stale, scrolledAway || opened != nil {
+            let known = Set(posts.map(\.pk))
+            posts += fresh.filter { !known.contains($0.pk) }
+            stale = false
+            return false
+        }
+        // Unchanged posts keep their identity (pk), so their tiles stay put.
+        posts = fresh
+        stale = false
+        return true
     }
 
     func refresh() async {
@@ -110,25 +147,34 @@ final class FeedModel {
         isLoading = true
         defer { isLoading = false }
         async let trayTask = try? client.storyTray()
+        let requested = source
+        var replaced = false
+        var firstPage: [Media]?
         do {
-            let requested = source
             let page = try await client.homeFeed(source: requested)
             guard requested == source else { return }
             // A failed refresh keeps what's shown.
-            posts = page.items
+            replaced = adopt(page.items)
             cursor = page.cursor
             hasMore = page.hasMore
             loadFailed = false
+            firstPage = page.items
         } catch {
             loadFailed = posts.isEmpty
             app?.report(error)
         }
-        if let t = await trayTask { tray = t }
+        if let t = await trayTask {
+            tray = t
+            cache?.save(t.map { var r = $0; r.items = []; return r }, "tray")
+        }
         // Feed pages are short (ads and suggestions are left out): fill a few grid rows.
         var tries = 0
         while posts.count < 8, hasMore, tries < 3 {
             tries += 1
             await loadMore()
+        }
+        if let firstPage, requested == source {
+            cache?.save((replaced ? posts : firstPage).cacheable(Self.cachedPosts), "feed-" + requested.rawValue)
         }
         #if DEBUG
         // `-IGOpen post|story`: open the first post or a story on launch (for screenshots).
@@ -143,6 +189,8 @@ final class FeedModel {
     }
 
     func loadMore() async {
+        // Cached posts have no cursor: load page 1 first (`refresh` keeps them in place).
+        if stale { return await refresh() }
         guard hasMore, let cursor, !isLoadingMore else { return }
         isLoadingMore = true
         defer { isLoadingMore = false }

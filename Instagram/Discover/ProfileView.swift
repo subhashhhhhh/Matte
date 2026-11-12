@@ -41,6 +41,7 @@ struct ProfileView: View {
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.never)
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y > 60 } action: { model.posts.browser.scrolledAway = $1 }
         .overlay { BrowserLightbox(browser: model.activeFeed.browser) }
         .photoFlightHost(flight)
         .overlay {

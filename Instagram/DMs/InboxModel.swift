@@ -5,8 +5,15 @@ import OSLog
 @Observable
 final class InboxModel {
     private(set) var threads: [DMThread] = [] {
-        didSet { if !Self.isTesting { DMNotifier.setBadge(unreadCount) } }
+        didSet {
+            if !Self.isTesting { DMNotifier.setBadge(unreadCount) }
+            if !stale { scheduleSave() }
+        }
     }
+    /// `threads` came from the cache: shown until the first fresh inbox replaces them.
+    @ObservationIgnored private(set) var stale = false
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+    static let cachedThreads = 30
     private(set) var isLoading = false
     private(set) var loadFailed = false
     var selectedId: String? {
@@ -35,6 +42,11 @@ final class InboxModel {
     init(app: AppModel, client: IGClient) {
         self.app = app
         self.client = client
+        // The last inbox shows at once (the fresh one replaces it).
+        if let hit = app.cache?.load([DMThread].self, "inbox", maxAge: 14 * 86_400)?.value, !hit.isEmpty {
+            stale = true
+            threads = hit
+        }
         guard !Self.isTesting else { return }
         // Messages arrive (and notify) whichever page is open: load the inbox and connect the
         // real-time socket shortly after launch.
@@ -200,6 +212,13 @@ final class InboxModel {
         defer { isLoading = false }
         do {
             let box = try await client.inbox()
+            if stale {
+                // Cached chats Instagram no longer lists (deleted, left, moved to requests) go;
+                // the open one stays until you leave it.
+                let fresh = Set(box.threads.map(\.id))
+                stale = false
+                threads.removeAll { !fresh.contains($0.id) && $0.id != selectedId }
+            }
             merge(box.threads)
             cursor = box.cursor
             hasMore = box.hasMore
@@ -239,6 +258,17 @@ final class InboxModel {
             return ($0.lastActivity ?? .distantPast) > ($1.lastActivity ?? .distantPast)
         }
         if fresh.count > 1 { watchPresence() }
+    }
+
+    /// Saves the top of the inbox a few seconds after it changes (bursts of updates write once).
+    private func scheduleSave() {
+        guard let cache = app?.cache else { return }
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, let self else { return }
+            cache.save(Array(threads.filter { !$0.isRequest }.prefix(Self.cachedThreads)), "inbox")
+        }
     }
 
     /// The open thread's newest state (after sending, or a poll).
@@ -400,6 +430,7 @@ final class InboxModel {
 
     func stop() {
         poller?.cancel()
+        saveTask?.cancel()
         inboxRefresh?.cancel()
         stopRealtime()
         conversation?.stop()

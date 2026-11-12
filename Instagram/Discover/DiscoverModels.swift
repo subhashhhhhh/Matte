@@ -11,12 +11,22 @@ final class MediaBrowser {
     @ObservationIgnored private let client: IGClient
     /// Called when the grid or the opened post gets near the end (load the next page).
     @ObservationIgnored var nearEnd: (() -> Void)?
+    /// The grid is scrolled down (set by the view): fresh results mustn't replace what's shown.
+    @ObservationIgnored var scrolledAway = false
 
     init(client: IGClient) { self.client = client }
 
     func append(_ more: [Media]) {
         let known = Set(items.map(\.pk))
         items += more.filter { !known.contains($0.pk) }
+    }
+
+    /// Fresh page 1 in place of cached items: replaces them while the grid is at the top and
+    /// nothing is open; otherwise adds the new posts after them, so nothing moves.
+    func replaceCached(with fresh: [Media]) {
+        if scrolledAway || opened != nil { return append(fresh) }
+        var seen = Set<String>()
+        items = fresh.filter { seen.insert($0.pk).inserted }
     }
 
     func reset() {
@@ -60,8 +70,11 @@ final class ExploreModel {
     @ObservationIgnored private var maxId: String?
     @ObservationIgnored private var token: String?
     @ObservationIgnored private var hasMore = true
+    /// The grid shows cached posts: page 1 must load before paging on.
+    @ObservationIgnored private(set) var stale = false
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let client: IGClient
+    static let cachedPosts = 30
 
     init(app: AppModel, client: IGClient) {
         self.app = app
@@ -71,14 +84,21 @@ final class ExploreModel {
     }
 
     func loadIfNeeded() async {
-        guard browser.items.isEmpty else { return }
-        #if DEBUG
-        // `-IGOpenMediaPk <pk>`: open that post first (screenshots of a specific post).
-        if let pk = UserDefaults.standard.string(forKey: "IGOpenMediaPk"), let m = try? await client.mediaInfo(pk: pk) {
-            browser.append([m])
-            browser.open(at: 0)
+        guard browser.items.isEmpty || stale else { return }
+        if browser.items.isEmpty {
+            #if DEBUG
+            // `-IGOpenMediaPk <pk>`: open that post first (screenshots of a specific post).
+            if let pk = UserDefaults.standard.string(forKey: "IGOpenMediaPk"), let m = try? await client.mediaInfo(pk: pk) {
+                browser.append([m])
+                browser.open(at: 0)
+            }
+            #endif
+            // The last first page, until the fresh one arrives.
+            if browser.items.isEmpty, let hit = app?.cache?.load([Media].self, "explore")?.value.cacheable(Self.cachedPosts), !hit.isEmpty {
+                browser.append(hit)
+                stale = true
+            }
         }
-        #endif
         await loadMore()
     }
 
@@ -86,17 +106,22 @@ final class ExploreModel {
         maxId = nil
         token = nil
         hasMore = true
+        stale = false
         browser.reset()
         await loadMore()
     }
 
     func loadMore() async {
-        guard hasMore, !isLoading else { return }
+        guard hasMore || stale, !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
         do {
-            let page = try await client.explore(maxId: maxId, pagingToken: token)
-            browser.append(page.items)
+            // Cached posts have no paging state: start over from page 1.
+            let first = stale || maxId == nil
+            let page = try await client.explore(maxId: stale ? nil : maxId, pagingToken: stale ? nil : token)
+            if stale { browser.replaceCached(with: page.items) } else { browser.append(page.items) }
+            stale = false
+            if first { app?.cache?.save(page.items.cacheable(Self.cachedPosts), "explore") }
             maxId = page.next
             token = page.token ?? token
             hasMore = page.more && page.next != nil && !page.items.isEmpty

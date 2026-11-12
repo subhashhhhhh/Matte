@@ -12,6 +12,7 @@ struct ExploreView: View {
             if model.isLoading, !model.browser.items.isEmpty { Spinner().padding(24) }
         }
         .scrollIndicators(.never)
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y > 60 } action: { model.browser.scrolledAway = $1 }
         .overlay {
             if model.browser.items.isEmpty {
                 if model.loadFailed {

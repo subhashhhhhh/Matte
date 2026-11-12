@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Values
 
 /// One story highlight on a profile (its id, "highlight:…", is a story reel id).
-nonisolated struct Highlight: Hashable, Sendable, Identifiable {
+nonisolated struct Highlight: Hashable, Sendable, Identifiable, Codable {
     var id: String
     var title: String
     var cover: URL?
@@ -66,6 +66,10 @@ final class MediaFeed {
     private(set) var failed = false
     @ObservationIgnored private var cursor: String?
     @ObservationIgnored private var hasMore = true
+    /// The grid shows cached posts: page 1 must load before paging on.
+    @ObservationIgnored private(set) var stale = false
+    /// The first page as it last arrived from Instagram (what gets cached).
+    @ObservationIgnored private(set) var firstPage: [Media]?
     @ObservationIgnored private let fetch: (String?) async throws -> Page<Media>
     @ObservationIgnored private let onError: (Error) -> Void
     /// Runs once after the first page arrives (debug launch flags).
@@ -80,19 +84,30 @@ final class MediaFeed {
 
     var isEmpty: Bool { settled && browser.items.isEmpty }
 
+    /// Shows cached posts until page 1 arrives.
+    func seed(_ items: [Media]) {
+        guard browser.items.isEmpty, !items.isEmpty else { return }
+        browser.append(items)
+        stale = true
+        settled = true
+    }
+
     func loadIfNeeded() async {
-        guard !settled else { return }
+        guard !settled || stale else { return }
         await loadMore()
     }
 
     func loadMore() async {
-        guard hasMore, !isLoading else { return }
+        guard hasMore || stale, !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
         do {
-            let page = try await fetch(cursor)
-            let first = !settled
-            browser.append(page.items)
+            let wasStale = stale
+            let page = try await fetch(wasStale ? nil : cursor)
+            let first = !settled || wasStale
+            if wasStale { browser.replaceCached(with: page.items) } else { browser.append(page.items) }
+            if wasStale || cursor == nil { firstPage = page.items }
+            stale = false
             cursor = page.cursor
             hasMore = page.hasMore && page.cursor != nil
             failed = false
@@ -100,6 +115,8 @@ final class MediaFeed {
             if first { onFirstPage?(); onFirstPage = nil }
         } catch {
             if error is CancellationError { return }
+            // Cached posts stay (and `stale` lets a later load try page 1 again).
+            if stale { return }
             hasMore = false
             failed = browser.items.isEmpty
             settled = true
@@ -108,6 +125,7 @@ final class MediaFeed {
     }
 
     func retry() async {
+        guard !stale else { return await loadMore() }
         hasMore = true
         settled = false
         failed = false
@@ -188,9 +206,25 @@ final class ProfileModel: Identifiable {
     /// Private and not followed: only the header shows.
     var isLocked: Bool { profile?.isPrivate == true && profile?.following != true && !isMe }
 
+    static let cachedProfiles = 20
+    private var cacheKey: String { "profile-" + user.id }
+
+    /// What's kept of a profile between visits: the header and the first posts.
+    nonisolated struct Snapshot: Codable, Sendable {
+        var profile: Profile
+        var highlights: [Highlight]
+        var posts: [Media]
+    }
+
     func start() async {
         guard !started else { return }
         started = true
+        if let cache = app?.cache, let snap = cache.load(Snapshot.self, cacheKey, maxAge: 14 * 86_400)?.value {
+            cache.touch(cacheKey)
+            profile = snap.profile
+            highlights = snap.highlights
+            posts.seed(snap.posts.cacheable(12))
+        }
         #if DEBUG
         // `-IGProfileTab reels|tagged|saved` and `-IGProfileList followers|following` (screenshots).
         let d = UserDefaults.standard
@@ -210,18 +244,38 @@ final class ProfileModel: Identifiable {
         async let grid: Void = activeFeed.loadIfNeeded()
         async let rings: Void = loadHighlights()
         _ = await (header, grid, rings)
+        saveSnapshot()
+    }
+
+    @ObservationIgnored private var headerFresh = false
+    @ObservationIgnored private var highlightsFresh = false
+
+    /// Keeps the header and first posts for next time (the 20 most recently opened profiles).
+    private func saveSnapshot() {
+        guard let cache = app?.cache, headerFresh, let profile else { return }
+        let first = posts.firstPage ?? (isLocked ? [] : nil)
+        guard let first else { return }
+        cache.save(Snapshot(profile: profile, highlights: highlightsFresh ? highlights : [], posts: first.cacheable(12)), cacheKey)
+        cache.trim(prefix: "profile-", keep: Self.cachedProfiles)
     }
 
     private func loadHeader() async {
-        do { profile = try await client.profile(id: user.id) } catch {
-            failed = true
+        do {
+            profile = try await client.profile(id: user.id)
+            headerFresh = true
+            failed = false
+        } catch {
+            failed = profile == nil
             app?.report(error)
         }
         if isMe { await loadCollections() }
     }
 
     private func loadHighlights() async {
-        highlights = (try? await client.highlights(userId: user.id)) ?? []
+        if let fresh = try? await client.highlights(userId: user.id) {
+            highlights = fresh
+            highlightsFresh = true
+        }
         #if DEBUG
         // `-IGOpenHighlight N`: play the Nth highlight (screenshots).
         let n = UserDefaults.standard.integer(forKey: "IGOpenHighlight")

@@ -27,6 +27,9 @@ final class ReelsModel {
 
     @ObservationIgnored private var cursor: String?
     @ObservationIgnored private var hasMore = true
+    /// `items` came from the cache: page 1 must load before paging on.
+    @ObservationIgnored private(set) var stale = false
+    static let cachedReels = 10
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let client: IGClient
 
@@ -38,17 +41,33 @@ final class ReelsModel {
     var reel: Media? { items.indices.contains(index) ? items[index] : nil }
 
     func loadIfNeeded() async {
-        guard items.isEmpty, !isLoading else { return }
+        guard items.isEmpty || stale, !isLoading else { return }
+        // The last first page plays at once; the fresh one follows it.
+        if items.isEmpty, let hit = app?.cache?.load([Media].self, "reels", maxAge: 2 * 86_400)?.value.filter(\.isVideo).cacheable(Self.cachedReels),
+           !hit.isEmpty {
+            items = hit
+            stale = true
+            startCurrent()
+        }
+        let wasEmpty = items.isEmpty
         await loadMore()
-        startCurrent()
+        if wasEmpty { startCurrent() }
     }
 
     func loadMore() async {
-        guard hasMore, !isLoading else { return }
+        guard hasMore || stale, !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
         do {
-            let page = try await client.reels(after: cursor)
+            let wasStale = stale
+            let page = try await client.reels(after: wasStale ? nil : cursor)
+            if wasStale || cursor == nil { app?.cache?.save(page.items.filter(\.isVideo).cacheable(Self.cachedReels), "reels") }
+            if wasStale {
+                // Cached reels: keep the one playing and the one buffered after it, then the
+                // fresh page (the reels after those were never seen).
+                items = Array(items.prefix(index + 2))
+                stale = false
+            }
             let known = Set(items.map(\.pk))
             items += page.items.filter { !known.contains($0.pk) && $0.isVideo }
             cursor = page.cursor

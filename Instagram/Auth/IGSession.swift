@@ -38,10 +38,14 @@ actor IGSession {
     private var saveTask: Task<Void, Never>?
     /// Signed out: nothing may write this session to disk again.
     private var ended = false
+    /// The account this session signed in as (`ds_user_id` at sign-in): keys per-account data
+    /// such as the response cache. Fixed for the session's life.
+    nonisolated let accountId: String?
 
     init(cookies: [StoredCookie], store: SessionStore = .shared) {
         self.cookies = Dictionary(cookies.map { ($0.key, $0) }, uniquingKeysWith: { $1 })
         self.store = store
+        accountId = cookies.first { $0.name == "ds_user_id" && !$0.isExpired }?.value
     }
 
     nonisolated static func isSignedIn(_ cookies: [StoredCookie]) -> Bool {

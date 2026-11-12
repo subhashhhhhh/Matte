@@ -83,6 +83,8 @@ final class AppModel {
     private(set) var explore: ExploreModel?
     private(set) var search: SearchModel?
     private(set) var activity: ActivityModel?
+    /// Last good results on disk, for this account (nil when signed out).
+    @ObservationIgnored private(set) var cache: ResponseCache?
 
     @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "App")
 
@@ -100,6 +102,7 @@ final class AppModel {
 
     private func start(_ client: IGClient) {
         self.client = client
+        cache = ResponseCache(account: client.session.accountId)
         authState = .signedIn
         feed = FeedModel(app: self, client: client)
         reels = ReelsModel(app: self, client: client)
@@ -180,6 +183,9 @@ final class AppModel {
         let old = client
         Task { await old?.session.end() }
         SessionStore.shared.clear()
+        cache?.end()
+        cache = nil
+        ResponseCache.clearAll()
         inbox?.stop()
         client = nil
         feed = nil
