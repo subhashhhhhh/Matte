@@ -64,8 +64,21 @@ struct Sidebar: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
-            .help("Your profile")
-            .contextMenu { Button("Sign Out") { app.signOut() } }
+            .help("Your profile (right-click to switch accounts)")
+            .contextMenu {
+                ForEach(app.accounts) { account in
+                    let current = account.id == app.accountId
+                    Button { app.switchAccount(to: account.id) } label: {
+                        if current { Label(account.handle, systemImage: "checkmark") } else { Text(account.handle) }
+                    }
+                    .disabled(current || app.switchingAccount)
+                }
+                Button("Add Account…") { app.addAccount() }
+                Divider()
+                Button("Settings…") { app.showSettings = true }
+                Divider()
+                Button(app.me.map { "Sign Out of @\($0.username)" } ?? "Sign Out") { app.signOut() }
+            }
             .padding(.bottom, 12)
         }
         .frame(width: 72)

@@ -117,6 +117,13 @@ nonisolated final class ResponseCache: @unchecked Sendable {
         queue.async { try? FileManager.default.removeItem(at: root) }
     }
 
+    /// Deletes one account's cache (signing out of it while other accounts stay signed in).
+    static func clear(account: String, root: URL = ResponseCache.root) {
+        guard AccountStore.isValid(account) else { return }
+        let dir = root.appending(path: account, directoryHint: .isDirectory)
+        queue.async { try? FileManager.default.removeItem(at: dir) }
+    }
+
     /// Waits for queued writes (tests).
     static func flush() async {
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in queue.async { c.resume() } }

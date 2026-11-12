@@ -72,6 +72,13 @@ actor IGSession {
         saveTask = nil
     }
 
+    /// Switching away: ends the session (as `end`) and hands back its cookies, rotated ones
+    /// included, in one step so nothing rotates in between.
+    func endAndTakeCookies() -> [StoredCookie] {
+        end()
+        return allCookies
+    }
+
     /// The CSRF token. Instagram rotates it now and then through Set-Cookie (see `absorb`).
     var csrfToken: String? { cookies.values.first { $0.name == "csrftoken" && !$0.isExpired }?.value }
 
@@ -132,7 +139,10 @@ nonisolated struct SessionStore: Sendable {
         return dir
     }()
 
-    var url: URL { Self.directory.appending(path: "session.json") }
+    /// The current account's cookies (`session.json`); parked accounts have their own (`AccountStore`).
+    let url: URL
+
+    init(url: URL = SessionStore.directory.appending(path: "session.json")) { self.url = url }
 
     func load() -> [StoredCookie]? {
         guard let data = try? Data(contentsOf: url) else { return nil }

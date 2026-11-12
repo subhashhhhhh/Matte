@@ -60,6 +60,11 @@ struct RootView: View {
                     .transition(.opacity)
                     .zIndex(24)
             }
+            if app.showSettings {
+                SettingsView()
+                    .transition(.opacity)
+                    .zIndex(27)
+            }
             if let urls = app.droppedFiles {
                 DropChooser(urls: urls)
                     .transition(.opacity)
@@ -99,6 +104,7 @@ struct RootView: View {
             return true
         }
         .animation(.easeOut(duration: 0.14), value: app.showSwitcher)
+        .animation(.easeOut(duration: 0.14), value: app.showSettings)
         .background(Theme.background)
         .ignoresSafeArea()
         .sheet(isPresented: $app.showSignIn) {

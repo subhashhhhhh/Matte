@@ -97,13 +97,36 @@ final class AppModel {
     private(set) var explore: ExploreModel?
     private(set) var search: SearchModel?
     private(set) var activity: ActivityModel?
+    /// Every account signed in on this Mac, the current one included, in the switcher's order.
+    private(set) var accounts: [AccountSummary] = []
+    /// Parking one account and starting another (the switcher waits).
+    private(set) var switchingAccount = false
+    /// Manager mode: planning, scheduling, replies and insights, for people who run accounts.
+    /// Off by default; turning it off only hides those (nothing scheduled is deleted).
+    var managerMode = UserDefaults.standard.bool(forKey: "managerMode") {
+        didSet { UserDefaults.standard.set(managerMode, forKey: "managerMode") }
+    }
+    /// The Settings page, when open.
+    var showSettings = false
+    /// The current account's id (`ds_user_id`).
+    var accountId: String? { client?.session.accountId }
+
     /// Last good results on disk, for this account (nil when signed out).
     @ObservationIgnored private(set) var cache: ResponseCache?
 
     @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "App")
 
     init() {
-        if let session = IGSession.restore() { start(IGClient(session: session)) }
+        if let session = IGSession.restore() {
+            if let id = session.accountId {
+                // Left parked by a switch that didn't finish: the current copy wins.
+                AccountStore.shared.dropParked(id)
+                accounts = AccountStore.shared.upsert(AccountSummary(id: id))
+            }
+            start(IGClient(session: session))
+        } else {
+            startNextParkedAccount()
+        }
         #if DEBUG
         // `-IGStartPage home|reels|messages`: open on that page (for screenshots).
         if let raw = UserDefaults.standard.string(forKey: "IGStartPage"), let d = Destination(rawValue: raw) {
@@ -111,6 +134,8 @@ final class AppModel {
         }
         // `-IGShowSwitcher YES`: open the ⌘K switcher at launch.
         showSwitcher = UserDefaults.standard.bool(forKey: "IGShowSwitcher")
+        // `-IGOpenSettings YES`: open Settings at launch.
+        showSettings = UserDefaults.standard.bool(forKey: "IGOpenSettings")
         #endif
     }
 
@@ -142,8 +167,15 @@ final class AppModel {
         }
         Task {
             guard let id = await client.session.userId else { return }
+            guard self.client === client else { return }
             viewerId = id
-            me = try? await client.profile(id: id).user
+            let loaded = try? await client.profile(id: id).user
+            // Switched again while this loaded: it belongs to the other account.
+            guard self.client === client else { return }
+            me = loaded
+            if let loaded, AccountStore.isValid(loaded.id) {
+                accounts = AccountStore.shared.upsert(AccountSummary(loaded))
+            }
             #if DEBUG
             // `-IGOpenMyStory YES`: open your own story (to check the viewer list).
             // `-IGOpenArchive YES` / `-IGOpenMe YES`: open your archive / your profile.
@@ -273,23 +305,123 @@ final class AppModel {
         inbox?.selectedId = threadId
     }
 
+    // MARK: Accounts
+
+    /// A sign-in finished. With an account already open, that one is parked (kept signed in)
+    /// and the new one becomes current; signing in again to the current account replaces it.
     func completeSignIn(_ cookies: [StoredCookie]) {
-        SessionStore.shared.save(cookies)
-        start(IGClient(session: IGSession(cookies: cookies)))
         showSignIn = false
+        let newId = cookies.first { $0.name == "ds_user_id" && !$0.isExpired }?.value
+        if let client, let current = accountId, newId != current {
+            switchingAccount = true
+            Task {
+                AccountStore.shared.park(await client.session.endAndTakeCookies(), for: current)
+                tearDown()
+                becomeCurrent(cookies)
+                switchingAccount = false
+                log.info("Added an account")
+            }
+            return
+        }
+        if let old = client {
+            Task { await old.session.end() }
+            tearDown()
+        }
+        becomeCurrent(cookies)
         log.info("Signed in")
     }
 
+    /// Makes `cookies` the current session and starts it.
+    private func becomeCurrent(_ cookies: [StoredCookie]) {
+        SessionStore.shared.save(cookies)
+        if let id = cookies.first(where: { $0.name == "ds_user_id" && !$0.isExpired })?.value, AccountStore.isValid(id) {
+            AccountStore.shared.dropParked(id)
+            accounts = AccountStore.shared.upsert(AccountSummary(id: id))
+        }
+        start(IGClient(session: IGSession(cookies: cookies)))
+    }
+
+    /// Switches to another signed-in account: the current one is parked (still signed in),
+    /// every page starts over for the other one.
+    func switchAccount(to id: String) {
+        guard id != accountId, !switchingAccount else { return }
+        if isPublishing { show("Wait until your post is shared, then switch."); return }
+        guard let cookies = AccountStore.shared.unpark(id) else {
+            // Its session has ended (expired, or signed out elsewhere).
+            let name = accounts.first { $0.id == id }?.handle ?? "That account"
+            removeAccount(id)
+            show("\(name) is signed out. Add it again to switch to it.")
+            return
+        }
+        switchingAccount = true
+        let old = client
+        Task {
+            if let old, let current = old.session.accountId {
+                AccountStore.shared.park(await old.session.endAndTakeCookies(), for: current)
+            }
+            tearDown()
+            becomeCurrent(cookies)
+            switchingAccount = false
+            MemoryRelief.soon()
+            log.info("Switched account")
+        }
+    }
+
+    /// Opens the sign-in sheet for one more account (the current one stays signed in).
+    func addAccount() {
+        if isPublishing { show("Wait until your post is shared, then add an account."); return }
+        showSettings = false
+        showSignIn = true
+    }
+
+    /// A post or story is uploading: switching would cancel it.
+    var isPublishing: Bool { creating?.isSharing == true || storyEditor?.sharer?.isSharing == true }
+
+    /// Signs out of an account that isn't the current one.
+    func removeAccount(_ id: String) {
+        guard id != accountId else { signOut(); return }
+        accounts = AccountStore.shared.remove(id)
+        ResponseCache.clear(account: id)
+    }
+
+    /// Signs out of the current account. Another signed-in account, if any, becomes current.
     func signOut() {
         let old = client
+        let id = old?.session.accountId
         Task { await old?.session.end() }
         SessionStore.shared.clear()
         cache?.end()
         cache = nil
-        ResponseCache.clearAll()
+        if let id { accounts = AccountStore.shared.remove(id) }
+        if accounts.isEmpty {
+            ResponseCache.clearAll()
+        } else if let id {
+            ResponseCache.clear(account: id)
+        }
         // Nothing of this account may show for the next one: opened posts, cached images (DM photos too).
         MediaDetailModel.clearCache()
         Task { await ImagePipeline.shared.clearAll() }
+        tearDown()
+        authState = .signedOut
+        startNextParkedAccount()
+    }
+
+    /// No current session: the first other account still signed in takes over.
+    private func startNextParkedAccount() {
+        var list = AccountStore.shared.list()
+        while let next = list.first {
+            if let cookies = AccountStore.shared.unpark(next.id) {
+                accounts = list
+                becomeCurrent(cookies)
+                return
+            }
+            list = AccountStore.shared.remove(next.id)
+        }
+        accounts = list
+    }
+
+    /// Lets go of every page and model of the current account (not its saved data).
+    private func tearDown() {
         inbox?.stop()
         client = nil
         feed = nil
@@ -303,6 +435,7 @@ final class AppModel {
         viewerId = nil
         actions = nil
         sharing = nil
+        openedMedia = nil
         creating?.cancel()
         creating = nil
         storyEditor?.tearDown()
@@ -312,14 +445,22 @@ final class AppModel {
         editingCaption = nil
         confirmingDelete = nil
         stories = nil
-        authState = .signedOut
+        cache?.end()
+        cache = nil
+        // Pages are built again on first visit (only the open one now).
+        visited = [destination]
     }
 
     /// Handles an error from any page: a dead session signs out, the rest become a toast.
     func report(_ error: Error) {
         if case IGError.signedOut = error {
+            let who = me.map { "@" + $0.username } ?? "This account"
             signOut()
-            showSignIn = true
+            if authState == .signedIn {
+                show("\(who) was signed out by Instagram. Add it again from Settings.")
+            } else {
+                showSignIn = true
+            }
             return
         }
         if error is CancellationError || (error as? URLError)?.code == .cancelled { return }

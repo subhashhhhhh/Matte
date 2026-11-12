@@ -22,5 +22,11 @@ struct InstagramApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1180, height: 860)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { app.showSettings = true }
+                    .keyboardShortcut(",")
+            }
+        }
     }
 }
