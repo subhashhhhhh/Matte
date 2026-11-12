@@ -48,6 +48,9 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `doc_id`s: scripts declare `__d("NameQuery_instagramRelayOperation",[],(function(…){a.exports="123"})`.
   Only scripts in the initial page are scanned; DM docs live in lazy chunks (seed from the spec).
 - Error 1357054 ("Your request couldn't be processed") = bad variables/doc or wrong endpoint.
+- Home feeds: `PolarisFeedTimelineRootV2Query`; Following (chronological) / Favorites are chosen with
+  `data.pagination_source` ("following"/"favorites"). The top-level `variant` alone does nothing.
+- Collab posts: `coauthor_producers`. Image candidates include square grid crops: pick by shape.
 - REST: `feed/timeline/` works with a web session; `feed/reels_tray/`, `direct_v2/*`,
   `clips/home/` don't (use GraphQL).
 
