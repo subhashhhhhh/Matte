@@ -138,7 +138,7 @@ struct MessagesView: View {
                 if let url = share.targetURL { NSWorkspace.shared.open(url) }
                 return nil
             }
-            return MediaDetailModel(pk: pk, client: app.client, fallbackURL: share.targetURL)
+            return MediaDetailModel.cached(pk: pk, client: app.client, fallbackURL: share.targetURL)
         case .attachment(let a):
             return MediaDetailModel(attachment: a)
         }

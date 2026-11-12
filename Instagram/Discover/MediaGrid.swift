@@ -34,6 +34,7 @@ struct MediaGrid: View {
             }
         }
 
+        .environment(\.prewarmPost) { browser.prewarm($0) }
     }
 }
 

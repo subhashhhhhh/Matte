@@ -5,6 +5,29 @@ struct FeedView: View {
     let model: FeedModel
     @State private var flight = PhotoFlight()
 
+    #if DEBUG
+    /// `-IGScenario tabs|reopen`: replays a user's steps for screenshots (logs each step's time).
+    private func runScenario() async {
+        guard let name = UserDefaults.standard.string(forKey: "IGScenario") else { return }
+        func step(_ s: String) { FileHandle.standardError.write(Data("SCENARIO \(Date.now.timeIntervalSince1970) \(s)\n".utf8)) }
+        while model.posts.isEmpty { try? await Task.sleep(for: .milliseconds(200)) }
+        try? await Task.sleep(for: .seconds(2))
+        switch name {
+        case "tabs":
+            step("following"); model.source = .following
+            try? await Task.sleep(for: .seconds(4))
+            step("back"); model.source = .forYou
+        case "reopen":
+            step("open1"); openPost(0)
+            try? await Task.sleep(for: .seconds(4))
+            step("close"); model.closeOpened()
+            try? await Task.sleep(for: .seconds(1.5))
+            step("open2"); openPost(0)
+        default: break
+        }
+    }
+    #endif
+
     /// Opens a post with the photo flying out of its tile (Lumen's animation).
     private func openPost(_ i: Int) {
         let posts = model.visible
@@ -68,7 +91,11 @@ struct FeedView: View {
             }
         }
         .photoFlightHost(flight)
+        .environment(\.prewarmPost) { model.prewarm($0) }
         .onChange(of: model.debugOpenRequest) { if let i = model.debugOpenRequest { openPost(i) } }
+        #if DEBUG
+        .task { await runScenario() }
+        #endif
         .task { await model.loadIfNeeded() }
     }
 }

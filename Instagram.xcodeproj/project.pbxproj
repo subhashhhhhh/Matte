@@ -17,6 +17,7 @@
 		195022253F323DFAFD7233A7 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC05586976985390822FB5D /* Models.swift */; };
 		1D7B64E7DF076158A08B7EE2 /* ImagePipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E5E86E83C879A5D5CA771F /* ImagePipelineTests.swift */; };
 		1E1C6771FF7E3EF37051ECED /* MediaGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AAF1E770CD263F186B73701 /* MediaGrid.swift */; };
+		2291B054B15F414B614B92CE /* AccountSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5026E3B9A2E1790A3CB94D /* AccountSwitchTests.swift */; };
 		22B8813396BC9C80351E5535 /* DiscoverModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA30AC46B4357D55AE6E584 /* DiscoverModels.swift */; };
 		2529EC8FF06C5515B852AF3D /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01BC34B06712391C289C2B4A /* Motion.swift */; };
 		2A626FDD4E0C9F62A3286463 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACA490118781421924D2729 /* RootView.swift */; };
@@ -131,6 +132,7 @@
 		5DC081742FD680BB10744532 /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
 		5F960C1BD532267112508BB8 /* NetworkGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkGuardTests.swift; sourceTree = "<group>"; };
 		65618AA6A6A6FF399D994E46 /* DMSending.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DMSending.swift; sourceTree = "<group>"; };
+		6F5026E3B9A2E1790A3CB94D /* AccountSwitchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSwitchTests.swift; sourceTree = "<group>"; };
 		70A001250E804B7FDF459585 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 		76D351C0CA1A9AC9A4D1A331 /* IGIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IGIcons.swift; sourceTree = "<group>"; };
 		76F09BA534CD44318EABB49F /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
@@ -228,6 +230,7 @@
 		24809829AA5777CA628E4C7D /* InstagramTests */ = {
 			isa = PBXGroup;
 			children = (
+				6F5026E3B9A2E1790A3CB94D /* AccountSwitchTests.swift */,
 				CCC3B602F4A82CCFA5929BD6 /* AppModelTests.swift */,
 				117E6CA4AD38E74892D8ABF2 /* CollabTests.swift */,
 				9CC7AC831877CE0102B3C2D2 /* CommentTests.swift */,
@@ -601,6 +604,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2291B054B15F414B614B92CE /* AccountSwitchTests.swift in Sources */,
 				71C4B51DC8389F4B36F5C116 /* AppModelTests.swift in Sources */,
 				D5DF8EE99B9181C61DDEB7F9 /* CollabTests.swift in Sources */,
 				ED8C07941914B33FB6A1B77D /* CommentTests.swift in Sources */,

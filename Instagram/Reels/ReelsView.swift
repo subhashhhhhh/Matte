@@ -91,7 +91,7 @@ final class ReelsModel {
 
     private func startCurrent() {
         guard let reel else { return }
-        if detail?.pk != reel.pk { detail = MediaDetailModel(pk: reel.pk, media: reel, client: client) }
+        if detail?.pk != reel.pk { detail = MediaDetailModel.cached(pk: reel.pk, media: reel, client: client) }
         // The next few covers, so sliding to them shows a picture at once.
         let covers = items.dropFirst(index + 1).prefix(3).compactMap { $0.image(minWidth: 720) }
         Task { await ImagePipeline.shared.prefetch(covers) }

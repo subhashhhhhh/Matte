@@ -51,16 +51,21 @@ final class FeedModel {
             guard source != oldValue else { return }
             UserDefaults.standard.set(source.rawValue, forKey: "feedSource")
             closeOpened()
-            posts = []
-            cursor = nil
-            hasMore = true
-            stale = false
-            showCached()
+            // Each feed keeps what it had loaded: switching back shows it at once.
+            saved[oldValue] = SourceState(posts: posts, cursor: cursor, hasMore: hasMore, fetchedAt: fetchedAt, stale: stale)
+            let restored = saved[source]
+            posts = restored?.posts ?? []
+            cursor = restored?.cursor
+            hasMore = restored?.hasMore ?? true
+            fetchedAt = restored?.fetchedAt ?? .distantPast
+            stale = restored?.stale ?? false
+            // Never loaded this launch: the copy saved on disk, until the fresh one arrives.
+            if restored == nil { showCached() }
             Task {
                 // A load for the previous feed may still be running: let it finish (its result
-                // is dropped), then load this one.
+                // is dropped), then load this one (quietly, if it's only getting stale).
                 while isLoading || isLoadingMore { try? await Task.sleep(for: .milliseconds(100)) }
-                await refresh()
+                if posts.isEmpty || stale || Date.now.timeIntervalSince(fetchedAt) > 300 { await refresh() }
             }
         }
     }
@@ -83,6 +88,22 @@ final class FeedModel {
         }
     }
 
+    private struct SourceState {
+        var posts: [Media]
+        var cursor: String?
+        var hasMore: Bool
+        var fetchedAt: Date
+        var stale: Bool
+    }
+    @ObservationIgnored private var saved: [FeedSource: SourceState] = [:]
+    @ObservationIgnored private var fetchedAt = Date.distantPast
+
+    /// Starts loading a post's comments ahead of a likely click (its tile is hovered).
+    func prewarm(_ media: Media) {
+        let detail = MediaDetailModel.cached(pk: media.pk, media: media, client: client)
+        Task { await detail.start() }
+    }
+
     /// Debug only: asks the view to open this post (with its animation).
     var debugOpenRequest: Int?
 
@@ -95,7 +116,7 @@ final class FeedModel {
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let client: IGClient
     @ObservationIgnored private var loadedOnce = false
-    /// `posts` came from the cache: no cursor yet, page 1 must load before paging on.
+    /// `posts` came from the disk cache: no cursor yet, page 1 must load before paging on.
     @ObservationIgnored private(set) var stale = false
     /// The grid is scrolled down (set by the view): fresh results mustn't replace what's shown.
     @ObservationIgnored var scrolledAway = false
@@ -114,7 +135,7 @@ final class FeedModel {
         await refresh()
     }
 
-    /// Shows the last saved first page (and stories tray) until the fresh one arrives.
+    /// Shows the last first page saved on disk (and the stories tray) until the fresh one arrives.
     private func showCached() {
         guard let cache else { return }
         if posts.isEmpty, let hit = cache.load([Media].self, "feed-" + source.rawValue)?.value.cacheable(Self.cachedPosts), !hit.isEmpty {
@@ -126,19 +147,18 @@ final class FeedModel {
         }
     }
 
-    /// Takes in a fresh first page. Over cached posts the user is looking at (scrolled down, or
-    /// a post open), it's added after them instead, so nothing moves.
+    /// Takes in a fresh first page. Over posts the user is looking at (scrolled down, or a post
+    /// open) it's added after them instead, so nothing moves; otherwise it replaces them
+    /// (unchanged posts keep their identity, so their tiles stay put).
     /// Returns whether the shown list was replaced.
     private func adopt(_ fresh: [Media]) -> Bool {
-        if stale, scrolledAway || opened != nil {
+        defer { stale = false }
+        if !posts.isEmpty, scrolledAway || opened != nil {
             let known = Set(posts.map(\.pk))
             posts += fresh.filter { !known.contains($0.pk) }
-            stale = false
             return false
         }
-        // Unchanged posts keep their identity (pk), so their tiles stay put.
         posts = fresh
-        stale = false
         return true
     }
 
@@ -157,6 +177,7 @@ final class FeedModel {
             replaced = adopt(page.items)
             cursor = page.cursor
             hasMore = page.hasMore
+            fetchedAt = .now
             loadFailed = false
             firstPage = page.items
         } catch {
@@ -189,7 +210,7 @@ final class FeedModel {
     }
 
     func loadMore() async {
-        // Cached posts have no cursor: load page 1 first (`refresh` keeps them in place).
+        // Posts from the disk cache have no cursor: load page 1 first (`refresh` keeps them in place).
         if stale { return await refresh() }
         guard hasMore, let cursor, !isLoadingMore else { return }
         isLoadingMore = true
@@ -215,7 +236,7 @@ final class FeedModel {
         guard shown.indices.contains(index) else { return }
         playing = nil
         openedIndex = index
-        opened = MediaDetailModel(pk: shown[index].pk, media: shown[index], client: client)
+        opened = MediaDetailModel.cached(pk: shown[index].pk, media: shown[index], client: client)
         if shown.count - index < 4 { Task { await loadMore() } }
     }
 
