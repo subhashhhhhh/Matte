@@ -177,6 +177,27 @@ enum DebugCreate {
         await flow("story photo", [a], .story)
         await flow("story video", [clip], .story)
 
+        // The story editor: the flattened 1080×1920 file goes through the same story upload.
+        func editorFlow(_ label: String, _ file: URL) async {
+            let editor = StoryEditorModel(app: nil, client: client)
+            await editor.load(file)
+            DebugStoryEditor.addSample(editor)
+            await editor.shareAndWait()
+            var outcome: [String: JSON] = [:]
+            if case .failed(let m) = editor.export { outcome["export"] = .string(m) }
+            if let s = editor.sharer {
+                outcome["share"] = switch s.phase {
+                case .failed(let m): .string(m)
+                case .sharing: "still sharing?!"
+                case .editing: "finished (sent?!)"
+                }
+            }
+            editor.tearDown()
+            results[label] = .object(outcome)
+        }
+        await editorFlow("story editor photo", a)
+        await editorFlow("story editor video", clip)
+
         var post = Media(id: "1000000000000000001_2000000001", pk: "1000000000000000001", kind: .image)
         post.user = User(id: "2000000001", username: "me", fullName: "")
         let calls: [(String, () async throws -> Void)] = [

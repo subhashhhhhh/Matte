@@ -249,6 +249,11 @@ final class CreateModel {
         await task?.value
     }
 
+    /// Waits for a share already under way (debug dry runs of the story editor).
+    func waitForShare() async {
+        await task?.value
+    }
+
     private func run() async {
         let options = IGClient.PostOptions(caption: caption, hideCounts: hideCounts, commentsOff: commentsOff)
         do {

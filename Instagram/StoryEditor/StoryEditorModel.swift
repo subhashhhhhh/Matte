@@ -478,6 +478,13 @@ final class StoryEditorModel {
     #if DEBUG
     /// Debug: replaces the document (sample content for screenshots).
     func debugSet(_ change: (inout StoryDoc) -> Void) { commit(change) }
+
+    /// Debug dry runs: shares and waits for the outcome.
+    func shareAndWait() async {
+        share()
+        await exportTask?.value
+        await sharer?.waitForShare()
+    }
     #endif
 }
 
