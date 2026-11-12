@@ -69,6 +69,7 @@
 		D40AF1245C0291905868C0A0 /* Endpoints+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB29A5058C39CC8EBE5E6858 /* Endpoints+Media.swift */; };
 		D572981CBC2C343771ED53A3 /* ShortcodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F3E95D0B15CBCFA0BF39266 /* ShortcodeTests.swift */; };
 		D5DF8EE99B9181C61DDEB7F9 /* CollabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117E6CA4AD38E74892D8ABF2 /* CollabTests.swift */; };
+		D6180F742CDBD3EE6B748F1F /* NewChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6634DC074F54CACBA91962F /* NewChat.swift */; };
 		D6E78F5B350C87CCB465CA82 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8113E6B5FF4E5BDFB8FDBB5F /* MessageRow.swift */; };
 		DED4BFBE4B2A5ACA80B77D3E /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B03916708F8F00FF5CF54C53 /* AppModel.swift */; };
 		DEE63DF80BC068E1ED4BC364 /* ImagePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81C7768449C9BCCDE3E78C65 /* ImagePipeline.swift */; };
@@ -153,6 +154,7 @@
 		D12C68EF1B3082D725B2A87C /* DGWSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DGWSocket.swift; sourceTree = "<group>"; };
 		D16D04C62418A79434A2F14E /* PostActionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostActionTests.swift; sourceTree = "<group>"; };
 		D1C06B59F28532FFE00AA455 /* Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sidebar.swift; sourceTree = "<group>"; };
+		D6634DC074F54CACBA91962F /* NewChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewChat.swift; sourceTree = "<group>"; };
 		D896ED4CC14DB41DF7D92D2E /* RemoteImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImage.swift; sourceTree = "<group>"; };
 		E5538FD1D0999006CADCC6B2 /* EndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndpointTests.swift; sourceTree = "<group>"; };
 		E88F44A7A0F26B2D5B8B0D3B /* SessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTests.swift; sourceTree = "<group>"; };
@@ -291,6 +293,7 @@
 				C53D54AAA83AB340352C7AAF /* InboxModel.swift */,
 				8113E6B5FF4E5BDFB8FDBB5F /* MessageRow.swift */,
 				FD17C1AB18F3F4B2F24A8651 /* MessagesView.swift */,
+				D6634DC074F54CACBA91962F /* NewChat.swift */,
 				B1DB8557AF356B536A43E831 /* OutgoingMedia.swift */,
 				F994981D652F8F6353428809 /* SharedPane.swift */,
 				70A001250E804B7FDF459585 /* ShareSheet.swift */,
@@ -510,6 +513,7 @@
 				D6E78F5B350C87CCB465CA82 /* MessageRow.swift in Sources */,
 				AEAA88CF220B3F1F23D60F6F /* MessagesView.swift in Sources */,
 				195022253F323DFAFD7233A7 /* Models.swift in Sources */,
+				D6180F742CDBD3EE6B748F1F /* NewChat.swift in Sources */,
 				D328FBAB77CE799ACAC813DB /* OutgoingMedia.swift in Sources */,
 				5C195AC369DA63FFE56998E7 /* Parser.swift in Sources */,
 				A0522E215611B6C956EAE89C /* PostActions.swift in Sources */,

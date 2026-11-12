@@ -90,7 +90,89 @@ final class InboxModel {
         DMNotifier.shared.notify(thread: thread, message: message, sender: thread.users.first { $0.messagingId == message.senderId })
     }
 
-    var selected: DMThread? { threads.first { $0.id == selectedId } }
+    var selected: DMThread? {
+        threads.first { $0.id == selectedId } ?? requests.first { $0.id == selectedId } ?? hiddenRequests.first { $0.id == selectedId }
+    }
+
+    // MARK: Message requests
+
+    /// Chats from people you don't follow, waiting to be accepted, and hidden ones (Instagram's filter).
+    private(set) var requests: [DMThread] = []
+    private(set) var hiddenRequests: [DMThread] = []
+    private(set) var loadingRequests = false
+    @ObservationIgnored private var requestsLoadedAt: Date?
+
+    func loadRequests(force: Bool = false) async {
+        if !force, let t = requestsLoadedAt, Date.now.timeIntervalSince(t) < 60 { return }
+        loadingRequests = true
+        defer { loadingRequests = false }
+        do {
+            let r = try await client.messageRequests()
+            requests = r.requests
+            hiddenRequests = r.hidden
+            requestsLoadedAt = .now
+        } catch {
+            app?.report(error)
+        }
+    }
+
+    /// Accepts a request: it moves to the inbox (you can reply, and they see when you've read).
+    func accept(_ thread: DMThread) async {
+        do {
+            try await client.acceptRequest(thread.id)
+            requests.removeAll { $0.id == thread.id }
+            hiddenRequests.removeAll { $0.id == thread.id }
+            var t = thread
+            t.isRequest = false
+            merge([t])
+            conversation?.markAccepted()
+            await refresh()
+        } catch {
+            app?.report(error)
+        }
+    }
+
+    // MARK: New chat
+
+    /// Someone you picked in "New message" who has no chat with you yet (the chat starts with
+    /// your first message).
+    private(set) var newChatUser: User?
+
+    /// Opens the chat with `user`: their existing one-to-one chat if there is one, else a new one.
+    func startChat(with user: User) {
+        if let t = (threads + requests).first(where: { !$0.isGroup && $0.users.first?.id == user.id }) {
+            newChatUser = nil
+            selectedId = t.id
+            return
+        }
+        selectedId = nil
+        newChatUser = user
+    }
+
+    func cancelNewChat() { newChatUser = nil }
+
+    /// Sends the first message to `newChatUser`, then opens the chat it created.
+    func sendFirstMessage(_ text: String) async -> Bool {
+        guard let user = newChatUser, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        do {
+            try await client.startChat(with: user.id, text: text)
+        } catch {
+            app?.report(error)
+            return false
+        }
+        // The new chat shows up in the inbox once Instagram has it.
+        for delay in [0.5, 1.5, 3.0] {
+            try? await Task.sleep(for: .seconds(delay))
+            await refresh()
+            if let t = threads.first(where: { !$0.isGroup && $0.users.first?.id == user.id }) {
+                newChatUser = nil
+                selectedId = t.id
+                return true
+            }
+        }
+        newChatUser = nil
+        return true
+    }
 
     func loadIfNeeded() async {
         guard !loadedOnce else { return }
@@ -166,6 +248,7 @@ final class InboxModel {
         conversation?.stop()
         conversation = nil
         guard let thread = selected else { return }
+        newChatUser = nil
         conversation = ConversationModel(inbox: self, thread: thread, client: client)
         if let i = threads.firstIndex(where: { $0.id == thread.id }) { threads[i].isUnread = false }
         if !Self.isTesting { DMNotifier.shared.clear(thread: thread.id) }
@@ -383,6 +466,7 @@ final class ConversationModel {
         if t.users.isEmpty { t.users = thread.users }
         t.isMuted = thread.isMuted
         t.isPinned = thread.isPinned
+        if thread.isRequest { t.isRequest = true }
         t.isUnread = false
         return t
     }
@@ -623,8 +707,15 @@ final class ConversationModel {
     }
 
     /// Tells Instagram we've read up to the newest message from the other side.
+    /// After accepting a request.
+    func markAccepted() { thread.isRequest = false }
+
+    /// Accepts this chat's message request.
+    func acceptRequest() async { await inbox?.accept(thread) }
+
     private func markRead() async {
-        guard let longId = thread.longId,
+        // Reading a request doesn't tell them (as on Instagram) until it's accepted.
+        guard !thread.isRequest, let longId = thread.longId,
               let newest = messages.last(where: { $0.senderId != viewerId && !$0.pending }),
               newest.id != markedReadUpTo else { return }
         if let mine = viewerId.flatMap({ thread.readUpTo[$0] }), mine >= newest.sentAt { markedReadUpTo = newest.id; return }
