@@ -85,6 +85,13 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
   `-IGTestNotification YES` posts a local notification for the first chat. Add `-ApplePersistenceIgnoreState YES`
   so the window isn't restored full screen.
 - DM writes (upload, media send, edit, forward, requests, story replies): docs/dm-protocol.md §10b.
+- Creating (docs/create-protocol.md; `Instagram/Create/`, `API/Endpoints+Create.swift`): `-IGMakeTestMedia <dir>`
+  writes test photos and a 3 s MP4 and quits; `-IGCreateFiles 'a.jpg,b.jpg' [-IGCreateTarget post|reel|story]
+  [-IGCreateShape square|portrait|landscape|tall] [-IGCreateCaption …]` opens the create sheet;
+  `-IGCreateShare YES` presses Share **only with `-IGDryRunWrites`**. `-IGProbeCreate YES -IGDryRunWrites <dir>
+  -IGProbeOut <file>` dry-runs every create/edit/delete flow. Uploads to `i.instagram.com/rupload_*` are
+  dry-run too (headers + body size recorded, fake success, so the publish step is recorded next).
+  `-IGOpenMe YES -IGOwnPostDialog caption|delete` shows those dialogs for your first post.
 
 ## Real-time DMs
 
