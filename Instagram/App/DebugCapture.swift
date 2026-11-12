@@ -21,7 +21,7 @@ enum DebugCapture {
 
     private static var keep: Recorder?
 
-    final class Recorder: NSObject, WKScriptMessageHandler, NSWindowDelegate {
+    final class Recorder: NSObject, WKScriptMessageHandler, NSWindowDelegate, WKUIDelegate {
         let dir: URL
         var window: NSWindow?
         var web: WKWebView?
@@ -48,6 +48,7 @@ enum DebugCapture {
             // `-IGCaptureMobile YES`: present as an iPhone browser (instagram.com only offers
             // posting a story there), in a phone-shaped window.
             let mobile = UserDefaults.standard.bool(forKey: "IGCaptureMobile")
+            web.uiDelegate = self
             web.customUserAgent = mobile
                 ? "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1"
                 : IGClient.userAgent
@@ -79,6 +80,17 @@ enum DebugCapture {
             }
             print("capture: \(count) requests")
             exit(0)
+        }
+
+        /// The page's "choose a file" (posting a story or a post): show the Mac's open panel.
+        func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+                     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor @Sendable ([URL]?) -> Void) {
+            let panel = NSOpenPanel()
+            panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+            panel.canChooseDirectories = false
+            panel.canChooseFiles = true
+            if let window { panel.beginSheetModal(for: window) { completionHandler($0 == .OK ? panel.urls : nil) } }
+            else { completionHandler(panel.runModal() == .OK ? panel.urls : nil) }
         }
 
         func windowWillClose(_ notification: Notification) {
