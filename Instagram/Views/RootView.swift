@@ -49,14 +49,14 @@ struct RootView: View {
         // Pages stay alive while hidden, so each keeps its scroll position and state;
         // only the visible one does any work (Reels pauses when hidden).
         ZStack {
-            if let feed = app.feed {
+            if let feed = app.feed, app.visited.contains(.home) {
                 FeedView(model: feed).opacity(app.destination == .home ? 1 : 0)
                     .allowsHitTesting(app.destination == .home)
             }
             if let reels = app.reels, app.destination == .reels {
                 ReelsView(model: reels)
             }
-            if let inbox = app.inbox {
+            if let inbox = app.inbox, app.visited.contains(.messages) {
                 MessagesView(model: inbox).opacity(app.destination == .messages ? 1 : 0)
                     .allowsHitTesting(app.destination == .messages)
             }

@@ -39,7 +39,11 @@ final class AppModel {
     private(set) var authState: AuthState = .signedOut
     private(set) var client: IGClient?
     var showSignIn = false
-    var destination: Destination = .messages
+    var destination: Destination = .messages {
+        didSet { visited.insert(destination) }
+    }
+    /// Pages opened at least once: only these are built (a page never visited loads nothing).
+    private(set) var visited: Set<Destination> = [.messages]
     /// The story viewer, when open.
     var stories: StoryViewerModel?
     /// A post opened from a DM or elsewhere, shown over the current page.
