@@ -47,6 +47,11 @@ struct MessagesView: View {
         }
         .animation(.smooth(duration: 0.25), value: viewer?.id)
         .overlay {
+            if let c = model.conversation, let m = c.forwarding {
+                ForwardSheet(conversation: c, message: m)
+            }
+        }
+        .overlay {
             if composing {
                 NewMessageSheet(close: { composing = false }, initialQuery: newMessageQuery) { user in
                     composing = false
@@ -76,6 +81,11 @@ struct MessagesView: View {
                 if let path = UserDefaults.standard.string(forKey: "IGStageFile") {
                     try? await Task.sleep(for: .seconds(1))
                     model.conversation?.stage(files: [URL(fileURLWithPath: path)])
+                }
+                // `-IGForwardLast YES`: open "Forward to…" for the newest forwardable message (nothing is sent).
+                if UserDefaults.standard.bool(forKey: "IGForwardLast"), let c = model.conversation {
+                    try? await Task.sleep(for: .seconds(2))
+                    c.forwarding = c.messages.last(where: c.canForward)
                 }
             }
             #endif

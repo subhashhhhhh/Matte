@@ -77,6 +77,7 @@
 		EDE504352F4F03824E304AE7 /* IGSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3063AD53E2CC3E6163F22767 /* IGSession.swift */; };
 		EE3B72CBB5887A9A713AD511 /* DMNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F77ECDEAEFB54786F5E6E27 /* DMNotifications.swift */; };
 		F055706704E21BED2D609CE7 /* DGWFrames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08AB317009B72EC8844FF3F0 /* DGWFrames.swift */; };
+		F0B977CDB431A6AE9986B3D2 /* ForwardSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF29F1DB35998D2221F2296 /* ForwardSheet.swift */; };
 		F23520B1FEF361176B969F86 /* SessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E88F44A7A0F26B2D5B8B0D3B /* SessionTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -164,6 +165,7 @@
 		F994981D652F8F6353428809 /* SharedPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPane.swift; sourceTree = "<group>"; };
 		FD17C1AB18F3F4B2F24A8651 /* MessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesView.swift; sourceTree = "<group>"; };
 		FDC05586976985390822FB5D /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		FFF29F1DB35998D2221F2296 /* ForwardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForwardSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -290,6 +292,7 @@
 			children = (
 				9F77ECDEAEFB54786F5E6E27 /* DMNotifications.swift */,
 				65618AA6A6A6FF399D994E46 /* DMSending.swift */,
+				FFF29F1DB35998D2221F2296 /* ForwardSheet.swift */,
 				C53D54AAA83AB340352C7AAF /* InboxModel.swift */,
 				8113E6B5FF4E5BDFB8FDBB5F /* MessageRow.swift */,
 				FD17C1AB18F3F4B2F24A8651 /* MessagesView.swift */,
@@ -500,6 +503,7 @@
 				78D95D449308C6C188CDE96E /* ExploreView.swift in Sources */,
 				A9F8EEB03F76B6E12F0A793D /* FeedModel.swift in Sources */,
 				3A3C8C88B17C2FF231F8E0E9 /* FeedView.swift in Sources */,
+				F0B977CDB431A6AE9986B3D2 /* ForwardSheet.swift in Sources */,
 				40F410BD0966CEB40914E3A4 /* IGClient.swift in Sources */,
 				16EB8BF4CA2CF2AC612BC130 /* IGIcons.swift in Sources */,
 				EDE504352F4F03824E304AE7 /* IGSession.swift in Sources */,

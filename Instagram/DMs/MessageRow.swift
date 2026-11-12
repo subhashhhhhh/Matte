@@ -65,11 +65,20 @@ struct MessageRow: View {
             Button { model.replyingTo = message } label: { Image(systemName: "arrowshape.turn.up.left") }
                 .buttonStyle(ChromeButtonStyle(size: 26))
                 .help("Reply")
-            if mine, !message.pending, !message.id.hasPrefix("local-") {
+            if !message.pending, !message.id.hasPrefix("local-") {
                 Menu {
-                    Button("Unsend", role: .destructive) { Task { await model.unsend(message) } }
+                    if model.canForward(message) {
+                        Button("Forward…") { model.forwarding = message }
+                    }
                     if case .text(let t) = message.body {
                         Button("Copy") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(t, forType: .string) }
+                    }
+                    if model.canEdit(message) {
+                        Button("Edit") { model.beginEdit(message) }
+                    }
+                    if mine {
+                        Divider()
+                        Button("Unsend", role: .destructive) { Task { await model.unsend(message) } }
                     }
                 } label: { Image(systemName: "ellipsis") }
                     .menuStyle(.borderlessButton)
@@ -379,6 +388,18 @@ struct Composer: View {
 
     var body: some View {
         VStack(spacing: 6) {
+            if let editing = model.editing {
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Editing message").font(.system(size: 11, weight: .semibold))
+                        Text(editing.previewText).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    ChromeButton("Cancel Edit", symbol: "xmark") { model.cancelEdit() }
+                        .keyboardShortcut(.cancelAction)
+                }
+                .padding(.horizontal, 10)
+            }
             if let reply = model.replyingTo {
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
@@ -398,7 +419,7 @@ struct Composer: View {
                     }
                     .buttonStyle(.pressable)
                     .help("Add photos or videos")
-                    .disabled(model.staged.count >= ConversationModel.maxStaged)
+                    .disabled(model.staged.count >= ConversationModel.maxStaged || model.editing != nil)
                     TextField(model.staged.isEmpty ? "Message…" : "Add a message…", text: $model.draft, axis: .vertical)
                         .textFieldStyle(.plain)
                         .font(.system(size: 14))
@@ -407,7 +428,7 @@ struct Composer: View {
                         .onSubmit { Task { await model.send() } }
                         .padding(.vertical, 9)
                     if model.canSend {
-                        Button("Send") { Task { await model.send() } }
+                        Button(model.editing == nil ? "Send" : "Save") { Task { await model.send() } }
                             .buttonStyle(.plain)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(Theme.link)
@@ -432,6 +453,7 @@ struct Composer: View {
         }
         .onDisappear { if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }; pasteMonitor = nil }
         .onChange(of: model.replyingTo) { if model.replyingTo != nil { focused = true } }
+        .onChange(of: model.editing) { if model.editing != nil { focused = true } }
         // Tell the other side we're typing; stop after 4 s without a keystroke, or when cleared.
         .onChange(of: model.draft) { _, draft in
             typingStop?.cancel()

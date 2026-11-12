@@ -611,9 +611,97 @@ final class ConversationModel {
 
     var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !staged.isEmpty }
 
+    // MARK: Editing and forwarding
+
+    /// Your message being edited in the composer (its text in `draft`).
+    private(set) var editing: DMMessage?
+    /// The message the "Forward to…" sheet is open for.
+    var forwarding: DMMessage?
+    /// Instagram lets you edit a message for 15 minutes.
+    static let editWindow: TimeInterval = 15 * 60
+
+    func canEdit(_ m: DMMessage) -> Bool {
+        guard m.senderId == viewerId, !m.pending, !m.failed, !m.id.hasPrefix("local-"),
+              Date.now.timeIntervalSince(m.sentAt) < Self.editWindow, case .text = m.body else { return false }
+        return true
+    }
+
+    func beginEdit(_ m: DMMessage) {
+        guard canEdit(m), case .text(let t) = m.body else { return }
+        replyingTo = nil
+        editing = m
+        draft = t
+    }
+
+    func cancelEdit() {
+        editing = nil
+        draft = ""
+    }
+
+    private func finishEdit(_ original: DMMessage) async {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        editing = nil
+        draft = ""
+        guard !text.isEmpty, original.body != .text(text) else { return }
+        guard let i = messages.firstIndex(where: { $0.id == original.id }) else { return }
+        messages[i].body = .text(text)
+        messages[i].isEdited = true
+        do {
+            try await client.editMessage(original.id, thread: thread.id, text: text)
+        } catch {
+            if let j = messages.firstIndex(where: { $0.id == original.id }) { messages[j] = original }
+            inbox?.report(error)
+        }
+    }
+
+    /// Whether a message can be forwarded (text, photos and videos with an id, shared links).
+    func canForward(_ m: DMMessage) -> Bool {
+        guard !m.pending, !m.failed, !m.id.hasPrefix("local-") else { return false }
+        switch m.body {
+        case .text: return true
+        case .media(let a): return a.contains { $0.id != nil && ($0.kind == .image || $0.kind == .video) }
+        case .share(let s, _): return s.targetURL != nil
+        default: return false
+        }
+    }
+
+    /// Forwards `m` into the chats `targets`; returns how many failed.
+    func forward(_ m: DMMessage, to targets: [String]) async -> Int {
+        let own = m.senderId == viewerId
+        var failures = 0
+        for target in targets {
+            do {
+                switch m.body {
+                case .text(let t):
+                    try await client.forwardText(t, from: thread.id, ownMessage: own, to: target)
+                case .media(let attachments):
+                    for a in attachments where a.kind == .image || a.kind == .video {
+                        guard let id = a.id else { continue }
+                        try await client.forwardAttachment(id, messageId: m.id, from: thread.id, ownMessage: own, to: target)
+                    }
+                case .share(let s, let text):
+                    // A shared post goes on as its link (Instagram shows it as a card).
+                    if let url = s.targetURL {
+                        try await client.forwardText(url.absoluteString, from: thread.id, ownMessage: own, to: target)
+                    }
+                    if let text, !text.isEmpty {
+                        try await client.forwardText(text, from: thread.id, ownMessage: own, to: target)
+                    }
+                default:
+                    break
+                }
+            } catch {
+                failures += 1
+                inbox?.report(error)
+            }
+        }
+        return failures
+    }
+
     /// Sends the composer: its photos and videos first (each its own message, shown at once
     /// while it uploads), then the text.
     func send() async {
+        if let editing { await finishEdit(editing); return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let media = staged
         guard !text.isEmpty || !media.isEmpty, let viewerId else { return }
