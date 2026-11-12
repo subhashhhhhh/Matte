@@ -34,7 +34,10 @@ struct FeedView: View {
             }
         }
         .overlay {
-            if model.posts.isEmpty, model.loadFailed {
+            if model.posts.isEmpty, !model.isLoading, !model.loadFailed, model.source == .favorites {
+                EmptyState(symbol: "star", title: "No favorites yet",
+                           message: "Add accounts to Favorites in the Instagram app and their posts show up here, newest first.")
+            } else if model.posts.isEmpty, model.loadFailed {
                 EmptyState(symbol: "wifi.exclamationmark", title: "Couldn't load your feed", actionTitle: "Try Again") {
                     Task { await model.refresh() }
                 }
@@ -56,12 +59,30 @@ struct FeedView: View {
     }
 }
 
-/// Filter chips and the sort menu above the grid.
+/// Which feed (For you / Following / Favorites) and filter chips, above the grid.
 private struct FeedControls: View {
     @Bindable var model: FeedModel
 
     var body: some View {
         HStack(spacing: 8) {
+            // Instagram's own feeds: ranked, everyone you follow newest first, favourites.
+            HStack(spacing: 2) {
+                ForEach(FeedSource.allCases) { source in
+                    let on = model.source == source
+                    Button { model.source = source } label: {
+                        Text(source.title)
+                            .font(.system(size: 13, weight: on ? .semibold : .medium))
+                            .padding(.horizontal, 12)
+                            .frame(height: 28)
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(on ? Theme.selected : .clear))
+                            .foregroundStyle(on ? .primary : .secondary)
+                    }
+                    .buttonStyle(.pressable)
+                }
+            }
+            .padding(3)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
+            Rectangle().fill(Theme.hairline).frame(width: 1, height: 20).padding(.horizontal, 6)
             ForEach(FeedFilter.allCases) { f in
                 let on = model.filter == f
                 Button { model.filter = f } label: {
@@ -75,21 +96,10 @@ private struct FeedControls: View {
                 .buttonStyle(.pressable)
             }
             Spacer()
-            if model.filter != .all || model.sort != .instagram {
+            if model.filter != .all {
                 Text("\(model.visible.count) of \(model.posts.count) loaded")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
-            Menu {
-                Picker("Sort", selection: $model.sort) {
-                    ForEach(FeedSort.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
-            } label: {
-                Text("Sort: \(model.sort.title)").font(.system(size: 12.5, weight: .medium))
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
         }
     }
 }

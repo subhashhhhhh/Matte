@@ -6,12 +6,18 @@ import Foundation
 extension IGClient {
     // MARK: Feed
 
-    func homeFeed(after cursor: String? = nil) async throws -> Page<Media> {
+    /// The home feed: `.forYou` is Instagram's ranked feed; `.following` is everyone you follow,
+    /// newest first, without suggestions; `.favorites` only your favourites. The web app picks
+    /// the feed with `data.pagination_source` (the top-level `variant` changes nothing).
+    func homeFeed(after cursor: String? = nil, source: FeedSource = .forYou) async throws -> Page<Media> {
         let deviceId = await session.cookie("ig_did") ?? UUID().uuidString
+        var feedData: [String: JSON] = ["device_id": .string(deviceId), "is_async_ads_double_request": "0",
+                                         "is_async_ads_in_headload_enabled": "0", "is_async_ads_rti": "0", "rti_delivery_backend": "0"]
+        if source != .forYou { feedData["pagination_source"] = .string(source.rawValue) }
         let vars: JSON = [
-            "after": cursor.map(JSON.string) ?? .null, "before": nil, "first": 12, "last": nil, "variant": "home",
-            "data": ["device_id": .string(deviceId), "is_async_ads_double_request": "0", "is_async_ads_in_headload_enabled": "0",
-                     "is_async_ads_rti": "0", "rti_delivery_backend": "0"],
+            "after": cursor.map(JSON.string) ?? .null, "before": nil, "first": 12, "last": nil,
+            "variant": source == .forYou ? "home" : .string(source.rawValue),
+            "data": .object(feedData),
             "__relay_internal__pv__PolarisShortDramaEnabledrelayprovider": true,
             "__relay_internal__pv__PolarisMultiCaptionCarouselEnabledrelayprovider": false,
             "__relay_internal__pv__PolarisThreadsStyleCommentsEnabledrelayprovider": false,

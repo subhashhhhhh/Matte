@@ -1,15 +1,14 @@
 import SwiftUI
 
-/// How Home orders the posts it has loaded.
-enum FeedSort: String, CaseIterable, Identifiable {
-    case instagram, newest, mostLiked, mostCommented
+/// Which of Instagram's home feeds to show (the web app's For you / Following / Favorites).
+nonisolated enum FeedSource: String, CaseIterable, Identifiable, Sendable {
+    case forYou = "home", following, favorites
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .instagram: "Instagram's order"
-        case .newest: "Newest first"
-        case .mostLiked: "Most liked"
-        case .mostCommented: "Most commented"
+        case .forYou: "For you"
+        case .following: "Following"
+        case .favorites: "Favorites"
         }
     }
 }
@@ -46,8 +45,22 @@ final class FeedModel {
     private(set) var loadFailed = false
     private var cursor: String?
     private var hasMore = true
-    var sort: FeedSort = FeedSort(rawValue: UserDefaults.standard.string(forKey: "feedSort") ?? "") ?? .instagram {
-        didSet { UserDefaults.standard.set(sort.rawValue, forKey: "feedSort"); closeOpened() }
+    /// Remembered between launches.
+    var source: FeedSource = FeedSource(rawValue: UserDefaults.standard.string(forKey: "feedSource") ?? "") ?? .forYou {
+        didSet {
+            guard source != oldValue else { return }
+            UserDefaults.standard.set(source.rawValue, forKey: "feedSource")
+            closeOpened()
+            posts = []
+            cursor = nil
+            hasMore = true
+            Task {
+                // A load for the previous feed may still be running: let it finish (its result
+                // is dropped), then load this one.
+                while isLoading || isLoadingMore { try? await Task.sleep(for: .milliseconds(100)) }
+                await refresh()
+            }
+        }
     }
     var filter: FeedFilter = .all {
         didSet {
@@ -56,16 +69,8 @@ final class FeedModel {
         }
     }
 
-    /// The loaded posts, filtered and sorted as chosen (what the grid shows).
-    var visible: [Media] {
-        let shown = posts.filter(filter.matches)
-        switch sort {
-        case .instagram: return shown
-        case .newest: return shown.sorted { ($0.takenAt ?? .distantPast) > ($1.takenAt ?? .distantPast) }
-        case .mostLiked: return shown.sorted { ($0.countsHidden ? -1 : $0.likeCount ?? 0) > ($1.countsHidden ? -1 : $1.likeCount ?? 0) }
-        case .mostCommented: return shown.sorted { ($0.commentCount ?? 0) > ($1.commentCount ?? 0) }
-        }
-    }
+    /// The loaded posts that pass the filter, in the feed's own order (what the grid shows).
+    var visible: [Media] { posts.filter(filter.matches) }
 
     /// A narrow filter can leave the grid nearly empty: load a few more pages to fill it.
     private func fillForFilter() async {
@@ -103,7 +108,9 @@ final class FeedModel {
         defer { isLoading = false }
         async let trayTask = try? client.storyTray()
         do {
-            let page = try await client.homeFeed()
+            let requested = source
+            let page = try await client.homeFeed(source: requested)
+            guard requested == source else { return }
             // A failed refresh keeps what's shown.
             posts = page.items
             cursor = page.cursor
@@ -135,7 +142,9 @@ final class FeedModel {
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let page = try await client.homeFeed(after: cursor)
+            let requested = source
+            let page = try await client.homeFeed(after: cursor, source: requested)
+            guard requested == source else { return }
             let known = Set(posts.map(\.pk))
             posts += page.items.filter { !known.contains($0.pk) }
             // A failed "load more" keeps its cursor so it can be retried.
