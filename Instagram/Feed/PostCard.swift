@@ -36,6 +36,7 @@ struct PostTile: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.panelStroke))
         .contentShape(Rectangle())
         .onTapGesture(perform: open)
+        .contextMenu { PostMenu(media: post, open: open) }
         .onHover { inside in
             hovering = inside
             hoverTask?.cancel()
@@ -97,14 +98,7 @@ struct PostTile: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 12) {
-                if let n = post.likeCount, n > 0 {
-                    Label(n.compact, systemImage: post.hasLiked ? "heart.fill" : "heart")
-                        .foregroundStyle(post.hasLiked ? AnyShapeStyle(Theme.like) : AnyShapeStyle(.primary))
-                }
-                if let n = post.commentCount, n > 0 { Label(n.compact, systemImage: "bubble.right") }
-            }
-            .font(.system(size: 12, weight: .medium))
+            PostActionBar(media: post, size: 20, onComment: open)
             if let caption = post.caption, !caption.isEmpty {
                 Text(caption).font(.system(size: 12.5)).lineLimit(2).foregroundStyle(.primary.opacity(0.85))
             }

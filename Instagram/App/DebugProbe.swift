@@ -115,6 +115,20 @@ enum DebugProbe {
                     "stats": .object(stats.mapValues { .integer(Int64($0)) }),
                     "notes": .array(notes.map(JSON.string)),
                 ]
+            } else if let path = raw("IGProbePagePath") {
+                // Any page's HTML and scripts (a post page loads the like/save/share code).
+                let dir = outURL.deletingLastPathComponent()
+                let html = try await client.fetchText(URL(string: IGClient.origin + path)!, accept: "text/html")
+                try Data(html.utf8).write(to: dir.appending(path: "page.html"))
+                let scripts = WebPageConfig(html: html).scripts
+                let scriptsDir = dir.appending(path: "scripts")
+                try FileManager.default.createDirectory(at: scriptsDir, withIntermediateDirectories: true)
+                for (i, url) in scripts.enumerated() {
+                    if let js = try? await client.fetchText(url, accept: "*/*") {
+                        try? Data(js.utf8).write(to: scriptsDir.appending(path: "\(i).js"))
+                    }
+                }
+                json = ["scripts": .integer(Int64(scripts.count))]
             } else if d.bool(forKey: "IGProbePage") {
                 await client.reloadAppPage(keepHTML: true)
                 let dir = outURL.deletingLastPathComponent()

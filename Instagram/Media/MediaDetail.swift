@@ -252,16 +252,14 @@ struct MediaDetailsColumn: View {
         }
     }
 
+    @ViewBuilder
     private func stats(_ media: Media) -> some View {
-        HStack(spacing: 16) {
-            if let n = media.likeCount, n > 0 {
-                Label(n.compact, systemImage: media.hasLiked ? "heart.fill" : "heart")
-                    .foregroundStyle(media.hasLiked ? AnyShapeStyle(Theme.like) : AnyShapeStyle(.primary))
-            }
-            if let n = media.commentCount, n > 0 { Label(n.compact, systemImage: "bubble.right") }
-            if let n = media.viewCount, n > 0 { Label(n.compact, systemImage: "play") }
+        if model.isRemote {
+            PostActionBar(media: media, size: 22)
         }
-        .font(.system(size: 12.5, weight: .medium))
+        if !media.countsHidden, let n = media.viewCount, n > 0 {
+            Text("\(n.compact) plays").font(.system(size: 12)).foregroundStyle(.secondary)
+        }
     }
 }
 

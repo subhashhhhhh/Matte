@@ -34,6 +34,7 @@ nonisolated enum Parser {
         m.viewCount = j["play_count"].int ?? j["view_count"].int
         m.hasLiked = j["has_liked"].bool ?? false
         m.hasSaved = j["has_viewer_saved"].bool ?? false
+        m.countsHidden = j["like_and_view_counts_disabled"].bool ?? false
         m.images = renditions(j["image_versions2"]["candidates"])
         m.videos = renditions(j["video_versions"])
         m.hasAudio = j["has_audio"].bool ?? true

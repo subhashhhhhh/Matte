@@ -42,6 +42,8 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     var viewCount: Int?
     var hasLiked = false
     var hasSaved = false
+    /// The owner hides like and view counts (`likeCount` is then only friends' likes).
+    var countsHidden = false
     var images: [Rendition] = []
     var videos: [Rendition] = []
     var hasAudio = true

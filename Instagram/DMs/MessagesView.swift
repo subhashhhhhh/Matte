@@ -206,6 +206,7 @@ struct ConversationView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.sharedPaneToggle) private var togglePane
     @Environment(\.sharedPaneShown) private var paneShown
+    @State private var atBottom = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -216,7 +217,14 @@ struct ConversationView: View {
                     LazyVStack(spacing: 2) {
                         if model.hasOlder {
                             Color.clear.frame(height: 1)
-                                .onAppear { Task { await model.loadOlder() } }
+                                .onAppear {
+                                    // Keep the message you were reading in place as older ones are added above.
+                                    let anchor = model.messages.first?.id
+                                    Task {
+                                        await model.loadOlder()
+                                        if let anchor { proxy.scrollTo(anchor, anchor: .top) }
+                                    }
+                                }
                             if model.loadingOlder { Spinner(size: 14).padding(8) }
                         }
                         ForEach(Array(model.messages.enumerated()), id: \.element.id) { i, message in
@@ -230,14 +238,31 @@ struct ConversationView: View {
                                        showAvatar: showsAvatar(at: i))
                                 .id(message.id)
                         }
+                        if model.peerTyping { TypingRow(thread: model.thread).id("typing") }
                         Color.clear.frame(height: 8).id("bottom")
                     }
                     .padding(.horizontal, 16)
                 }
-                .defaultScrollAnchor(.bottom)
+                // Only the first layout starts at the bottom; later size changes (the shared column
+                // opening or closing, images loading) leave the scroll position alone.
+                .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .scrollIndicators(.never)
-                .onChange(of: model.newestToken) {
+                .onScrollGeometryChange(for: Bool.self) { g in
+                    g.contentOffset.y + g.containerSize.height >= g.contentSize.height - 120
+                } action: { _, bottom in
+                    atBottom = bottom
+                }
+                // Follow new messages only when you're already at the bottom, or when it's yours.
+                .onChange(of: model.messages.last?.id) { old, new in
+                    guard old != new else { return }
+                    let mine = model.messages.last?.senderId == model.viewerId
+                    guard old == nil || atBottom || mine else { return }
                     withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+                .onChange(of: model.peerTyping) {
+                    if model.peerTyping, atBottom {
+                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                    }
                 }
             }
             .overlay { if model.isLoading && model.messages.isEmpty { Spinner(size: 20) } }
@@ -279,5 +304,30 @@ struct ConversationView: View {
         guard m.senderId != model.viewerId else { return false }
         guard i + 1 < model.messages.count else { return true }
         return model.messages[i + 1].senderId != m.senderId || showsTime(at: i + 1)
+    }
+}
+
+/// "typing…" under the last message while the other person is typing.
+private struct TypingRow: View {
+    let thread: DMThread
+    @State private var phase = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ThreadAvatar(thread: thread, size: 26)
+            HStack(spacing: 4) {
+                ForEach(0..<3, id: \.self) { i in
+                    Circle().fill(Color.secondary).frame(width: 6, height: 6)
+                        .opacity(phase ? 1 : 0.3)
+                        .animation(.easeInOut(duration: 0.5).repeatForever().delay(Double(i) * 0.15), value: phase)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.panel))
+            Spacer()
+        }
+        .padding(.top, 4)
+        .onAppear { phase = true }
     }
 }

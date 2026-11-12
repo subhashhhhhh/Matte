@@ -131,6 +131,25 @@ extension IGClient {
         return data.first("message_id")?.string ?? data.first("id")?.string
     }
 
+    /// Sends a post or reel into a chat, as the web app's share sheet does: reels by their id
+    /// with the clip mutation, everything else as a media share.
+    func share(_ media: Media, toThread id: String) async throws {
+        let otid = OfflineThreadingId.next()
+        let target: JSON = ["forwarded_from_thread_id": nil, "is_forwarded_from_own_message": nil,
+                            "offline_threading_id": .string(otid), "recipient_users": nil, "thread_id": .string(id)]
+        if media.productType == "clips" {
+            _ = try await dmQuery("IGDirectReelShareMutation", variables: [
+                "clip_share_params": ["inventory_source": nil, "send_attribution": "igd_web_share_sheet:reel",
+                                      "social_context_share_type": nil, "text": nil, "tracking_token": nil],
+                "data": target, "ig_media_igid": .string(media.pk), "otid": .string(otid),
+            ])
+        } else {
+            _ = try await dmQuery("IGDirectMediaShareMutation", variables: [
+                "data": ["media_id": .string(media.id)], "send_data": target,
+            ])
+        }
+    }
+
     /// Adds `emoji` to a message, or removes `previous` when `emoji` is nil.
     func react(_ emoji: String?, previous: String? = nil, to messageId: String, thread id: String) async throws {
         let value = (emoji ?? previous ?? "").unicodeScalars.filter { $0.value != 0xFE0F }.map(String.init).joined()
@@ -180,6 +199,8 @@ extension IGClient {
     /// Last known DM doc ids (from the web app on 2026-11-12, else from mautrix-instagram).
     nonisolated static let fallbackDocIds: [String: String] = [
         "PolarisDirectInboxQuery": "28881837051457834",
+        "IGDirectMediaShareMutation": "29164221929874709",
+        "IGDirectReelShareMutation": "28509600205408270",
         "IGDThreadDetailQuery": "29620840297508799",
         "IGDThreadListOffMsysPaginationQuery": "27712934271665380",
         "IGDMessageListOffMsysQuery": "27502152406082940",

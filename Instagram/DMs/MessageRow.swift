@@ -295,6 +295,7 @@ struct ShareCard: View {
 struct Composer: View {
     @Bindable var model: ConversationModel
     @FocusState private var focused: Bool
+    @State private var typingStop: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 6) {
@@ -331,5 +332,20 @@ struct Composer: View {
         .padding(12)
         .onAppear { focused = true }
         .onChange(of: model.replyingTo) { if model.replyingTo != nil { focused = true } }
+        // Tell the other side we're typing; stop after 4 s without a keystroke, or when cleared.
+        .onChange(of: model.draft) { _, draft in
+            typingStop?.cancel()
+            let typing = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            Task { await model.sendTyping(typing) }
+            guard typing else { return }
+            typingStop = Task {
+                try? await Task.sleep(for: .seconds(4))
+                if !Task.isCancelled { await model.sendTyping(false) }
+            }
+        }
+        .onDisappear {
+            typingStop?.cancel()
+            Task { await model.sendTyping(false) }
+        }
     }
 }

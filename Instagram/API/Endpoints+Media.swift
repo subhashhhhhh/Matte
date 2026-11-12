@@ -2,6 +2,29 @@ import Foundation
 
 /// One post or reel by id, and its comments (REST endpoints that accept the web session).
 extension IGClient {
+    /// Like/save mutations live in scripts the web app loads on demand (not scanned), so their
+    /// doc ids are kept here (read from the web app's scripts on 2026-11-12).
+    nonisolated static let postActionDocIds: [String: String] = [
+        "PolarisAPILikePostMutation": "28051398997871885",
+        "PolarisAPIUnlikePostMutation": "29100661379564082",
+        "PolarisAPISavePostMutation": "27326721586982367",
+        "PolarisAPIUnsavePostMutation": "27203919972607144",
+    ]
+
+    private func postAction(_ name: String, pk: String) async throws {
+        await prepare()
+        let doc = knownOperations()[name] ?? Self.postActionDocIds[name]
+        _ = try await graphQL(name, variables: ["input": ["media_id": .string(pk)]], docId: doc)
+    }
+
+    func setLiked(_ liked: Bool, pk: String) async throws {
+        try await postAction(liked ? "PolarisAPILikePostMutation" : "PolarisAPIUnlikePostMutation", pk: pk)
+    }
+
+    func setSaved(_ saved: Bool, pk: String) async throws {
+        try await postAction(saved ? "PolarisAPISavePostMutation" : "PolarisAPIUnsavePostMutation", pk: pk)
+    }
+
     func mediaInfo(pk: String) async throws -> Media {
         let json = try await rest(.get, "/api/v1/media/\(pk)/info/")
         guard let media = Parser.media(json["items"][0]) else { throw IGError.badResponse }

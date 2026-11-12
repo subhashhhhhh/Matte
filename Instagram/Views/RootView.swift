@@ -18,6 +18,12 @@ struct RootView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            if let media = app.sharing {
+                ShareSheet(media: media)
+                    .id(media.pk)
+                    .transition(.opacity)
+                    .zIndex(20)
+            }
             if let stories = app.stories {
                 StoryViewer(model: stories)
                     .transition(.opacity)
@@ -37,6 +43,7 @@ struct RootView: View {
         }
         .animation(.smooth(duration: 0.25), value: app.toast)
         .animation(.easeOut(duration: 0.18), value: app.stories == nil)
+        .animation(.easeOut(duration: 0.15), value: app.sharing == nil)
         .background(Theme.background)
         .ignoresSafeArea()
         .sheet(isPresented: $app.showSignIn) {

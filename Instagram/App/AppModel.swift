@@ -21,6 +21,14 @@ enum Destination: String, CaseIterable, Identifiable {
         }
     }
 
+    var glyph: (outline: IGIcon, filled: IGIcon) {
+        switch self {
+        case .home: (.home, .homeFilled)
+        case .reels: (.reels, .reelsFilled)
+        case .messages: (.direct, .directFilled)
+        }
+    }
+
     var shortcut: KeyEquivalent {
         switch self {
         case .home: "1"
@@ -50,6 +58,10 @@ final class AppModel {
     var openedMedia: Media?
     /// Shown as a small banner (errors, "copied").
     var toast: String?
+    /// The post being sent to chats (the "Send to…" sheet), when open.
+    var sharing: Media?
+    /// Like/save/send/copy/download for posts and reels everywhere.
+    private(set) var actions: PostActions?
 
     private(set) var feed: FeedModel?
     private(set) var reels: ReelsModel?
@@ -73,6 +85,7 @@ final class AppModel {
         feed = FeedModel(app: self, client: client)
         reels = ReelsModel(app: self, client: client)
         inbox = InboxModel(app: self, client: client)
+        actions = PostActions(app: self, client: client)
     }
 
     func completeSignIn(_ cookies: [StoredCookie]) {
@@ -91,6 +104,8 @@ final class AppModel {
         feed = nil
         reels = nil
         inbox = nil
+        actions = nil
+        sharing = nil
         stories = nil
         authState = .signedOut
     }

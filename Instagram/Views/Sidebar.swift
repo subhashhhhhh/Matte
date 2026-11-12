@@ -12,8 +12,7 @@ struct Sidebar: View {
                 let selected = app.destination == d
                 Button { app.destination = d } label: {
                     ZStack(alignment: .topTrailing) {
-                        Image(systemName: selected ? d.symbol + ".fill" : d.symbol)
-                            .font(.system(size: 19, weight: selected ? .semibold : .regular))
+                        IGGlyph(icon: selected ? d.glyph.filled : d.glyph.outline, size: 22)
                             .frame(width: 48, height: 44)
                             .background {
                                 if selected {

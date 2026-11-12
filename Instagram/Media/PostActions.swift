@@ -1,0 +1,208 @@
+import SwiftUI
+import AppKit
+
+/// Like, save, send, copy and download for any post or reel. Likes and saves show at once and
+/// are undone if Instagram refuses them; the state is kept by media id so the grid, the opened
+/// post and Reels agree.
+@Observable
+final class PostActions {
+    struct State: Equatable {
+        var liked: Bool
+        var likeCount: Int?
+        var saved: Bool
+    }
+
+    private(set) var overrides: [String: State] = [:]
+    @ObservationIgnored private weak var app: AppModel?
+    @ObservationIgnored private let client: IGClient
+
+    init(app: AppModel, client: IGClient) {
+        self.app = app
+        self.client = client
+    }
+
+    func state(_ m: Media) -> State {
+        overrides[m.pk] ?? State(liked: m.hasLiked, likeCount: m.likeCount, saved: m.hasSaved)
+    }
+
+    func toggleLike(_ m: Media) {
+        let old = state(m)
+        var new = old
+        new.liked.toggle()
+        new.likeCount = old.likeCount.map { max(0, $0 + (new.liked ? 1 : -1)) }
+        overrides[m.pk] = new
+        Task {
+            do { try await client.setLiked(new.liked, pk: m.pk) } catch {
+                overrides[m.pk] = old
+                app?.report(error)
+            }
+        }
+    }
+
+    /// Likes (never unlikes): for double-click, as double-tap does on the phone.
+    func like(_ m: Media) { if !state(m).liked { toggleLike(m) } }
+
+    func toggleSave(_ m: Media) {
+        let old = state(m)
+        var new = old
+        new.saved.toggle()
+        overrides[m.pk] = new
+        Task {
+            do {
+                try await client.setSaved(new.saved, pk: m.pk)
+                app?.show(new.saved ? "Saved" : "Removed from saved")
+            } catch {
+                overrides[m.pk] = old
+                app?.report(error)
+            }
+        }
+    }
+
+    func copyLink(_ m: Media) {
+        guard let url = m.shareURL else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        app?.show("Link copied")
+    }
+
+    func copyCaption(_ m: Media) {
+        guard let caption = m.caption else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(caption, forType: .string)
+        app?.show("Caption copied")
+    }
+
+    /// Saves the photo(s) or video(s) at full size to ~/Downloads.
+    func download(_ m: Media) {
+        let items = m.children.isEmpty ? [m] : m.children
+        let owner = m.user?.username ?? "instagram"
+        Task {
+            var saved = 0
+            for (i, item) in items.enumerated() {
+                let video = item.isVideo
+                guard let url = video ? item.videos.max(by: { $0.width < $1.width })?.url
+                                      : item.images.max(by: { $0.width < $1.width })?.url else { continue }
+                let suffix = items.count > 1 ? "-\(i + 1)" : ""
+                let name = "\(owner)-\(m.code ?? m.pk)\(suffix).\(video ? "mp4" : "jpg")"
+                do {
+                    let (temp, _) = try await URLSession.shared.download(from: url)
+                    let downloads = try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+                    let dest = downloads.appending(path: name)
+                    try? FileManager.default.removeItem(at: dest)
+                    try FileManager.default.moveItem(at: temp, to: dest)
+                    saved += 1
+                } catch {
+                    app?.report(error)
+                }
+            }
+            if saved > 0 { app?.show(saved == 1 ? "Saved to Downloads" : "\(saved) files saved to Downloads") }
+        }
+    }
+
+    func send(_ m: Media) { app?.sharing = m }
+}
+
+extension Media {
+    /// The link Instagram's own "Copy link" gives: /reel/ for reels, /p/ otherwise.
+    var shareURL: URL? {
+        guard let code else { return nil }
+        return URL(string: "https://www.instagram.com/\(productType == "clips" ? "reel" : "p")/\(code)/")
+    }
+}
+
+// MARK: - Action bar
+
+/// Heart, comment, send and save, as under every Instagram post.
+struct PostActionBar: View {
+    let media: Media
+    var size: CGFloat = 22
+    var onComment: (() -> Void)?
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        if let actions = app.actions {
+            let state = actions.state(media)
+            HStack(spacing: size * 0.65) {
+                HStack(spacing: 5) {
+                    LikeButton(liked: state.liked, size: size) { actions.toggleLike(media) }
+                    if !media.countsHidden, let n = state.likeCount, n > 0 { count(n) }
+                }
+                HStack(spacing: 5) {
+                    iconButton(.comment, help: "Comments") { onComment?() }
+                    if let n = media.commentCount, n > 0 { count(n) }
+                }
+                iconButton(.share, help: "Send to…") { actions.send(media) }
+                Spacer(minLength: 0)
+                iconButton(state.saved ? .saveFilled : .save, help: state.saved ? "Remove from saved" : "Save") {
+                    actions.toggleSave(media)
+                }
+            }
+        }
+    }
+
+    private func count(_ n: Int) -> some View {
+        Text(n.compact).font(.system(size: size * 0.6, weight: .semibold)).monospacedDigit()
+    }
+
+    private func iconButton(_ icon: IGIcon, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            IGGlyph(icon: icon, size: size).contentShape(Rectangle())
+        }
+        .buttonStyle(.pressable)
+        .help(help)
+    }
+}
+
+/// The heart: outlined, or red and filled once liked, with a small pop.
+struct LikeButton: View {
+    let liked: Bool
+    var size: CGFloat = 22
+    let action: () -> Void
+    @State private var pop = false
+
+    var body: some View {
+        Button {
+            if !liked { pop = true }
+            action()
+        } label: {
+            IGGlyph(icon: liked ? .heartFilled : .heart, size: size)
+                .foregroundStyle(liked ? AnyShapeStyle(Theme.like) : AnyShapeStyle(.primary))
+                .scaleEffect(pop ? 1.25 : 1)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.pressable)
+        .help(liked ? "Unlike" : "Like")
+        .onChange(of: pop) {
+            guard pop else { return }
+            Task { try? await Task.sleep(for: .milliseconds(160)); pop = false }
+        }
+        .animation(.spring(response: 0.25, dampingFraction: 0.5), value: pop)
+    }
+}
+
+// MARK: - Right-click menu
+
+/// What a right-click on a post or reel offers.
+struct PostMenu: View {
+    let media: Media
+    var open: (() -> Void)?
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        if let actions = app.actions {
+            let state = actions.state(media)
+            if let open { Button("Open", action: open) }
+            Button(state.liked ? "Unlike" : "Like") { actions.toggleLike(media) }
+            Button(state.saved ? "Remove from Saved" : "Save") { actions.toggleSave(media) }
+            Button("Send to…") { actions.send(media) }
+            Divider()
+            Button("Copy Link") { actions.copyLink(media) }
+            if media.caption?.isEmpty == false { Button("Copy Caption") { actions.copyCaption(media) } }
+            if let url = media.shareURL { Button("Open on Instagram") { NSWorkspace.shared.open(url) } }
+            Divider()
+            Button(media.children.count > 1 ? "Download All (\(media.children.count))" : media.isVideo ? "Download Video" : "Download Photo") {
+                actions.download(media)
+            }
+        }
+    }
+}

@@ -96,6 +96,7 @@ final class ReelsModel {
 
 struct ReelsView: View {
     let model: ReelsModel
+    @Environment(AppModel.self) private var app
     @State private var sound = SoundSetting.shared
     @FocusState private var focused: Bool
 
@@ -171,6 +172,7 @@ struct ReelsView: View {
         }
         .frame(width: max(width, 200), height: max(height, 300))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contextMenu { if let reel = model.reel { PostMenu(media: reel) } }
         .overlay(alignment: .topTrailing) { MuteButton().padding(12) }
     }
 
@@ -193,30 +195,47 @@ struct ReelsView: View {
     }
 
     private var sideActions: some View {
-        VStack(spacing: 18) {
-            if let reel = model.reel {
-                stat(reel.hasLiked ? "heart.fill" : "heart", reel.likeCount, tint: reel.hasLiked ? Theme.like : nil)
-                stat("bubble.right", reel.commentCount)
-                if let url = reel.webURL {
-                    Button { NSWorkspace.shared.open(url) } label: { Image(systemName: "arrow.up.right").font(.system(size: 16)) }
-                        .buttonStyle(ChromeButtonStyle(size: 36))
-                        .help("Open on Instagram")
+        VStack(spacing: 20) {
+            if let reel = model.reel, let actions = app.actions {
+                let state = actions.state(reel)
+                VStack(spacing: 4) {
+                    LikeButton(liked: state.liked, size: 26) { actions.toggleLike(reel) }
+                    countLabel(reel.countsHidden ? nil : state.likeCount)
                 }
+                VStack(spacing: 4) {
+                    IGGlyph(icon: .comment, size: 26)
+                    countLabel(reel.commentCount)
+                }
+                .help("Comments")
+                glyphButton(.share, help: "Send to…") { actions.send(reel) }
+                glyphButton(state.saved ? .saveFilled : .save, help: state.saved ? "Remove from saved" : "Save") {
+                    actions.toggleSave(reel)
+                }
+                Menu { PostMenu(media: reel) } label: {
+                    Image(systemName: "ellipsis").font(.system(size: 20, weight: .semibold)).frame(width: 36, height: 30)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("More")
             }
             VStack(spacing: 6) {
                 ChromeButton("Previous", symbol: "chevron.up") { model.move(-1) }.disabled(model.index == 0)
                 ChromeButton("Next", symbol: "chevron.down") { model.move(1) }.disabled(model.index >= model.items.count - 1)
             }
-            .padding(.top, 10)
+            .padding(.top, 6)
         }
         .padding(.bottom, 20)
     }
 
-    private func stat(_ symbol: String, _ count: Int?, tint: Color? = nil) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: symbol).font(.system(size: 20)).foregroundStyle(tint ?? .primary)
-            Text((count ?? 0) > 0 ? count!.compact : " ").font(.system(size: 11, weight: .medium))
-        }
+    private func countLabel(_ count: Int?) -> some View {
+        Text((count ?? 0) > 0 ? count!.compact : " ").font(.system(size: 11.5, weight: .semibold))
+    }
+
+    private func glyphButton(_ icon: IGIcon, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { IGGlyph(icon: icon, size: 26).contentShape(Rectangle()) }
+            .buttonStyle(.pressable)
+            .help(help)
     }
 }
 
