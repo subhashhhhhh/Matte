@@ -11,7 +11,7 @@ struct ProfileView: View {
                 header
                     .frame(maxWidth: 1000)
                 Rectangle().fill(Theme.hairline).frame(height: 1).frame(maxWidth: 1000)
-                if model.profile?.isPrivate == true, model.profile?.following != true {
+                if model.profile?.isPrivate == true, model.profile?.following != true, user.id != app.viewerId {
                     EmptyState(symbol: "lock", title: "This account is private",
                                message: "Follow them on Instagram to see their posts.")
                         .frame(height: 260)

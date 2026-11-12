@@ -61,6 +61,7 @@
 		C3F14739443DB3AF599D28D7 /* PostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971CACDEFE67D14470F686CF /* PostCard.swift */; };
 		C7B3585F5B43769995E24541 /* StoryViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84E0D25428A4E234085B541D /* StoryViewer.swift */; };
 		C91442D1C32F529B8B0E1EBC /* InstagramApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB15FB4FE77D3D29AAF3721 /* InstagramApp.swift */; };
+		D30B145FE5C2725EB6D503F9 /* PresenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A429650214B679666E74508B /* PresenceTests.swift */; };
 		D40AF1245C0291905868C0A0 /* Endpoints+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB29A5058C39CC8EBE5E6858 /* Endpoints+Media.swift */; };
 		D6E78F5B350C87CCB465CA82 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8113E6B5FF4E5BDFB8FDBB5F /* MessageRow.swift */; };
 		DED4BFBE4B2A5ACA80B77D3E /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B03916708F8F00FF5CF54C53 /* AppModel.swift */; };
@@ -115,6 +116,7 @@
 		9AAF1E770CD263F186B73701 /* MediaGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGrid.swift; sourceTree = "<group>"; };
 		A101CDB731E175706029EDDA /* JSONIntegerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONIntegerTests.swift; sourceTree = "<group>"; };
 		A28840F30816AE4E43B69C05 /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
+		A429650214B679666E74508B /* PresenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceTests.swift; sourceTree = "<group>"; };
 		A6861626770DF3F24B190EB4 /* VideoPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayer.swift; sourceTree = "<group>"; };
 		A6B7FF0354B5C9BE92C40DC6 /* MediaDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetail.swift; sourceTree = "<group>"; };
 		A7432B5F9D6DDFAB9CB712C4 /* DebugProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugProbe.swift; sourceTree = "<group>"; };
@@ -186,6 +188,7 @@
 				76F09BA534CD44318EABB49F /* ModelTests.swift */,
 				BA43873DACB6AD14DE3E7AD7 /* ParserTests.swift */,
 				D16D04C62418A79434A2F14E /* PostActionTests.swift */,
+				A429650214B679666E74508B /* PresenceTests.swift */,
 				C45E61FF9DE2323A596DB4BA /* README.md */,
 				CE0A96280872B92E86A9626C /* RealtimeCodecTests.swift */,
 				ACE006CC362B71562A6202E4 /* RealtimeGatewayTests.swift */,
@@ -516,6 +519,7 @@
 				03FC908A2CB4C1EF3CDF5441 /* ModelTests.swift in Sources */,
 				9CFB376B283CD9265B92A791 /* ParserTests.swift in Sources */,
 				B6705DD1F79616379D46F171 /* PostActionTests.swift in Sources */,
+				D30B145FE5C2725EB6D503F9 /* PresenceTests.swift in Sources */,
 				0441437FCA936C091700AA59 /* RealtimeCodecTests.swift in Sources */,
 				012F737DDDFF2D8D891B4864 /* RealtimeGatewayTests.swift in Sources */,
 				5D855133AEF5B1FEA4E815B9 /* RequestEncodingTests.swift in Sources */,
@@ -561,7 +565,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.subhash.Instagram;
-				PRODUCT_NAME = Instagram;
+				PRODUCT_MODULE_NAME = Instagram;
+				PRODUCT_NAME = Matte;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -595,7 +600,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.subhash.Instagram;
-				PRODUCT_NAME = Instagram;
+				PRODUCT_MODULE_NAME = Instagram;
+				PRODUCT_NAME = Matte;
 				SDKROOT = macosx;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -685,7 +691,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.subhash.InstagramTests;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Instagram.app/Contents/MacOS/Instagram";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Matte.app/Contents/MacOS/Matte";
 			};
 			name = Release;
 		};
@@ -762,7 +768,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.subhash.InstagramTests;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Instagram.app/Contents/MacOS/Instagram";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Matte.app/Contents/MacOS/Matte";
 			};
 			name = Debug;
 		};

@@ -12,7 +12,9 @@ targets:
       - path: Instagram
     settings:
       base:
-        PRODUCT_NAME: Instagram
+        PRODUCT_NAME: Matte
+        # The code module keeps its name (tests `@testable import Instagram`).
+        PRODUCT_MODULE_NAME: Instagram
         PRODUCT_BUNDLE_IDENTIFIER: com.subhash.Instagram
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
@@ -54,6 +56,8 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
         PRODUCT_BUNDLE_IDENTIFIER: com.subhash.InstagramTests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Matte.app/Contents/MacOS/Matte"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 schemes:
   Instagram:
     build:

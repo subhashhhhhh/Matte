@@ -11,6 +11,9 @@ memory (the website uses 4–5 GB on an 8 GB Mac).
 - macOS 15, Swift 6, **MainActor default isolation**. Types that cross actors are
   `nonisolated`; `IGClient`, `IGSession`, `ImagePipeline` are actors.
 - Debug build: `xcodebuild -project Instagram.xcodeproj -scheme Instagram -configuration Debug -derivedDataPath <scratchpad>/dd build`
+- The app is **Matte** (`PRODUCT_NAME`, Matte.app); the code module stays `Instagram`.
+- Install: `xcodebuild … -configuration Release -derivedDataPath <scratchpad>/dd-release build`, quit the
+  running app, `ditto <…>/Release/Matte.app /Applications/Matte.app`.
 - Tests: `xcodebuild test -project Instagram.xcodeproj -scheme Instagram -derivedDataPath <scratchpad>/dd-test`.
   Read the whole result, including the trailing summary.
 - **Commit and push after every working step** (private repo, `main`). The Mac shuts down
