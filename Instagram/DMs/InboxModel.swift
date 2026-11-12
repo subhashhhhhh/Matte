@@ -4,7 +4,9 @@ import OSLog
 /// The DM inbox and the open conversation.
 @Observable
 final class InboxModel {
-    private(set) var threads: [DMThread] = []
+    private(set) var threads: [DMThread] = [] {
+        didSet { if !Self.isTesting { DMNotifier.setBadge(unreadCount) } }
+    }
     private(set) var isLoading = false
     private(set) var loadFailed = false
     var selectedId: String? {
@@ -33,9 +35,144 @@ final class InboxModel {
     init(app: AppModel, client: IGClient) {
         self.app = app
         self.client = client
+        guard !Self.isTesting else { return }
+        // Messages arrive (and notify) whichever page is open: load the inbox and connect the
+        // real-time socket shortly after launch.
+        DMNotifier.shared.open = { [weak self] id in self?.openFromNotification(id) }
+        DMNotifier.shared.start()
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            await self?.loadIfNeeded()
+        }
+        activeObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
+                                                                queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.appBecameActive() }
+        }
     }
 
-    var selected: DMThread? { threads.first { $0.id == selectedId } }
+    /// Unit tests build models without the app around them: no notifications, Dock badge or
+    /// background loading there.
+    nonisolated static let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        || NSClassFromString("XCTestCase") != nil
+    @ObservationIgnored private var activeObserver: NSObjectProtocol?
+
+    private func openFromNotification(_ threadId: String) {
+        app?.openChat(threadId)
+        DMNotifier.shared.clear(thread: threadId)
+    }
+
+    /// Back in the app: the open chat counts as seen now.
+    private func appBecameActive() {
+        guard let conversation, app?.destination == .messages else { return }
+        DMNotifier.shared.clear(thread: conversation.thread.id)
+        Task { await conversation.markReadIfVisible() }
+    }
+
+    /// Whether you're looking at this chat right now (the app in front, on Messages, chat open).
+    func isWatching(_ threadId: String) -> Bool {
+        NSApp.isActive && app?.destination == .messages && conversation?.thread.id == threadId
+            && NSApp.keyWindow != nil
+    }
+
+    /// A notification for a new message from someone else, unless you're looking at that chat.
+    private func notifyIfNeeded(_ threadId: String, _ message: DMMessage) async {
+        guard !Self.isTesting, !isWatching(threadId), Date.now.timeIntervalSince(message.sentAt) < 600 else { return }
+        var thread = threads.first { $0.id == threadId }
+        if thread == nil {
+            await refresh()
+            thread = threads.first { $0.id == threadId }
+        }
+        guard let thread, !thread.isMuted else { return }
+        // Not our own messages (sent from another device, echoed back).
+        let me: String? = if let id = thread.viewerMessagingId { id } else { await client.page.messagingId }
+        guard let me, message.senderId != me else { return }
+        if case .notice = message.body { return }
+        DMNotifier.shared.notify(thread: thread, message: message, sender: thread.users.first { $0.messagingId == message.senderId })
+    }
+
+    var selected: DMThread? {
+        threads.first { $0.id == selectedId } ?? requests.first { $0.id == selectedId } ?? hiddenRequests.first { $0.id == selectedId }
+    }
+
+    // MARK: Message requests
+
+    /// Chats from people you don't follow, waiting to be accepted, and hidden ones (Instagram's filter).
+    private(set) var requests: [DMThread] = []
+    private(set) var hiddenRequests: [DMThread] = []
+    private(set) var loadingRequests = false
+    @ObservationIgnored private var requestsLoadedAt: Date?
+
+    func loadRequests(force: Bool = false) async {
+        if !force, let t = requestsLoadedAt, Date.now.timeIntervalSince(t) < 60 { return }
+        loadingRequests = true
+        defer { loadingRequests = false }
+        do {
+            let r = try await client.messageRequests()
+            requests = r.requests
+            hiddenRequests = r.hidden
+            requestsLoadedAt = .now
+        } catch {
+            app?.report(error)
+        }
+    }
+
+    /// Accepts a request: it moves to the inbox (you can reply, and they see when you've read).
+    func accept(_ thread: DMThread) async {
+        do {
+            try await client.acceptRequest(thread.id)
+            requests.removeAll { $0.id == thread.id }
+            hiddenRequests.removeAll { $0.id == thread.id }
+            var t = thread
+            t.isRequest = false
+            merge([t])
+            conversation?.markAccepted()
+            await refresh()
+        } catch {
+            app?.report(error)
+        }
+    }
+
+    // MARK: New chat
+
+    /// Someone you picked in "New message" who has no chat with you yet (the chat starts with
+    /// your first message).
+    private(set) var newChatUser: User?
+
+    /// Opens the chat with `user`: their existing one-to-one chat if there is one, else a new one.
+    func startChat(with user: User) {
+        if let t = (threads + requests).first(where: { !$0.isGroup && $0.users.first?.id == user.id }) {
+            newChatUser = nil
+            selectedId = t.id
+            return
+        }
+        selectedId = nil
+        newChatUser = user
+    }
+
+    func cancelNewChat() { newChatUser = nil }
+
+    /// Sends the first message to `newChatUser`, then opens the chat it created.
+    func sendFirstMessage(_ text: String) async -> Bool {
+        guard let user = newChatUser, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        do {
+            try await client.startChat(with: user.id, text: text)
+        } catch {
+            app?.report(error)
+            return false
+        }
+        // The new chat shows up in the inbox once Instagram has it.
+        for delay in [0.5, 1.5, 3.0] {
+            try? await Task.sleep(for: .seconds(delay))
+            await refresh()
+            if let t = threads.first(where: { !$0.isGroup && $0.users.first?.id == user.id }) {
+                newChatUser = nil
+                selectedId = t.id
+                return true
+            }
+        }
+        newChatUser = nil
+        return true
+    }
 
     func loadIfNeeded() async {
         guard !loadedOnce else { return }
@@ -43,6 +180,18 @@ final class InboxModel {
         await refresh()
         startRealtime()
         startPolling()
+        #if DEBUG
+        // `-IGTestNotification YES`: post a local notification for the first chat (checks the
+        // notification and click-to-open path; nothing is sent to Instagram).
+        if UserDefaults.standard.bool(forKey: "IGTestNotification"), let t = threads.first {
+            let other = t.users.first?.messagingId ?? "0"
+            DMNotifier.shared.notify(thread: t, message: DMMessage(id: "test-\(Int(Date.now.timeIntervalSince1970))", senderId: other,
+                                                                   sentAt: .now, body: .text("Test notification")),
+                                     sender: t.users.first)
+            try? await Task.sleep(for: .seconds(2))
+            DMNotifier.shared.logDelivered()
+        }
+        #endif
     }
 
     func refresh() async {
@@ -99,8 +248,10 @@ final class InboxModel {
         conversation?.stop()
         conversation = nil
         guard let thread = selected else { return }
+        newChatUser = nil
         conversation = ConversationModel(inbox: self, thread: thread, client: client)
         if let i = threads.firstIndex(where: { $0.id == thread.id }) { threads[i].isUnread = false }
+        if !Self.isTesting { DMNotifier.shared.clear(thread: thread.id) }
     }
 
     func report(_ error: Error) { app?.report(error) }
@@ -156,6 +307,7 @@ final class InboxModel {
         case .message(let id, let message):
             conversation(id)?.receive(message)
             bumpRow(id, with: message)
+            await notifyIfNeeded(id, message)
         case .messageDeleted(let id, let messageId):
             conversation(id)?.remove(messageId)
             refreshInboxSoon()
@@ -314,6 +466,7 @@ final class ConversationModel {
         if t.users.isEmpty { t.users = thread.users }
         t.isMuted = thread.isMuted
         t.isPinned = thread.isPinned
+        if thread.isRequest { t.isRequest = true }
         t.isUnread = false
         return t
     }
@@ -351,7 +504,7 @@ final class ConversationModel {
         if changed {
             messages.sort { $0.sentAt < $1.sentAt }
             newestToken += 1
-            await markRead()
+            await markReadIfVisible()
         }
     }
 
@@ -370,8 +523,15 @@ final class ConversationModel {
         }
         if message.senderId != viewerId {
             setPeerTyping(false)
-            Task { await markRead() }
+            Task { await markReadIfVisible() }
         }
+    }
+
+    /// Marks the chat read only while you can see it (the app in front); otherwise when you
+    /// come back to it.
+    func markReadIfVisible() async {
+        guard InboxModel.isTesting || inbox?.isWatching(thread.id) == true else { return }
+        await markRead()
     }
 
     func remove(_ messageId: String) {
@@ -417,43 +577,194 @@ final class ConversationModel {
 
     // MARK: Actions
 
-    func send() async {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let viewerId else { return }
-        draft = ""
-        let reply = replyingTo
+    /// Photos and videos waiting in the composer; they go out with the next send.
+    private(set) var staged: [StagedMedia] = []
+    /// Files still being prepared for the tray.
+    private(set) var preparing = 0
+    /// Media we sent, by offline id, so a failed one can go back to the tray.
+    @ObservationIgnored private var outgoing: [String: StagedMedia] = [:]
+    static let maxStaged = 10
+
+    /// Adds photos or videos (picked or dropped files) to the composer.
+    func stage(files: [URL]) {
+        for url in files.prefix(Self.maxStaged - staged.count) {
+            preparing += 1
+            Task {
+                defer { preparing -= 1 }
+                do {
+                    let m = try await OutgoingMedia.prepare(file: url)
+                    if staged.count < Self.maxStaged { staged.append(m) }
+                } catch {
+                    inbox?.report(error)
+                }
+            }
+        }
+    }
+
+    /// Adds a pasted image to the composer.
+    func stage(imageData: Data) {
+        guard staged.count < Self.maxStaged else { return }
+        do { staged.append(try OutgoingMedia.prepare(imageData: imageData)) } catch { inbox?.report(error) }
+    }
+
+    func unstage(_ id: UUID) { staged.removeAll { $0.id == id } }
+
+    var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !staged.isEmpty }
+
+    // MARK: Editing and forwarding
+
+    /// Your message being edited in the composer (its text in `draft`).
+    private(set) var editing: DMMessage?
+    /// The message the "Forward to…" sheet is open for.
+    var forwarding: DMMessage?
+    /// Instagram lets you edit a message for 15 minutes.
+    static let editWindow: TimeInterval = 15 * 60
+
+    func canEdit(_ m: DMMessage) -> Bool {
+        guard m.senderId == viewerId, !m.pending, !m.failed, !m.id.hasPrefix("local-"),
+              Date.now.timeIntervalSince(m.sentAt) < Self.editWindow, case .text = m.body else { return false }
+        return true
+    }
+
+    func beginEdit(_ m: DMMessage) {
+        guard canEdit(m), case .text(let t) = m.body else { return }
         replyingTo = nil
-        let otid = OfflineThreadingId.next()
-        var local = DMMessage(id: "local-\(otid)", senderId: viewerId, sentAt: .now, body: .text(text))
-        local.pending = true
-        local.offlineId = otid
-        if let reply { local.replyTo = .init(id: reply.id, senderId: reply.senderId, text: reply.previewText) }
-        messages.append(local)
-        newestToken += 1
+        editing = m
+        draft = t
+    }
+
+    func cancelEdit() {
+        editing = nil
+        draft = ""
+    }
+
+    private func finishEdit(_ original: DMMessage) async {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        editing = nil
+        draft = ""
+        guard !text.isEmpty, original.body != .text(text) else { return }
+        guard let i = messages.firstIndex(where: { $0.id == original.id }) else { return }
+        messages[i].body = .text(text)
+        messages[i].isEdited = true
         do {
-            let id = try await client.sendText(text, thread: thread.id, replyTo: reply?.id, offlineId: otid)
-            if let i = messages.firstIndex(where: { $0.offlineId == otid && $0.pending }) {
-                messages[i].pending = false
-                if let id { messages[i].id = id }
-            }
-            thread.snippet = text
-            thread.lastActivity = .now
-            thread.lastSenderIsViewer = true
-            inbox?.update(thread)
+            try await client.editMessage(original.id, thread: thread.id, text: text)
         } catch {
-            if let i = messages.firstIndex(where: { $0.offlineId == otid }) {
-                messages[i].pending = false
-                messages[i].failed = true
-            }
+            if let j = messages.firstIndex(where: { $0.id == original.id }) { messages[j] = original }
             inbox?.report(error)
         }
     }
 
-    /// Removes a failed message and puts its text back in the box.
+    /// Whether a message can be forwarded (text, photos and videos with an id, shared links).
+    func canForward(_ m: DMMessage) -> Bool {
+        guard !m.pending, !m.failed, !m.id.hasPrefix("local-") else { return false }
+        switch m.body {
+        case .text: return true
+        case .media(let a): return a.contains { $0.id != nil && ($0.kind == .image || $0.kind == .video) }
+        case .share(let s, _): return s.targetURL != nil
+        default: return false
+        }
+    }
+
+    /// Forwards `m` into the chats `targets`; returns how many failed.
+    func forward(_ m: DMMessage, to targets: [String]) async -> Int {
+        let own = m.senderId == viewerId
+        var failures = 0
+        for target in targets {
+            do {
+                switch m.body {
+                case .text(let t):
+                    try await client.forwardText(t, from: thread.id, ownMessage: own, to: target)
+                case .media(let attachments):
+                    for a in attachments where a.kind == .image || a.kind == .video {
+                        guard let id = a.id else { continue }
+                        try await client.forwardAttachment(id, messageId: m.id, from: thread.id, ownMessage: own, to: target)
+                    }
+                case .share(let s, let text):
+                    // A shared post goes on as its link (Instagram shows it as a card).
+                    if let url = s.targetURL {
+                        try await client.forwardText(url.absoluteString, from: thread.id, ownMessage: own, to: target)
+                    }
+                    if let text, !text.isEmpty {
+                        try await client.forwardText(text, from: thread.id, ownMessage: own, to: target)
+                    }
+                default:
+                    break
+                }
+            } catch {
+                failures += 1
+                inbox?.report(error)
+            }
+        }
+        return failures
+    }
+
+    /// Sends the composer: its photos and videos first (each its own message, shown at once
+    /// while it uploads), then the text.
+    func send() async {
+        if let editing { await finishEdit(editing); return }
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let media = staged
+        guard !text.isEmpty || !media.isEmpty, let viewerId else { return }
+        draft = ""
+        staged = []
+        let reply = replyingTo
+        replyingTo = nil
+        // Everything appears right away, in order; then goes out one by one.
+        var queue: [(otid: String, media: StagedMedia?)] = []
+        for m in media { queue.append((OfflineThreadingId.next(), m)) }
+        if !text.isEmpty { queue.append((OfflineThreadingId.next(), nil)) }
+        // A reply quotes on the text if there is one, else on the first photo.
+        let replyOtid = text.isEmpty ? queue.first?.otid : queue.last?.otid
+        for item in queue {
+            var local = DMMessage(id: "local-\(item.otid)", senderId: viewerId, sentAt: .now,
+                                  body: item.media.map { .media([$0.attachment]) } ?? .text(text))
+            local.pending = true
+            local.offlineId = item.otid
+            if let reply, item.otid == replyOtid { local.replyTo = .init(id: reply.id, senderId: reply.senderId, text: reply.previewText) }
+            messages.append(local)
+            if let m = item.media { outgoing[item.otid] = m }
+        }
+        newestToken += 1
+        for item in queue {
+            let replyId = item.otid == replyOtid ? reply?.id : nil
+            do {
+                let id: String?
+                if let m = item.media {
+                    let attachment = try await client.uploadDMAttachment(file: m.file, mimeType: m.mimeType, isVideo: m.isVideo)
+                    id = try await client.sendMedia(attachmentId: attachment, thread: thread.id, replyTo: replyId, offlineId: item.otid)
+                } else {
+                    id = try await client.sendText(text, thread: thread.id, replyTo: replyId, offlineId: item.otid)
+                }
+                if let i = messages.firstIndex(where: { $0.offlineId == item.otid && $0.pending }) {
+                    messages[i].pending = false
+                    if let id { messages[i].id = id }
+                }
+                outgoing[item.otid] = nil
+                thread.snippet = item.media.map { $0.isVideo ? "You sent a video" : "You sent a photo" } ?? text
+                thread.lastActivity = .now
+                thread.lastSenderIsViewer = true
+                inbox?.update(thread)
+            } catch {
+                if let i = messages.firstIndex(where: { $0.offlineId == item.otid }) {
+                    messages[i].pending = false
+                    messages[i].failed = true
+                }
+                inbox?.report(error)
+            }
+        }
+    }
+
+    /// Removes a failed message and puts it back in the composer (text in the box, a photo or
+    /// video in the tray).
     func retry(_ message: DMMessage) {
-        guard case .text(let t) = message.body else { return }
-        messages.removeAll { $0.id == message.id }
-        draft = t
+        if case .text(let t) = message.body {
+            messages.removeAll { $0.id == message.id }
+            draft = t
+        } else if let otid = message.offlineId, let m = outgoing[otid] {
+            messages.removeAll { $0.id == message.id }
+            outgoing[otid] = nil
+            staged.append(m)
+        }
     }
 
     func toggleReaction(_ emoji: String, on message: DMMessage) async {
@@ -484,8 +795,15 @@ final class ConversationModel {
     }
 
     /// Tells Instagram we've read up to the newest message from the other side.
+    /// After accepting a request.
+    func markAccepted() { thread.isRequest = false }
+
+    /// Accepts this chat's message request.
+    func acceptRequest() async { await inbox?.accept(thread) }
+
     private func markRead() async {
-        guard let longId = thread.longId,
+        // Reading a request doesn't tell them (as on Instagram) until it's accepted.
+        guard !thread.isRequest, let longId = thread.longId,
               let newest = messages.last(where: { $0.senderId != viewerId && !$0.pending }),
               newest.id != markedReadUpTo else { return }
         if let mine = viewerId.flatMap({ thread.readUpTo[$0] }), mine >= newest.sentAt { markedReadUpTo = newest.id; return }

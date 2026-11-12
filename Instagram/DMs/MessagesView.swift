@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MessagesView: View {
     @Environment(AppModel.self) private var app
@@ -7,6 +8,8 @@ struct MessagesView: View {
     @AppStorage("showSharedPane") private var showPane = true
     @State private var viewer: MediaDetailModel?
     @State private var viewerItemId: String?
+    @State private var composing = false
+    @State private var newMessageQuery = ""
 
     var body: some View {
         GeometryReader { geo in
@@ -14,7 +17,7 @@ struct MessagesView: View {
             let paneWidth = min(520, max(340, geo.size.width * 0.3))
             let listWidth: CGFloat = geo.size.width >= 1300 ? 330 : 290
             HStack(spacing: 0) {
-                ThreadList(model: model)
+                ThreadList(model: model, composing: $composing)
                     .frame(width: listWidth)
                 Rectangle().fill(Theme.hairline).frame(width: 1)
                 conversationColumn(paneFits: paneFits)
@@ -43,10 +46,30 @@ struct MessagesView: View {
             .environment(\.sharedPaneShown, paneFits && showPane)
         }
         .animation(.smooth(duration: 0.25), value: viewer?.id)
+        .overlay {
+            if let c = model.conversation, let m = c.forwarding {
+                ForwardSheet(conversation: c, message: m)
+            }
+        }
+        .overlay {
+            if composing {
+                NewMessageSheet(close: { composing = false }, initialQuery: newMessageQuery) { user in
+                    composing = false
+                    model.startChat(with: user)
+                }
+            }
+        }
         .onChange(of: model.selectedId) { closeViewer() }
         .task {
             await model.loadIfNeeded()
             #if DEBUG
+            // `-IGNewMessage <query>`: open "New message" searching for <query> (screenshots).
+            if let q = UserDefaults.standard.string(forKey: "IGNewMessage") { newMessageQuery = q; composing = true }
+            // `-IGNewChatWith <query>`: open a new (unsent) chat with the first account found.
+            if let q = UserDefaults.standard.string(forKey: "IGNewChatWith"),
+               let user = try? await app.client?.search(q, sessionId: UUID().uuidString.lowercased()).users.first {
+                model.startChat(with: user)
+            }
             // `-IGOpenThread N`: open the Nth chat at launch, only if it's already read (opening
             // an unread chat would mark it read).
             let n = UserDefaults.standard.integer(forKey: "IGOpenThread")
@@ -54,6 +77,16 @@ struct MessagesView: View {
                !model.threads[n].isUnread {
                 try? await Task.sleep(for: .seconds(3))
                 model.selectedId = model.threads[n].id
+                // `-IGStageFile <path>`: put a photo/video in that chat's composer (nothing is sent).
+                if let path = UserDefaults.standard.string(forKey: "IGStageFile") {
+                    try? await Task.sleep(for: .seconds(1))
+                    model.conversation?.stage(files: [URL(fileURLWithPath: path)])
+                }
+                // `-IGForwardLast YES`: open "Forward to…" for the newest forwardable message (nothing is sent).
+                if UserDefaults.standard.bool(forKey: "IGForwardLast"), let c = model.conversation {
+                    try? await Task.sleep(for: .seconds(2))
+                    c.forwarding = c.messages.last(where: c.canForward)
+                }
             }
             #endif
         }
@@ -61,7 +94,10 @@ struct MessagesView: View {
 
     @ViewBuilder
     private func conversationColumn(paneFits: Bool) -> some View {
-        if let conversation = model.conversation {
+        if let user = model.newChatUser {
+            NewChatView(model: model, user: user)
+                .id("new-\(user.id)")
+        } else if let conversation = model.conversation {
             ConversationView(model: conversation)
                 .id(conversation.thread.id)
         } else {
@@ -112,38 +148,88 @@ extension EnvironmentValues {
 
 private struct ThreadList: View {
     let model: InboxModel
+    @Binding var composing: Bool
+    @State private var folder = Folder.chats
+    @State private var showHidden = false
+
+    enum Folder: Hashable { case chats, requests }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Messages").font(.system(size: 20, weight: .bold))
                 Spacer()
-                if model.isLoading { Spinner(size: 14) }
-                ChromeButton("Refresh", symbol: "arrow.clockwise") { Task { await model.refresh() } }
+                if model.isLoading || model.loadingRequests { Spinner(size: 14) }
+                ChromeButton("Refresh", symbol: "arrow.clockwise") {
+                    Task { folder == .chats ? await model.refresh() : await model.loadRequests(force: true) }
+                }
+                ChromeButton("New Message", symbol: "square.and.pencil", shortcut: "n") { composing = true }
             }
             .padding(.horizontal, 16)
             .frame(height: 56)
+            SegmentedTabs(tabs: [(Folder.chats, "Chats"),
+                                 (Folder.requests, model.requests.isEmpty ? "Requests" : "Requests \(model.requests.count)")],
+                          selection: $folder)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    ForEach(model.threads) { thread in
-                        ThreadRow(thread: thread, selected: model.selectedId == thread.id, presence: model.presence(for: thread))
-                            .onTapGesture { model.selectedId = thread.id }
-                            .onAppear {
-                                if thread.id == model.threads.last?.id { Task { await model.loadMore() } }
+                    switch folder {
+                    case .chats:
+                        ForEach(model.threads) { thread in
+                            row(thread)
+                                .onAppear {
+                                    if thread.id == model.threads.last?.id { Task { await model.loadMore() } }
+                                }
+                        }
+                    case .requests:
+                        ForEach(model.requests) { row($0) }
+                        if !model.hiddenRequests.isEmpty {
+                            Button { withAnimation(.smooth(duration: 0.2)) { showHidden.toggle() } } label: {
+                                HStack {
+                                    Text("Hidden requests").font(.system(size: 13, weight: .semibold))
+                                    Text("\(model.hiddenRequests.count)").font(.system(size: 13)).foregroundStyle(.secondary)
+                                    Spacer()
+                                    Image(systemName: showHidden ? "chevron.up" : "chevron.down").font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 10)
+                                .frame(height: 36)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .padding(.top, 8)
+                            if showHidden { ForEach(model.hiddenRequests) { row($0) } }
+                        }
                     }
                 }
                 .padding(.horizontal, 8)
             }
             .scrollIndicators(.never)
             .overlay {
-                if model.threads.isEmpty, model.loadFailed {
+                if folder == .chats, model.threads.isEmpty, model.loadFailed {
                     EmptyState(symbol: "wifi.exclamationmark", title: "Couldn't load messages", actionTitle: "Try Again") {
                         Task { await model.refresh() }
                     }
+                } else if folder == .requests, model.requests.isEmpty, model.hiddenRequests.isEmpty, !model.loadingRequests {
+                    EmptyState(symbol: "tray", title: "No message requests",
+                               message: "Messages from people you don't follow show up here.")
                 }
             }
         }
+        .task {
+            #if DEBUG
+            // `-IGInboxFolder requests`: open on the requests list (screenshots).
+            if UserDefaults.standard.string(forKey: "IGInboxFolder") == "requests" { folder = .requests }
+            #endif
+            await model.loadRequests()
+        }
+        .onChange(of: folder) { if folder == .requests { Task { await model.loadRequests() } } }
+    }
+
+    private func row(_ thread: DMThread) -> some View {
+        ThreadRow(thread: thread, selected: model.selectedId == thread.id, presence: model.presence(for: thread))
+            .onTapGesture { model.selectedId = thread.id }
     }
 }
 
@@ -325,8 +411,53 @@ struct ConversationView: View {
                 }
             }
             .overlay { if model.isLoading && model.messages.isEmpty { Spinner(size: 20) } }
-            Composer(model: model)
+            if model.thread.isRequest {
+                RequestBar(model: model)
+            } else {
+                Composer(model: model)
+            }
         }
+        // Drop photos or videos anywhere on the chat to add them to the message.
+        .onDrop(of: [.fileURL, .image], isTargeted: $dropTargeted) { providers in
+            Self.accept(providers, into: model)
+        }
+        .overlay {
+            if dropTargeted {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Theme.link, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.background.opacity(0.85)))
+                    .overlay {
+                        VStack(spacing: 8) {
+                            PhotoGlyph().frame(width: 34, height: 34)
+                            Text("Drop to add to your message").font(.system(size: 14, weight: .semibold))
+                        }
+                    }
+                    .padding(10)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    @State private var dropTargeted = false
+
+    private static func accept(_ providers: [NSItemProvider], into model: ConversationModel) -> Bool {
+        var any = false
+        for p in providers {
+            if p.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                any = true
+                _ = p.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url, OutgoingMedia.isMediaFile(url) else { return }
+                    Task { @MainActor in model.stage(files: [url]) }
+                }
+            } else if p.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                any = true
+                p.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                    guard let data else { return }
+                    Task { @MainActor in model.stage(imageData: data) }
+                }
+            }
+        }
+        return any
     }
 
     private var header: some View {

@@ -738,6 +738,34 @@ Required API headers (from `addInstagramHeaders`, `http.go:729-748`): `x-csrftok
 
 ---
 
+## 10b. Web app write flows (read from instagram.com's scripts, 2026-11-12)
+Implemented in `Instagram/DMs/DMSending.swift`; **none run against the account by probes** — the user tests them.
+* **Upload** (`WmiStartRuploadAndGetMercuryFallback` → `WmiStartResumableUpload` → `ResumableUploadServiceComet`):
+  `POST https://rupload.instagram.com/<consumer>/<uuid>?<async params: __a, fb_dtsg, lsd, jazoest, __user, …>`, raw file body,
+  cookies sent (withCredentials). Consumers: `messenger_image`, `messenger_video`, `messenger_gif`, `messenger_audio`, `messenger_file`.
+  Headers: `X-Entity-Name` (encoded file name), `X-Entity-Type` (MIME), `X-Entity-Length`, `Offset: 0`,
+  `ig-u-ds-user-id: <viewer pk>`, and `image_type`/`video_type: FILE_ATTACHMENT`. Answer: `media_id_str` / `media_id` = attachment id.
+  On transport failure the web app falls back to `/ajax/mercury/upload.php` (§7.3). Size limit 25 MB (`IGDMediaStagingConstants`).
+* **Send media**: `IGDirectMediaSendMutation` (doc 28887524104237595) `{attachment_fbid, forwarded_from_thread_id:null,
+  is_forwarded_from_own_message:null, offline_threading_id, reply_to_message_id, thread_id}`.
+* **Edit**: `IGDirectEditMessageMutation` (28951492551202915) `{body:{sensitive_string_value}, offline_threading_id, target_item_id:"", target_message_id, thread_id}`.
+* **Forward**: text = `IGDirectTextSendMutation` with `forwarded_from_thread_id` (source thread IGID) and `is_forwarded_from_own_message`;
+  photo/video = `IGDMediaForwardPublisherMutation` (29536362899300769) `{attachment_fbid, forwarded_from_thread_id,
+  forwarded_from_thread_item_id (message id), is_forwarded_from_own_message, offline_threading_id, recipient_users:null, thread_id}`.
+* **New chat**: there is no create call; the first `IGDirectTextSendMutation` carries `ig_thread_igid: null` and
+  `recipient_igids: ["<user pk>"]` (`IGDMAPISendTextMessage`; callers pass `toUserId(...)`).
+* **Message requests**: `PolarisDirectMessageRequestQuery` (30071460809109024), variables `device_id_for_iris_subscription`,
+  `__relay_internal__pv__IGD30DayAgoTimestampMsrelayprovider` (now − 30 days, ms, string) and the three thread-list providers
+  of the inbox query. Answer: `get_slide_mailbox_for_iris_subscription.threads_by_folder` (requests) and
+  `spamMailbox.threads_by_folder` (hidden requests). Verified read-only (empty for this account, as on the web).
+  Accept: `useIGDirectAcceptMessageRequestMutation` `{ig_inbox_folder:null, offline_threading_id, thread_fbid}`.
+* **Story reply / reaction**: `IGDirectStoryShareReplyMutation` (29327482173525974)
+  `{data:{is_shh_mode:false, media_id, reaction_emoji|null, reel_id, sampled:false, share_client_context:<otid>, text:{sensitive_string_value}|null},
+  send_data:{forwarded_from_thread_id:null, is_forwarded_from_own_message:null, offline_threading_id, recipient_users:"[\"<owner pk>\"]", thread_id:null}}`.
+  (The web app's reaction path still calls the old REST `direct_v2/threads/broadcast/reel_react/`; the mutation takes `reaction_emoji` too.)
+* **Inbox size**: the web app's own `PolarisDirectInboxQuery` (first 15, folder INBOX) returns the same threads and `has_next_page`
+  as ours; for personal accounts there is no Primary/General split (`threads_by_system_folder_and_ig_inbox_folder` is the professional inbox).
+
 ## 11. Recommended implementation order (first working version)
 
 | # | Piece | Notes | Complexity |
