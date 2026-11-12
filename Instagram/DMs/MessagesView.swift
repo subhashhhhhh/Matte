@@ -126,7 +126,7 @@ private struct ThreadList: View {
             ScrollView {
                 LazyVStack(spacing: 2) {
                     ForEach(model.threads) { thread in
-                        ThreadRow(thread: thread, selected: model.selectedId == thread.id)
+                        ThreadRow(thread: thread, selected: model.selectedId == thread.id, presence: model.presence(for: thread))
                             .onTapGesture { model.selectedId = thread.id }
                             .onAppear {
                                 if thread.id == model.threads.last?.id { Task { await model.loadMore() } }
@@ -150,6 +150,7 @@ private struct ThreadList: View {
 private struct ThreadRow: View {
     let thread: DMThread
     let selected: Bool
+    var presence: Presence?
     @State private var hovering = false
 
     /// Instagram's snippet sometimes already says "You…" ("You sent an attachment").
@@ -161,6 +162,7 @@ private struct ThreadRow: View {
     var body: some View {
         HStack(spacing: 12) {
             ThreadAvatar(thread: thread, size: 50)
+                .overlay(alignment: .bottomTrailing) { if presence?.isActive == true { ActiveDot(size: 14) } }
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     Text(thread.title)
@@ -314,10 +316,13 @@ struct ConversationView: View {
     private var header: some View {
         HStack(spacing: 10) {
             ThreadAvatar(thread: model.thread, size: 34)
+                .overlay(alignment: .bottomTrailing) { if model.presence?.isActive == true { ActiveDot(size: 11) } }
                 .opensProfile(model.thread.isGroup ? nil : model.thread.users.first)
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.thread.title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
-                if !model.thread.isGroup, let u = model.thread.users.first, u.fullName != model.thread.title {
+                if let status = model.presence?.statusText {
+                    Text(status).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                } else if !model.thread.isGroup, let u = model.thread.users.first, u.fullName != model.thread.title {
                     Text(u.username).font(.system(size: 11.5)).foregroundStyle(.secondary)
                 }
             }
@@ -394,4 +399,29 @@ private struct ChatGeometry: Equatable {
     var container: CGFloat
     var width: CGFloat
     var isAtBottom: Bool { offset + container >= content - 24 }
+}
+
+/// The green dot on someone who's active now.
+struct ActiveDot: View {
+    var size: CGFloat = 12
+    var body: some View {
+        Circle().fill(Color(red: 0.2, green: 0.78, blue: 0.35))
+            .frame(width: size, height: size)
+            .overlay(Circle().strokeBorder(Theme.background, lineWidth: size * 0.2))
+    }
+}
+
+extension Presence {
+    /// "Active now", "Active 12m ago", "Active yesterday", as Instagram words it; nil when unknown
+    /// or longer ago than Instagram shows.
+    var statusText: String? {
+        if isActive { return "Active now" }
+        guard let t = lastActive else { return nil }
+        let s = Date.now.timeIntervalSince(t)
+        if s < 60 { return "Active just now" }
+        if s < 3600 { return "Active \(Int(s / 60))m ago" }
+        if s < 86_400 { return "Active \(Int(s / 3600))h ago" }
+        if s < 2 * 86_400 { return "Active yesterday" }
+        return nil
+    }
 }
