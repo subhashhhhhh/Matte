@@ -38,6 +38,10 @@ actor IGClient {
 
     nonisolated static let origin = "https://www.instagram.com"
 
+    /// The phone-sized web app's id and browser (recorded posting a story in phone mode).
+    nonisolated static let mobileAppId = "1217981644879628"
+    nonisolated static let mobileUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1"
+
     /// The web app posts most queries to `/api/graphql` (some, like the feed, to `/graphql/query`;
     /// both accept either).
     nonisolated static var graphQLPath: String {
@@ -245,7 +249,8 @@ actor IGClient {
             route = "PolarisStoriesV3Route"
         } else if name.hasPrefix("IGD") || name.hasPrefix("useIGD") {
             route = name == "IGDirectMediaShareMutation" ? "PolarisFeedRoute" : "PolarisDirectInboxRoute"
-        } else if name.contains("Follow") {
+        } else if name.contains("Follow") || name.hasPrefix("PolarisPostFastOption") || name.hasPrefix("PolarisPostOption") {
+            // Your own post's ⋯ options are used from your profile (recorded: commenting toggle).
             route = "PolarisProfilePostsTabRoute"
         } else {
             route = "PolarisFeedRoute"
@@ -281,6 +286,54 @@ actor IGClient {
         let url = URL(fileURLWithPath: dir).appending(path: "\(Int(Date.now.timeIntervalSince1970 * 1000))-\(UUID().uuidString.prefix(4))-\(safe).json")
         try? JSON.object(entry).data().write(to: url)
         throw IGError.http(-1, "Dry run: \(name) not sent")
+    }
+
+    /// The whole request as it would leave (creation calls and uploads): method, URL, every
+    /// header (cookie values and tokens redacted), the form or JSON body, and the body size.
+    nonisolated static func dryRun(_ name: String, request: URLRequest, bodySize: Int? = nil) throws {
+        guard dryRunRecord(name, request: request, bodySize: bodySize) else { return }
+        throw IGError.http(-1, "Dry run: \(name) not sent")
+    }
+
+    /// Writes the record; false when dry runs are off.
+    @discardableResult
+    nonisolated static func dryRunRecord(_ name: String, request: URLRequest, bodySize: Int? = nil) -> Bool {
+        guard let dir = UserDefaults.standard.string(forKey: "IGDryRunWrites") else { return false }
+        let secretHeaders: Set = ["x-csrftoken", "x-fb-lsd", "x-ig-www-claim", "x-web-session-id", "x-mid"]
+        let secretFields: Set = ["fb_dtsg", "lsd", "jazoest", "av", "__hs", "__hsi", "__rev", "__spin_r", "__spin_t", "__s"]
+        var headers: [String: JSON] = [:]
+        for (k, v) in request.allHTTPHeaderFields ?? [:] {
+            if k.lowercased() == "cookie" {
+                headers[k] = .string(v.split(separator: ";").map { $0.split(separator: "=").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? "" }.joined(separator: ","))
+            } else {
+                headers[k] = .string(secretHeaders.contains(k.lowercased()) ? "<redacted>" : v)
+            }
+        }
+        var entry: [String: JSON] = ["name": .string(name), "method": .string(request.httpMethod ?? "GET"),
+                                     "url": .string(request.url?.absoluteString ?? ""), "headers": .object(headers)]
+        let body = request.httpBody ?? Data()
+        entry["bodySize"] = .integer(Int64(bodySize ?? body.count))
+        let type = request.value(forHTTPHeaderField: "Content-Type") ?? ""
+        if type.hasPrefix("application/x-www-form-urlencoded") {
+            var form: [String: JSON] = [:]
+            for pair in String(decoding: body, as: UTF8.self).split(separator: "&") {
+                let kv = pair.split(separator: "=", maxSplits: 1).map { String($0).removingPercentEncoding ?? String($0) }
+                guard let k = kv.first else { continue }
+                form[k] = .string(secretFields.contains(k) ? "<redacted>" : (kv.count > 1 ? kv[1] : ""))
+            }
+            entry["form"] = .object(form)
+        } else if type.hasPrefix("application/json") {
+            var text = String(decoding: body, as: UTF8.self)
+            // fb_dtsg / jazoest ride at the end of the JSON body.
+            for k in ["fb_dtsg", "jazoest"] {
+                text = text.replacingOccurrences(of: #""\#(k)":"[^"]*""#, with: "\"\(k)\":\"<redacted>\"", options: .regularExpression)
+            }
+            entry["json"] = .string(text)
+        }
+        let safe = name.replacingOccurrences(of: "/", with: "_")
+        let url = URL(fileURLWithPath: dir).appending(path: "\(Int(Date.now.timeIntervalSince1970 * 1000))-\(UUID().uuidString.prefix(4))-\(safe).json")
+        try? JSON.object(entry).data().write(to: url)
+        return true
     }
 
     /// Sends a captured web form as is (debug comparison of our form against the web app's).
@@ -334,23 +387,52 @@ actor IGClient {
 
     // MARK: Transport
 
-    private func send(_ base: URLRequest, path: String, retried: Bool = false) async throws -> JSON {
+    /// Which of the web app's header sets a request carries.
+    nonisolated enum HeaderSet: Sendable, Equatable {
+        /// REST (`/api/v1/`) or GraphQL, told apart by the path.
+        case standard
+        /// The web app's `cometAsyncFetch` posts (recorded: post delete, reel publish): the page
+        /// headers (`X-FB-LSD`, `X-IG-D`, `X-FB-Entry-Nonce`) and, when `api`, the REST ones the
+        /// caller adds (`PolarisInstajax.getHeaders`), without `X-Requested-With`.
+        case comet(api: Bool)
+        /// instagram.com in phone mode (recorded: story publish): the mobile web app's id, five
+        /// touch points and an iPhone browser.
+        case mobile
+    }
+
+    func send(_ base: URLRequest, path: String, retried: Bool = false, headers set: HeaderSet = .standard,
+              dryRun dryRunName: String? = nil) async throws -> JSON {
         var request = base
         guard let csrf = await session.csrfToken else { throw IGError.signedOut }
         request.setValue(await session.cookieHeader(for: "www.instagram.com"), forHTTPHeaderField: "Cookie")
-        request.setValue(csrf, forHTTPHeaderField: "x-csrftoken")
-        request.setValue(page.appId, forHTTPHeaderField: "x-ig-app-id")
-        request.setValue(page.asbdId, forHTTPHeaderField: "x-asbd-id")
-        // The web app sends these on REST calls only, not on GraphQL.
-        if !path.hasSuffix("graphql") && !path.hasSuffix("/graphql/query") {
-            request.setValue(wwwClaim, forHTTPHeaderField: "x-ig-www-claim")
-            request.setValue("XMLHttpRequest", forHTTPHeaderField: "x-requested-with")
-            // Also on the web app's REST calls (recorded): the build number and its web session id.
-            if let rev = page.rev { request.setValue(rev, forHTTPHeaderField: "X-Instagram-AJAX") }
-            request.setValue(page.webSessionId, forHTTPHeaderField: "X-Web-Session-ID")
+        switch set {
+        case .standard, .mobile:
+            request.setValue(csrf, forHTTPHeaderField: "x-csrftoken")
+            request.setValue(set == .mobile ? Self.mobileAppId : page.appId, forHTTPHeaderField: "x-ig-app-id")
+            request.setValue(page.asbdId, forHTTPHeaderField: "x-asbd-id")
+            // The web app sends these on REST calls only, not on GraphQL.
+            if !path.hasSuffix("graphql") && !path.hasSuffix("/graphql/query") {
+                request.setValue(wwwClaim, forHTTPHeaderField: "x-ig-www-claim")
+                request.setValue("XMLHttpRequest", forHTTPHeaderField: "x-requested-with")
+                // Also on the web app's REST calls (recorded): the build number and its web session id.
+                if let rev = page.rev { request.setValue(rev, forHTTPHeaderField: "X-Instagram-AJAX") }
+                request.setValue(page.webSessionId, forHTTPHeaderField: "X-Web-Session-ID")
+            }
+        case .comet(let api):
+            request.setValue(page.asbdId, forHTTPHeaderField: "x-asbd-id")
+            if api {
+                request.setValue(csrf, forHTTPHeaderField: "x-csrftoken")
+                request.setValue(page.appId, forHTTPHeaderField: "x-ig-app-id")
+                request.setValue(wwwClaim, forHTTPHeaderField: "x-ig-www-claim")
+                if let rev = page.rev { request.setValue(rev, forHTTPHeaderField: "X-Instagram-AJAX") }
+                request.setValue(page.webSessionId, forHTTPHeaderField: "X-Web-Session-ID")
+            }
+            request.setValue("www", forHTTPHeaderField: "X-IG-D")
+            if let lsd = page.lsd { request.setValue(lsd, forHTTPHeaderField: "X-FB-LSD") }
+            if let nonce = page.entryNonce { request.setValue(nonce, forHTTPHeaderField: "X-FB-Entry-Nonce") }
         }
-        request.setValue("0", forHTTPHeaderField: "X-IG-Max-Touch-Points")
-        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(set == .mobile ? "5" : "0", forHTTPHeaderField: "X-IG-Max-Touch-Points")
+        request.setValue(set == .mobile ? Self.mobileUserAgent : Self.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(Self.origin, forHTTPHeaderField: "Origin")
         request.setValue(Self.origin + "/", forHTTPHeaderField: "Referer")
         request.setValue("*/*", forHTTPHeaderField: "Accept")
@@ -359,6 +441,9 @@ actor IGClient {
         request.setValue("empty", forHTTPHeaderField: "Sec-Fetch-Dest")
         request.setValue("cors", forHTTPHeaderField: "Sec-Fetch-Mode")
         request.setValue("same-origin", forHTTPHeaderField: "Sec-Fetch-Site")
+        #if DEBUG
+        if let dryRunName { try Self.dryRun(dryRunName, request: request) }
+        #endif
 
         let (data, response) = try await http.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw IGError.badResponse }
@@ -404,7 +489,7 @@ actor IGClient {
             throw IGError.signedOut
         case 403 where !retried && message.localizedCaseInsensitiveContains("csrf"):
             // The CSRF token rotated; the response carried the new one.
-            return try await send(base, path: path, retried: true)
+            return try await send(base, path: path, retried: true, headers: set, dryRun: dryRunName)
         default:
             let text = String(decoding: data.prefix(1500), as: UTF8.self)
             log.error("HTTP \(response.statusCode) for \(path, privacy: .public): \(text, privacy: .public)")
@@ -456,7 +541,7 @@ actor IGClient {
         return root
     }
 
-    private func nextCounter() -> String {
+    func nextCounter() -> String {
         requestCounter += 1
         return String(requestCounter, radix: 36)
     }

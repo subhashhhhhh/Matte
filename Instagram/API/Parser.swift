@@ -73,6 +73,8 @@ nonisolated enum Parser {
         m.width = j["original_width"].int ?? m.images.first?.width ?? 1
         m.height = j["original_height"].int ?? m.images.first?.height ?? 1
         m.productType = j["product_type"].string
+        m.commentsDisabled = j["comments_disabled"].bool
+        if !j["usertags"].isNull { m.hasUsertags = !j["usertags"]["in"].array.isEmpty }
         m.children = j["carousel_media"].array.compactMap(media)
         if m.kind == .carousel, m.images.isEmpty, let first = m.children.first {
             m.images = first.images

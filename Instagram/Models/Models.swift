@@ -78,6 +78,10 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     var height: Int = 1
     var children: [Media] = []
     var productType: String?
+    /// The owner turned commenting off (`comments_disabled`), when the response says.
+    var commentsDisabled: Bool?
+    /// People are tagged in it (`usertags.in`), when the response says.
+    var hasUsertags: Bool?
 
     /// Width over height, clamped to what a layout can show sensibly.
     var aspect: CGFloat { CGFloat(width) / CGFloat(max(height, 1)) }
