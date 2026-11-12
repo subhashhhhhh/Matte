@@ -143,8 +143,14 @@ final class InboxModel {
             Task { [weak self] in await self?.refresh() }
         case .resnapshot:
             // Our cursor is too old: take a new snapshot and resume from it.
+            let old = seqId
             await refresh()
-            if let seq = seqId.flatMap(Int64.init) { await realtime?.restart(seqId: seq) }
+            if let seq = seqId.flatMap(Int64.init), seqId != old {
+                await realtime?.restart(seqId: seq)
+            } else {
+                // No new snapshot (offline?): poll, and the poll loop reconnects later.
+                stopRealtime()
+            }
         case .message(let id, let message):
             conversation(id)?.receive(message)
             bumpRow(id, with: message)
