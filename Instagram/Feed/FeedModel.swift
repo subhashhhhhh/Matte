@@ -51,14 +51,18 @@ final class FeedModel {
             guard source != oldValue else { return }
             UserDefaults.standard.set(source.rawValue, forKey: "feedSource")
             closeOpened()
-            posts = []
-            cursor = nil
-            hasMore = true
+            // Each feed keeps what it had loaded: switching back shows it at once.
+            saved[oldValue] = SourceState(posts: posts, cursor: cursor, hasMore: hasMore, fetchedAt: fetchedAt)
+            let restored = saved[source]
+            posts = restored?.posts ?? []
+            cursor = restored?.cursor
+            hasMore = restored?.hasMore ?? true
+            fetchedAt = restored?.fetchedAt ?? .distantPast
             Task {
                 // A load for the previous feed may still be running: let it finish (its result
-                // is dropped), then load this one.
+                // is dropped), then load this one (quietly, if it's only getting stale).
                 while isLoading || isLoadingMore { try? await Task.sleep(for: .milliseconds(100)) }
-                await refresh()
+                if posts.isEmpty || Date.now.timeIntervalSince(fetchedAt) > 300 { await refresh() }
             }
         }
     }
@@ -79,6 +83,21 @@ final class FeedModel {
             tries += 1
             await loadMore()
         }
+    }
+
+    private struct SourceState {
+        var posts: [Media]
+        var cursor: String?
+        var hasMore: Bool
+        var fetchedAt: Date
+    }
+    @ObservationIgnored private var saved: [FeedSource: SourceState] = [:]
+    @ObservationIgnored private var fetchedAt = Date.distantPast
+
+    /// Starts loading a post's comments ahead of a likely click (its tile is hovered).
+    func prewarm(_ media: Media) {
+        let detail = MediaDetailModel.cached(pk: media.pk, media: media, client: client)
+        Task { await detail.start() }
     }
 
     /// Debug only: asks the view to open this post (with its animation).
@@ -118,6 +137,7 @@ final class FeedModel {
             posts = page.items
             cursor = page.cursor
             hasMore = page.hasMore
+            fetchedAt = .now
             loadFailed = false
         } catch {
             loadFailed = posts.isEmpty
@@ -167,7 +187,7 @@ final class FeedModel {
         guard shown.indices.contains(index) else { return }
         playing = nil
         openedIndex = index
-        opened = MediaDetailModel(pk: shown[index].pk, media: shown[index], client: client)
+        opened = MediaDetailModel.cached(pk: shown[index].pk, media: shown[index], client: client)
         if shown.count - index < 4 { Task { await loadMore() } }
     }
 

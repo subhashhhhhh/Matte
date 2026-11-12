@@ -96,7 +96,7 @@ final class ActivityModel {
 
     func open(_ item: ActivityItem) {
         if let pk = item.mediaPk {
-            opened = MediaDetailModel(pk: pk, client: client)
+            opened = MediaDetailModel.cached(pk: pk, client: client)
         } else if let user = item.profile {
             isOpen = false
             app?.openProfile(user)

@@ -31,7 +31,7 @@ final class MediaBrowser {
         // Grids like a profile's Reels tab list videos by cover only: fetch the full post.
         let item = items[index]
         let complete = !(item.kind == .video && item.videos.isEmpty)
-        opened = MediaDetailModel(pk: item.pk, media: complete ? item : nil, client: client)
+        opened = MediaDetailModel.cached(pk: item.pk, media: complete ? item : nil, client: client)
         if items.count - index < 4 { nearEnd?() }
     }
 
@@ -44,6 +44,12 @@ final class MediaBrowser {
         opened = nil
         openedIndex = nil
         MemoryRelief.soon()
+    }
+
+    /// Starts loading a post's comments ahead of a likely click (its tile is hovered).
+    func prewarm(_ media: Media) {
+        let detail = MediaDetailModel.cached(pk: media.pk, media: media, client: client)
+        Task { await detail.start() }
     }
 
     func appeared(_ index: Int) {

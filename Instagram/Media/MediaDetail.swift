@@ -88,6 +88,27 @@ final class MediaDetailModel: Identifiable {
 
     var canLoadMoreComments: Bool { hasMore && isRemote }
 
+    // MARK: Cache
+
+    /// Posts opened (or hovered) recently, with their comments: reopening one is instant.
+    private static var recent: [String: MediaDetailModel] = [:]
+    private static var order: [String] = []
+
+    /// The cached model for `pk`, or a new one (kept for the next 40 posts).
+    static func cached(pk: String, media: Media? = nil, client: IGClient?, fallbackURL: URL? = nil) -> MediaDetailModel {
+        if let hit = recent[pk] {
+            order.removeAll { $0 == pk }
+            order.append(pk)
+            if hit.media == nil, let media { hit.media = media }
+            return hit
+        }
+        let model = MediaDetailModel(pk: pk, media: media, client: client, fallbackURL: fallbackURL)
+        recent[pk] = model
+        order.append(pk)
+        while order.count > 40 { recent[order.removeFirst()] = nil }
+        return model
+    }
+
     // MARK: Replies, likes, posting
 
     /// Loaded replies by parent comment id (a parent is "open" once it has an entry).

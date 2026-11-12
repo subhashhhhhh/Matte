@@ -184,6 +184,8 @@ final class PhotoFlight {
 
 extension EnvironmentValues {
     @Entry var photoFlight: PhotoFlight? = nil
+    /// Starts loading a hovered post's comments (set by the page that owns the posts).
+    @Entry var prewarmPost: ((Media) -> Void)? = nil
 }
 
 /// The flying photo and the backdrop darkening behind it. Draws nothing when idle.
@@ -255,6 +257,8 @@ private struct FlightTile: ViewModifier {
     let radius: CGFloat
     private var pk: String { media.pk }
     @Environment(\.photoFlight) private var flight
+    @Environment(\.prewarmPost) private var prewarm
+    @State private var hoverTask: Task<Void, Never>?
 
     func body(content: Content) -> some View {
         content
@@ -262,7 +266,16 @@ private struct FlightTile: ViewModifier {
                 flight?.register(pk, frame: frame, radius: radius)
             }
             .onAppear { PhotoFlight.prefetch(media) }
-            .onHover { if $0 { flight?.warm(media) } }
+            .onHover { inside in
+                hoverTask?.cancel()
+                guard inside else { return }
+                flight?.warm(media)
+                // Resting on a post for a moment: fetch its comments too.
+                hoverTask = Task {
+                    try? await Task.sleep(for: .milliseconds(350))
+                    if !Task.isCancelled { prewarm?(media) }
+                }
+            }
             .onDisappear { flight?.forget(pk) }
             .opacity(flight?.isFlying(pk) == true ? 0 : 1)
     }
