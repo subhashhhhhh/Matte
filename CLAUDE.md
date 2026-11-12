@@ -56,7 +56,17 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `-IGStartPage home|reels|messages`, `-IGOpen post|story` — open on a page / open the first
   post or a story at launch (for screenshots; capture a window with `screencapture -l <id>`).
 - `-IGCapture <dir> [-IGCapturePages '/,/reels/'] [-IGCaptureSeconds 12]` — loads the site in an
-  off-screen web view with the session and records the web app's own API requests.
+  off-screen web view with the session and records the web app's own API requests, and the
+  first 40 WebSocket frames each way (hex) as `ws-send-*`/`ws-recv-*`.
+- `-IGProbeDGW YES [-IGProbeSeconds 30] [-IGProbeDGWRewind N]` (+ `-IGProbeOut`) — connects the
+  real-time DM sockets, only listens, writes frame/delta/event counts. Rewind replays the last N deltas.
+
+## Real-time DMs
+
+`Instagram/DMs/Realtime/`: `DGWFrames` (DGW framing, protobuf `LSResponse`, Thrift compact),
+`DGWSocket` (one WebSocket, keepalive), `DMRealtime` (main + typing streams, reconnect,
+`AsyncStream<DMRealtimeEvent>`). `InboxModel` applies events; it polls (60 s) only while the
+socket is down. What the web app actually sends: docs/dm-protocol.md §5.10.
 
 ## Rules
 

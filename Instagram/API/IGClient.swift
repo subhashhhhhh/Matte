@@ -160,6 +160,9 @@ actor IGClient {
         let other = WebPageConfig(html: html)
         if page.dmDeviceId == nil { page.dmDeviceId = other.dmDeviceId }
         if page.messagingId == nil { page.messagingId = other.messagingId }
+        if page.dgwAppId == nil { page.dgwAppId = other.dgwAppId }
+        if page.viewerFbid == nil { page.viewerFbid = other.viewerFbid }
+        if page.viewerId == nil { page.viewerId = other.viewerId }
         await scanScripts(extra: other.scripts)
     }
 
@@ -444,6 +447,12 @@ nonisolated struct WebPageConfig: Sendable {
     var dmDeviceId: String?
     /// `CurrentUserInitialData.IG_USER_EIMU`: our own messaging id (DM senders are named by it).
     var messagingId: String?
+    /// `DGWWebConfig.appId`: the real-time gateway's app id.
+    var dgwAppId: String?
+    /// `PolarisViewer.data.fbid` (also `NON_FACEBOOK_USER_ID`): the gateway's `x-dgw-uuid`.
+    var viewerFbid: String?
+    /// `PolarisViewer.id`: the account's user id (pk).
+    var viewerId: String?
     var cometReq = "7"
     var dpr = "2"
     /// A random web session id for this run, `xxxxxx:xxxxxx:xxxxxx`.
@@ -473,6 +482,9 @@ nonisolated struct WebPageConfig: Sendable {
         jazoest = first(#"[?&]jazoest=(\d+)"#)
         dmDeviceId = first(#""IGDMqttWebDeviceID",\[\],\{"clientId":"([^"]+)""#)
         messagingId = first(#""IG_USER_EIMU":"(\d+)""#)
+        dgwAppId = first(#""DGWWebConfig",\[\],\{"appId":"(\d+)""#)
+        viewerFbid = first(#""PolarisViewer",\[\],\{"data":\{[^{}]*?"fbid":"(\d+)""#) ?? first(#""NON_FACEBOOK_USER_ID":"(\d+)""#)
+        viewerId = first(#""PolarisViewer",\[\],\{"data":\{.*?\},"id":"(\d+)"\}"#)
         entryNonce = first(#""BootloaderConfig",\[\],\{[^}]*?"nonce":"([^"]+)""#)
         if let c = first(#"[?&]__comet_req=(\d+)"#) { cometReq = c }
         if let pr = first(#""SiteData",\[\],\{[^}]*?"pr":([\d.]+)"#) { dpr = pr }

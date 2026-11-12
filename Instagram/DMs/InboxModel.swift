@@ -20,6 +20,14 @@ final class InboxModel {
     @ObservationIgnored let client: IGClient
     @ObservationIgnored private var poller: Task<Void, Never>?
     @ObservationIgnored private var loadedOnce = false
+    /// True while the real-time socket is subscribed (polling pauses meanwhile).
+    private(set) var isLive = false
+    /// The real-time DM connection (docs/dm-protocol.md §5), once the inbox gave a seq id.
+    @ObservationIgnored private(set) var realtime: DMRealtime?
+    @ObservationIgnored private var realtimeTask: Task<Void, Never>?
+    /// After the gateway refused the session (and a normal request showed it's fine): when to try again.
+    @ObservationIgnored private var realtimeRetryAt = Date.distantPast
+    @ObservationIgnored private var inboxRefresh: Task<Void, Never>?
     @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "DMs")
 
     init(app: AppModel, client: IGClient) {
@@ -33,6 +41,7 @@ final class InboxModel {
         guard !loadedOnce else { return }
         loadedOnce = true
         await refresh()
+        startRealtime()
         startPolling()
     }
 
@@ -95,25 +104,121 @@ final class InboxModel {
 
     func report(_ error: Error) { app?.report(error) }
 
-    // MARK: Polling (until the real-time socket is in)
+    // MARK: Real-time
+
+    private func startRealtime() {
+        guard realtime == nil, Date.now >= realtimeRetryAt, let seq = seqId.flatMap(Int64.init) else { return }
+        let rt = DMRealtime(client: client, seqId: seq)
+        realtime = rt
+        realtimeTask = Task { [weak self] in
+            await rt.start()
+            for await event in rt.events {
+                guard let self else { return }
+                await self.handle(event)
+            }
+        }
+    }
+
+    private func stopRealtime() {
+        let rt = realtime
+        realtime = nil
+        realtimeTask?.cancel()
+        realtimeTask = nil
+        isLive = false
+        Task { await rt?.stop() }
+    }
+
+    private func handle(_ event: DMRealtimeEvent) async {
+        switch event {
+        case .connected:
+            isLive = true
+        case .disconnected:
+            isLive = false
+        case .unauthorized:
+            // Check with an ordinary request: a dead session signs out through `report`;
+            // otherwise keep polling and try the socket again later.
+            // (Outside this event loop's task, which stopping cancels.)
+            stopRealtime()
+            realtimeRetryAt = .now.addingTimeInterval(600)
+            Task { [weak self] in await self?.refresh() }
+        case .resnapshot:
+            // Our cursor is too old: take a new snapshot and resume from it.
+            let old = seqId
+            await refresh()
+            if let seq = seqId.flatMap(Int64.init), seqId != old {
+                await realtime?.restart(seqId: seq)
+            } else {
+                // No new snapshot (offline?): poll, and the poll loop reconnects later.
+                stopRealtime()
+            }
+        case .message(let id, let message):
+            conversation(id)?.receive(message)
+            bumpRow(id, with: message)
+        case .messageDeleted(let id, let messageId):
+            conversation(id)?.remove(messageId)
+            refreshInboxSoon()
+        case .messageEdited(let id, _, _), .reaction(let id, _, _, _):
+            conversation(id)?.refreshSoon()
+        case .readReceipt(let id, let who, let at):
+            conversation(id)?.applyReadReceipt(who, at: at)
+            if let i = threads.firstIndex(where: { $0.id == id }) { threads[i].readUpTo[who] = at }
+        case .markedRead(let id):
+            if let i = threads.firstIndex(where: { $0.id == id }) { threads[i].isUnread = false }
+        case .typing(let longId, _, let typing):
+            if let c = conversation, c.thread.longId == longId { c.setPeerTyping(typing) }
+        case .threadChanged(let id):
+            conversation(id)?.refreshSoon()
+            refreshInboxSoon()
+        }
+    }
+
+    private func conversation(_ threadId: String) -> ConversationModel? {
+        conversation?.thread.id == threadId ? conversation : nil
+    }
+
+    /// A new message moves its thread to the top with a new snippet (no request); an unknown
+    /// thread means fetching the inbox again.
+    private func bumpRow(_ id: String, with message: DMMessage) {
+        guard let i = threads.firstIndex(where: { $0.id == id }) else { refreshInboxSoon(); return }
+        var row = threads[i]
+        if let last = row.lastActivity, message.sentAt < last { return }
+        row.lastActivity = message.sentAt
+        row.snippet = message.previewText
+        row.lastSenderIsViewer = message.senderId == row.viewerMessagingId
+        if !row.lastSenderIsViewer { row.isUnread = true }
+        merge([row])
+    }
+
+    /// Fetches the inbox's first page once a burst of changes has settled.
+    private func refreshInboxSoon() {
+        inboxRefresh?.cancel()
+        inboxRefresh = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
+    }
+
+    // MARK: Fallback polling (only while the socket is down)
 
     private func startPolling() {
         poller?.cancel()
         poller = Task { [weak self] in
-            var tick = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(8))
+                try? await Task.sleep(for: .seconds(60))
                 guard let self, !Task.isCancelled else { return }
-                tick += 1
+                if self.isLive { continue }
                 await self.conversation?.poll()
-                // The inbox list less often: every 48 s.
-                if tick % 6 == 0 { await self.refresh() }
+                await self.refresh()
+                self.startRealtime()
             }
         }
     }
 
     func stop() {
         poller?.cancel()
+        inboxRefresh?.cancel()
+        stopRealtime()
         conversation?.stop()
     }
 }
@@ -130,6 +235,12 @@ final class ConversationModel {
     var replyingTo: DMMessage?
     /// Bumped when new messages arrive at the bottom (the view scrolls to them).
     private(set) var newestToken = 0
+    /// Someone else in the thread is typing (from the real-time socket; clears itself after 6 s).
+    private(set) var peerTyping = false
+
+    @ObservationIgnored private var typingExpiry: Task<Void, Never>?
+    @ObservationIgnored private var pendingRefresh: Task<Void, Never>?
+    @ObservationIgnored private var sentTyping: (on: Bool, at: Date)?
 
     @ObservationIgnored private var olderCursor: String?
     @ObservationIgnored private weak var inbox: InboxModel?
@@ -213,6 +324,63 @@ final class ConversationModel {
         }
     }
 
+    // MARK: Real-time updates
+
+    /// A message from the socket: replaces our pending copy (same offline id) or is added.
+    func receive(_ message: DMMessage) {
+        if let i = messages.firstIndex(where: { $0.id == message.id || ($0.offlineId != nil && $0.offlineId == message.offlineId) }) {
+            var m = message
+            if m.replyTo == nil { m.replyTo = messages[i].replyTo }
+            if messages[i] != m { messages[i] = m }
+        } else {
+            messages.append(message)
+            if messages.count > 1, messages[messages.count - 2].sentAt > message.sentAt { messages.sort { $0.sentAt < $1.sentAt } }
+            newestToken += 1
+        }
+        if message.senderId != viewerId {
+            setPeerTyping(false)
+            Task { await markRead() }
+        }
+    }
+
+    func remove(_ messageId: String) {
+        messages.removeAll { $0.id == messageId }
+    }
+
+    func applyReadReceipt(_ participant: String, at: Date) {
+        if (thread.readUpTo[participant] ?? .distantPast) < at { thread.readUpTo[participant] = at }
+    }
+
+    func setPeerTyping(_ typing: Bool) {
+        typingExpiry?.cancel()
+        if peerTyping != typing { peerTyping = typing }
+        guard typing else { return }
+        typingExpiry = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard !Task.isCancelled else { return }
+            self?.peerTyping = false
+        }
+    }
+
+    /// Refetches the newest messages once a burst of changes (edits, reactions) has settled.
+    func refreshSoon() {
+        pendingRefresh?.cancel()
+        pendingRefresh = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            await self?.poll()
+        }
+    }
+
+    /// Tells the thread we're typing (`true`) or stopped. Meant to be called as the draft
+    /// changes: repeats of the same state within 5 s aren't sent again.
+    func sendTyping(_ typing: Bool) async {
+        if let last = sentTyping, last.on == typing, !typing || Date.now.timeIntervalSince(last.at) < 5 { return }
+        guard let realtime = inbox?.realtime else { return }
+        sentTyping = (typing, .now)
+        try? await realtime.setTyping(typing, threadId: thread.id)
+    }
+
     // MARK: Actions
 
     func send() async {
@@ -291,5 +459,12 @@ final class ConversationModel {
         try? await client.markRead(longThreadId: longId, message: newest)
     }
 
-    func stop() {}
+    func stop() {
+        typingExpiry?.cancel()
+        pendingRefresh?.cancel()
+        if sentTyping?.on == true, let realtime = inbox?.realtime {
+            let id = thread.id
+            Task { try? await realtime.setTyping(false, threadId: id) }
+        }
+    }
 }
