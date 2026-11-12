@@ -75,7 +75,7 @@ struct PostTile: View {
         }
         .frame(width: w, height: w / Self.mediaAspect(post))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .photoFlightTile(post.pk, radius: 10)
+        .photoFlightTile(post, radius: 10)
         .overlay(alignment: .topTrailing) {
             if post.children.count > 1 {
                 badge("square.on.square.fill", text: "\(post.children.count)")
@@ -101,6 +101,7 @@ struct PostTile: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 5) {
             PostActionBar(media: post, size: 20, onComment: open)
+            LikedByLine(media: post, avatarSize: 18, fontSize: 12)
             if let caption = post.caption, !caption.isEmpty {
                 Text(caption).font(.system(size: 12.5)).lineLimit(2).foregroundStyle(.primary.opacity(0.85))
             }

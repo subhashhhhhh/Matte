@@ -132,11 +132,29 @@ final class PhotoFlight {
         let first = media.children.first ?? media
         guard let url = first.image(minWidth: 1080) else { return }
         let px = Self.bucket(size)
+        // Warmed by hovering: the full-size photo is ready for the very first frame.
+        if let hit = ImagePipeline.shared.cachedImage(for: url, maxPixel: px) {
+            image = hit
+            return
+        }
         decodeTask = Task { [weak self] in
             let decoded = await ImagePipeline.shared.image(for: url, maxPixel: px)
             guard !Task.isCancelled, let self, self.imagePk == media.pk else { return }
             self.image = decoded
         }
+    }
+
+    /// Decodes a post's full-size photo ahead of a likely click (hovering its tile).
+    func warm(_ media: Media) {
+        guard hostSize.width > 0, let url = (media.children.first ?? media).image(minWidth: 1080) else { return }
+        let px = Self.bucket(PostLightbox.stageRect(in: hostSize, media: media).size)
+        Task { await ImagePipeline.shared.warm(url, maxPixel: px) }
+    }
+
+    /// Downloads a post's full-size photo to disk when its tile scrolls into view.
+    static func prefetch(_ media: Media) {
+        guard let url = (media.children.first ?? media).image(minWidth: 1080) else { return }
+        Task { await ImagePipeline.shared.prefetch([url]) }
     }
 
     /// RemoteImage's pixel bucket for a view of `size` (keep in step with RemoteImage).
@@ -225,15 +243,17 @@ extension View {
             .environment(\.photoFlight, flight)
     }
 
-    /// A tile the flight starts from and lands in; hidden while its photo is in flight.
-    func photoFlightTile(_ pk: String, radius: CGFloat = 0) -> some View {
-        modifier(FlightTile(pk: pk, radius: radius))
+    /// A tile the flight starts from and lands in; hidden while its photo is in flight. Its
+    /// full-size photo is downloaded when it appears and decoded when hovered (a click is likely).
+    func photoFlightTile(_ media: Media, radius: CGFloat = 0) -> some View {
+        modifier(FlightTile(media: media, radius: radius))
     }
 }
 
 private struct FlightTile: ViewModifier {
-    let pk: String
+    let media: Media
     let radius: CGFloat
+    private var pk: String { media.pk }
     @Environment(\.photoFlight) private var flight
 
     func body(content: Content) -> some View {
@@ -241,6 +261,8 @@ private struct FlightTile: ViewModifier {
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(PhotoFlight.space)) } action: { frame in
                 flight?.register(pk, frame: frame, radius: radius)
             }
+            .onAppear { PhotoFlight.prefetch(media) }
+            .onHover { if $0 { flight?.warm(media) } }
             .onDisappear { flight?.forget(pk) }
             .opacity(flight?.isFlying(pk) == true ? 0 : 1)
     }

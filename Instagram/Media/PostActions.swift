@@ -131,6 +131,13 @@ struct PostActionBar: View {
                     iconButton(.comment, help: "Comments") { onComment?() }
                     if let n = media.commentCount, n > 0 { count(n) }
                 }
+                if let n = media.repostCount, n > 0 {
+                    HStack(spacing: 5) {
+                        IGGlyph(icon: .repost, size: size)
+                        count(n)
+                    }
+                    .help("Reposts")
+                }
                 iconButton(.share, help: "Send to…") { actions.send(media) }
                 Spacer(minLength: 0)
                 iconButton(state.saved ? .saveFilled : .save, help: state.saved ? "Remove from saved" : "Save") {
@@ -202,6 +209,50 @@ struct PostMenu: View {
             Divider()
             Button(media.children.count > 1 ? "Download All (\(media.children.count))" : media.isVideo ? "Download Video" : "Download Photo") {
                 actions.download(media)
+            }
+        }
+    }
+}
+
+
+// MARK: - Liked by
+
+/// "Liked by name and others" with up to three overlapping avatars of people you follow, as the
+/// Instagram app shows under a post.
+struct LikedByLine: View {
+    let media: Media
+    var avatarSize: CGFloat = 20
+    var fontSize: CGFloat = 12.5
+
+    private var name: (text: String, user: User?)? {
+        if let u = media.likedBy.first(where: { !$0.username.isEmpty }) { return (u.username, u) }
+        if let n = media.topLikers.first { return (n, nil) }
+        return nil
+    }
+
+    var body: some View {
+        if let name {
+            HStack(spacing: 8) {
+                let faces = Array(media.likedBy.prefix(3))
+                if !faces.isEmpty {
+                    HStack(spacing: -avatarSize * 0.35) {
+                        ForEach(Array(faces.enumerated()), id: \.element.id) { i, user in
+                            Avatar(url: user.avatar, size: avatarSize)
+                                .overlay(Circle().strokeBorder(Theme.background, lineWidth: 1.5))
+                                .zIndex(Double(faces.count - i))
+                        }
+                    }
+                }
+                HStack(spacing: 0) {
+                    Text("Liked by ").foregroundStyle(.secondary)
+                    Text(name.text).fontWeight(.semibold).opensProfile(name.user)
+                    if (media.likedByCount ?? media.likeCount ?? 2) > 1 {
+                        Text(" and ").foregroundStyle(.secondary)
+                        Text("others").fontWeight(.semibold)
+                    }
+                }
+                .font(.system(size: fontSize))
+                .lineLimit(1)
             }
         }
     }

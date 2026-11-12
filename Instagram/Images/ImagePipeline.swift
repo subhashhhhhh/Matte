@@ -13,34 +13,120 @@ actor ImagePipeline {
     static let shared = ImagePipeline()
 
     private let session: URLSession
-    private let cache = NSCache<NSString, CGImageBox>()
+    /// Decoded bitmaps by size bucket and stable key. NSCache is thread-safe, so views can check
+    /// it synchronously (`cachedImage`) and show a hit on their first frame, without a fade.
+    nonisolated(unsafe) private let cache = NSCache<NSString, CGImageBox>()
     private var inFlight: [String: Task<CGImage?, Never>] = [:]
+    private var downloads: [String: Task<Data?, Never>] = [:]
+    private var prefetchQueue: [URL] = []
+    private var prefetching = 0
+    private let disk: URL
+    private let diskBudget: Int
     private let log = Logger(subsystem: "com.subhash.Instagram", category: "Images")
 
-    init(memoryBudgetMB: Int = 48, diskBudgetMB: Int = 300) {
+    init(memoryBudgetMB: Int = 96, diskBudgetMB: Int = 400) {
         let cfg = URLSessionConfiguration.default
-        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appending(path: "com.subhash.Instagram/images", directoryHint: .isDirectory)
-        cfg.urlCache = URLCache(memoryCapacity: 0, diskCapacity: diskBudgetMB << 20, directory: dir)
-        cfg.requestCachePolicy = .returnCacheDataElseLoad
+        cfg.urlCache = nil
         cfg.httpMaximumConnectionsPerHost = 6
         session = URLSession(configuration: cfg)
         cache.totalCostLimit = memoryBudgetMB << 20
+        disk = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appending(path: "com.subhash.Instagram/img", directoryHint: .isDirectory)
+        diskBudget = diskBudgetMB << 20
+        try? FileManager.default.createDirectory(at: disk, withIntermediateDirectories: true)
+        let dir = disk, budget = diskBudget
+        Task.detached(priority: .background) { Self.trim(dir, to: budget) }
+    }
+
+    /// Instagram's image links carry a signature that changes on every API response; the same
+    /// picture at the same size keeps its path and `stp` (size/crop) parameter. Keying on those
+    /// lets a re-fetched feed hit the cache instead of downloading (and fading in) again.
+    nonisolated static func stableKey(_ url: URL) -> String {
+        guard let host = url.host(), host.contains("cdninstagram") || host.contains("fbcdn") || host.contains("fbsbx") else {
+            return url.absoluteString
+        }
+        let stp = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "stp" }?.value ?? ""
+        return url.path() + "|" + stp
+    }
+
+    private nonisolated static func memoryKey(_ url: URL, _ bucket: Int) -> NSString {
+        "\(bucket)|\(stableKey(url))" as NSString
+    }
+
+    private nonisolated static func bucket(_ maxPixel: Int) -> Int { max(64, ((maxPixel + 63) / 64) * 64) }
+
+    /// A decoded image already in memory, or nil — synchronous, for a view's first frame.
+    nonisolated func cachedImage(for url: URL, maxPixel: Int) -> CGImage? {
+        cache.object(forKey: Self.memoryKey(url, Self.bucket(maxPixel)))?.image
     }
 
     /// Returns `url` decoded so its longest side is at most `maxPixel` pixels.
     func image(for url: URL, maxPixel: Int) async -> CGImage? {
         // Bucket sizes so slightly different layouts share cache entries.
-        let bucket = max(64, ((maxPixel + 63) / 64) * 64)
-        let key = "\(bucket)|\(url.absoluteString)"
-        if let hit = cache.object(forKey: key as NSString) { return hit.image }
-        if let running = inFlight[key] { return await running.value }
+        let bucket = Self.bucket(maxPixel)
+        let key = Self.memoryKey(url, bucket)
+        if let hit = cache.object(forKey: key) { return hit.image }
+        if let running = inFlight[key as String] { return await running.value }
 
-        let task = Task<CGImage?, Never> { [session, log] in
+        let task = Task<CGImage?, Never> { [weak self] in
+            guard let data = await self?.bytes(for: url) else { return nil }
+            return await Task.detached(priority: .userInitiated) { Self.downsample(data, maxPixel: bucket) }.value
+        }
+        inFlight[key as String] = task
+        let image = await task.value
+        inFlight[key as String] = nil
+        if let image {
+            cache.setObject(CGImageBox(image), forKey: key, cost: image.bytesPerRow * image.height)
+        }
+        return image
+    }
+
+    /// Raw bytes (from the disk cache, or downloaded into it), for formats decoded elsewhere.
+    func data(for url: URL) async -> Data? { await bytes(for: url) }
+
+    /// Downloads `url` into the disk cache in the background (no decode), so opening it later is
+    /// a local read. A few at a time, newest requests first.
+    func prefetch(_ urls: [URL]) {
+        for url in urls where !url.isFileURL && !FileManager.default.fileExists(atPath: file(for: url).path) {
+            prefetchQueue.append(url)
+        }
+        if prefetchQueue.count > 60 { prefetchQueue.removeFirst(prefetchQueue.count - 60) }
+        pump()
+    }
+
+    /// Decodes `url` into memory ahead of time (a post you're hovering, the next story).
+    func warm(_ url: URL, maxPixel: Int) {
+        Task(priority: .utility) { _ = await image(for: url, maxPixel: maxPixel) }
+    }
+
+    private func pump() {
+        while prefetching < 4, let url = prefetchQueue.popLast() {
+            prefetching += 1
+            Task(priority: .utility) {
+                _ = await bytes(for: url)
+                prefetching -= 1
+                pump()
+            }
+        }
+    }
+
+    private func file(for url: URL) -> URL {
+        disk.appending(path: Self.hash(Self.stableKey(url)))
+    }
+
+    private func bytes(for url: URL) async -> Data? {
+        // Only downloads are kept on disk; a local file is read where it is.
+        if url.isFileURL { return try? Data(contentsOf: url) }
+        let path = file(for: url)
+        if let data = try? Data(contentsOf: path) { return data }
+        let key = Self.stableKey(url)
+        if let running = downloads[key] { return await running.value }
+        let task = Task<Data?, Never> { [session, log] in
             do {
                 let (data, response) = try await session.data(from: url)
-                guard (response as? HTTPURLResponse)?.statusCode ?? 200 < 400 else { return nil }
-                return Self.downsample(data, maxPixel: bucket)
+                guard (response as? HTTPURLResponse)?.statusCode ?? 200 < 400, !data.isEmpty else { return nil }
+                try? data.write(to: path, options: .atomic)
+                return data
             } catch {
                 if !(error is CancellationError) {
                     log.debug("Image failed: \(url.lastPathComponent, privacy: .public) \(error.localizedDescription, privacy: .public)")
@@ -48,28 +134,43 @@ actor ImagePipeline {
                 return nil
             }
         }
-        inFlight[key] = task
-        let image = await task.value
-        inFlight[key] = nil
-        if let image {
-            cache.setObject(CGImageBox(image), forKey: key as NSString, cost: image.bytesPerRow * image.height)
-        }
-        return image
-    }
-
-    /// Raw bytes (via the same disk cache), for formats decoded elsewhere.
-    func data(for url: URL) async -> Data? {
-        guard let (data, response) = try? await session.data(from: url),
-              (response as? HTTPURLResponse)?.statusCode ?? 200 < 400 else { return nil }
+        downloads[key] = task
+        let data = await task.value
+        downloads[key] = nil
         return data
     }
 
     func clearMemory() { cache.removeAllObjects() }
 
-    /// Drops decoded images and the on-disk download cache.
+    /// Drops decoded images and the on-disk image cache.
     func clearAll() {
         cache.removeAllObjects()
-        session.configuration.urlCache?.removeAllCachedResponses()
+        try? FileManager.default.removeItem(at: disk)
+        try? FileManager.default.createDirectory(at: disk, withIntermediateDirectories: true)
+    }
+
+    /// FNV-1a, hex: a short stable file name for a key.
+    private nonisolated static func hash(_ s: String) -> String {
+        var h: UInt64 = 0xcbf29ce484222325
+        for b in s.utf8 { h = (h ^ UInt64(b)) &* 0x100000001b3 }
+        return String(h, radix: 16)
+    }
+
+    /// Keeps the disk cache under budget by deleting the least recently written files.
+    private nonisolated static func trim(_ dir: URL, to budget: Int) {
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
+        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: keys) else { return }
+        var entries = files.compactMap { url -> (URL, Date, Int)? in
+            guard let v = try? url.resourceValues(forKeys: Set(keys)) else { return nil }
+            return (url, v.contentModificationDate ?? .distantPast, v.fileSize ?? 0)
+        }
+        var total = entries.reduce(0) { $0 + $1.2 }
+        guard total > budget else { return }
+        entries.sort { $0.1 < $1.1 }
+        for (url, _, size) in entries where total > budget * 8 / 10 {
+            try? FileManager.default.removeItem(at: url)
+            total -= size
+        }
     }
 
     private nonisolated static func downsample(_ data: Data, maxPixel: Int) -> CGImage? {

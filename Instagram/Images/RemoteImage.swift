@@ -17,7 +17,8 @@ struct RemoteImage: View {
         GeometryReader { geo in
             ZStack {
                 Rectangle().fill(Theme.placeholder)
-                if let image = image ?? initial {
+                // A memory-cache hit shows on the first frame (no grey flash, no fade).
+                if let image = image ?? initial ?? cachedHit(geo.size) {
                     Image(decorative: image, scale: displayScale)
                         .resizable()
                         .aspectRatio(contentMode: contentMode)
@@ -30,6 +31,12 @@ struct RemoteImage: View {
                 await load(side: bucket(geo.size))
             }
         }
+    }
+
+    private func cachedHit(_ size: CGSize) -> CGImage? {
+        guard let url else { return nil }
+        let side = bucket(size)
+        return side > 0 ? ImagePipeline.shared.cachedImage(for: url, maxPixel: side) : nil
     }
 
     /// Pixel size rounded up to 64px steps, so live window resizing doesn't refetch constantly.
@@ -46,6 +53,11 @@ struct RemoteImage: View {
     private func load(side: Int) async {
         guard let url, side > 0 else { image = nil; return }
         if loadedURL != url { image = nil }
+        if let hit = ImagePipeline.shared.cachedImage(for: url, maxPixel: side) {
+            image = hit
+            loadedURL = url
+            return
+        }
         var result = await ImagePipeline.shared.image(for: url, maxPixel: side)
         if result == nil, let fallback, !Task.isCancelled {
             result = await ImagePipeline.shared.image(for: fallback, maxPixel: side)

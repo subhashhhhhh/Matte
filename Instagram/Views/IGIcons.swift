@@ -5,7 +5,7 @@ import ImageIO
 /// rather than SF Symbols.
 enum IGIcon: CaseIterable {
     case heart, heartFilled, comment, share, save, saveFilled, home, homeFilled, reels, reelsFilled, direct, directFilled
-    case more, explore, exploreFilled, search
+    case more, explore, exploreFilled, search, repost
 
     fileprivate var spec: (path: String, box: CGFloat, stroked: Bool) {
         switch self {
@@ -35,6 +35,8 @@ enum IGIcon: CaseIterable {
             ("M13.941 13.953 7.581 16.424 10.06 10.056 16.42 7.585ZM10.06 10.056l3.881 3.897M22.5 12a10.5 10.5 0 1 1-21 0 10.5 10.5 0 0 1 21 0Z", 24, true)
         case .exploreFilled:
             ("m13.173 13.164 1.491-3.829-3.83 1.49ZM12.001.5a11.5 11.5 0 1 0 11.5 11.5A11.513 11.513 0 0 0 12.001.5Zm5.35 7.443-2.478 6.369a1 1 0 0 1-.57.569l-6.36 2.47a1 1 0 0 1-1.294-1.294l2.48-6.369a1 1 0 0 1 .57-.569l6.359-2.47a1 1 0 0 1 1.294 1.294Z", 24, false)
+        case .repost:
+            ("M19.998 9.497a1 1 0 0 0-1 1v4.228a3.274 3.274 0 0 1-3.27 3.27h-5.313l1.791-1.787a1 1 0 0 0-1.412-1.416L7.29 18.287a1.004 1.004 0 0 0-.294.707v.001c0 .023.012.042.013.065a.923.923 0 0 0 .281.643l3.502 3.504a1 1 0 0 0 1.414-1.414l-1.797-1.798h5.318a5.276 5.276 0 0 0 5.27-5.27v-4.228a1 1 0 0 0-1-1Zm-6.41-3.496-1.795 1.795a1 1 0 1 0 1.414 1.414l3.5-3.5a1.003 1.003 0 0 0 0-1.417l-3.5-3.5a1 1 0 0 0-1.414 1.414l1.794 1.794H8.27A5.277 5.277 0 0 0 3 9.271V13.5a1 1 0 0 0 2 0V9.271a3.275 3.275 0 0 1 3.271-3.27Z", 24, false)
         case .search:
             ("M19 10.5A8.5 8.5 0 1 1 10.5 2a8.5 8.5 0 0 1 8.5 8.5ZM16.511 16.511 22 22", 24, true)
         case .more:

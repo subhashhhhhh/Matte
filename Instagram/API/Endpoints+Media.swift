@@ -61,6 +61,19 @@ extension IGClient {
         return Parser.comment(result["xig_comment_create"])
     }
 
+    /// Tells Instagram you watched a story item (you then appear in its viewers), as the web
+    /// app does when an item is shown. `reelId` is the owner's id, or "highlight:…".
+    func markStorySeen(reelId: String, media: Media) async throws {
+        let name = "PolarisAPIReelSeenMutation"
+        await prepare()
+        let owner = media.user?.id ?? (reelId.hasPrefix("highlight:") ? "" : reelId)
+        _ = try await graphQL(name, variables: [
+            "reelId": .string(reelId), "reelMediaId": .string(media.id), "reelMediaOwnerId": .string(owner),
+            "reelMediaTakenAt": .integer(Int64(media.takenAt?.timeIntervalSince1970 ?? 0)),
+            "viewSeenAt": .integer(Int64(Date.now.timeIntervalSince1970)),
+        ], docId: knownOperations()[name] ?? "36133297086317984")
+    }
+
     func mediaInfo(pk: String) async throws -> Media {
         let json = try await rest(.get, "/api/v1/media/\(pk)/info/")
         guard let media = Parser.media(json["items"][0]) else { throw IGError.badResponse }
