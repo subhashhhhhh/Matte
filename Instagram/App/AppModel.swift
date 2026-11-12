@@ -3,6 +3,8 @@ import OSLog
 
 enum Destination: String, CaseIterable, Identifiable {
     case home, explore, reels, messages
+    /// Manager mode only: the calendar of scheduled posts.
+    case planner
     var id: String { rawValue }
 
     var title: String {
@@ -11,6 +13,7 @@ enum Destination: String, CaseIterable, Identifiable {
         case .explore: "Explore"
         case .reels: "Reels"
         case .messages: "Messages"
+        case .planner: "Planner"
         }
     }
 
@@ -20,6 +23,7 @@ enum Destination: String, CaseIterable, Identifiable {
         case .explore: "safari"
         case .reels: "play.rectangle.on.rectangle"
         case .messages: "paperplane"
+        case .planner: "calendar"
         }
     }
 
@@ -29,8 +33,11 @@ enum Destination: String, CaseIterable, Identifiable {
         case .explore: (.explore, .exploreFilled)
         case .reels: (.reels, .reelsFilled)
         case .messages: (.direct, .directFilled)
+        case .planner: (.calendar, .calendarFilled)
         }
     }
+
+    var managerOnly: Bool { self == .planner }
 
     var shortcut: KeyEquivalent {
         switch self {
@@ -38,6 +45,7 @@ enum Destination: String, CaseIterable, Identifiable {
         case .explore: "2"
         case .reels: "3"
         case .messages: "4"
+        case .planner: "5"
         }
     }
 }
@@ -91,6 +99,7 @@ final class AppModel {
     /// Your post waiting for "Delete?" to be confirmed.
     var confirmingDelete: Media?
 
+    private(set) var planner: PlannerModel?
     private(set) var feed: FeedModel?
     private(set) var reels: ReelsModel?
     private(set) var inbox: InboxModel?
@@ -104,8 +113,13 @@ final class AppModel {
     /// Manager mode: planning, scheduling, replies and insights, for people who run accounts.
     /// Off by default; turning it off only hides those (nothing scheduled is deleted).
     var managerMode = UserDefaults.standard.bool(forKey: "managerMode") {
-        didSet { UserDefaults.standard.set(managerMode, forKey: "managerMode") }
+        didSet {
+            UserDefaults.standard.set(managerMode, forKey: "managerMode")
+            if !managerMode, destination.managerOnly { destination = .home }
+        }
     }
+    /// The pages the sidebar shows (Manager mode adds the Planner).
+    var destinations: [Destination] { Destination.allCases.filter { managerMode || !$0.managerOnly } }
     /// The Settings page, when open.
     var showSettings = false
     /// Bumped each time a session starts (sign-in, switch): the pages take it as their identity,
@@ -120,6 +134,7 @@ final class AppModel {
     @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "App")
 
     init() {
+        if destination.managerOnly, !managerMode { destination = .home }
         if let session = IGSession.restore() {
             if let id = session.accountId {
                 // Left parked by a switch that didn't finish: the current copy wins.
@@ -155,6 +170,7 @@ final class AppModel {
         cache = ResponseCache(account: client.session.accountId)
         authState = .signedIn
         feed = FeedModel(app: self, client: client)
+        planner = PlannerModel(app: self, client: client)
         reels = ReelsModel(app: self, client: client)
         inbox = InboxModel(app: self, client: client)
         actions = PostActions(app: self, client: client)
@@ -196,6 +212,9 @@ final class AppModel {
                 openStories([StoryReel(id: me.id, user: me, seen: true)], at: 0)
             }
             DebugCreate.openIfAsked(self)
+            // `-IGCreateScheduleDays N` (with `-IGCreateFiles`): the sheet set to publish in N days.
+            let days = UserDefaults.standard.double(forKey: "IGCreateScheduleDays")
+            if days > 0 { creating?.scheduleAt = SchedulePicker.clamp(.now.addingTimeInterval(days * 86_400)) }
             DebugStoryEditor.openIfAsked(self)
             #endif
             #if DEBUG
@@ -435,6 +454,7 @@ final class AppModel {
     private func tearDown() {
         inbox?.stop()
         client = nil
+        planner = nil
         feed = nil
         reels = nil
         inbox = nil

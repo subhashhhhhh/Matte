@@ -30,7 +30,7 @@ struct QuickSwitcher: View {
     private var items: [Item] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         var out: [Item] = []
-        let pages: [Item] = Destination.allCases.map { .page($0) } + [.notifications] + (app.me.map { [.me($0)] } ?? [])
+        let pages: [Item] = app.destinations.map { .page($0) } + [.notifications] + (app.me.map { [.me($0)] } ?? [])
         out += pages.filter { q.isEmpty || title(of: $0).lowercased().contains(q) }
         let chats = (app.inbox?.threads ?? []).filter { t in
             q.isEmpty || t.title.lowercased().contains(q) || t.users.contains { $0.username.lowercased().contains(q) }

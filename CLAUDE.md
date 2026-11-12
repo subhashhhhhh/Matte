@@ -36,6 +36,9 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - Settings (⌘,, `Views/SettingsView.swift`, an in-window card): accounts and **Manager mode**
   (`AppModel.managerMode`, off by default). Manager-only features (planner, scheduling, replies, insights)
   appear only when it's on.
+- `Instagram/Planner/` (Manager mode): the Planner page (month calendar + upcoming list of the account's
+  scheduled posts, cancel) and `SchedulePicker`. Scheduling is Instagram's own (`API/Endpoints+Schedule.swift`,
+  docs/create-protocol.md "Scheduling"); the create sheet's Schedule switch sets `PostOptions.scheduledAt`.
 - `Instagram/Images/` — `ImagePipeline` (downsampled decode, cost-limited cache), `RemoteImage`.
 - `Instagram/App/` — `AppModel`, `MemoryRelief`, `ResponseCache`, debug tools.
 - `ResponseCache`: last good first pages (feed per source, tray, reels, Explore, inbox, 20 recent
@@ -69,7 +72,10 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `-IGProbeRest <path> [-IGProbeQuery 'a=1']`, `-IGProbeGQL <Name> [-IGProbeVars '{…}'] [-IGProbeDoc id]`,
   `-IGProbePage YES` — with `-IGProbeOut <file>`; read-only, then quit.
 - `-IGRawDir <dir>` — raw responses and the (redacted) GraphQL form for each request.
-- `-IGOpenSettings YES` — open Settings at launch. `-IGSwitchAccount YES` — switch to the next signed-in account 5 s after launch.
+- `-IGOpenSettings YES` — open Settings at launch. `-managerMode YES` turns Manager mode on for that launch;
+  `-IGStartPage planner` opens the Planner; `-IGCreateScheduleDays N` (with `-IGCreateFiles`) sets the sheet to
+  publish in N days (dry-run it with `-IGCreateShare YES -IGDryRunWrites <dir>`). `-IGCaptureAccount <username>`
+  records as a parked account. `-IGSwitchAccount YES` — switch to the next signed-in account 5 s after launch.
 - `-IGStartPage home|reels|messages`, `-IGOpen post|story` — open on a page / open the first
   post or a story at launch (for screenshots; capture a window with `screencapture -l <id>`).
 - `-IGCapture <dir> -IGCaptureInteractive YES`: a visible, signed-in instagram.com window; the user

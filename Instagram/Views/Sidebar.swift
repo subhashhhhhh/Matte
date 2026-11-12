@@ -8,7 +8,7 @@ struct Sidebar: View {
     var body: some View {
         VStack(spacing: 6) {
             Color.clear.frame(height: 44)
-            ForEach(Destination.allCases) { d in
+            ForEach(app.destinations) { d in
                 let selected = app.destination == d
                 Button { app.destination = d } label: {
                     ZStack(alignment: .topTrailing) {

@@ -132,6 +132,9 @@ struct RootView: View {
             if let inbox = app.inbox, app.visited.contains(.messages) {
                 MessagesView(model: inbox).pageVisibility(app.destination == .messages)
             }
+            if let planner = app.planner, app.managerMode, app.visited.contains(.planner) {
+                PlannerView(model: planner).pageVisibility(app.destination == .planner)
+            }
             // A profile opened from anywhere covers the page until you go back.
             if let page = app.profiles.last {
                 StackPageView(page: page)

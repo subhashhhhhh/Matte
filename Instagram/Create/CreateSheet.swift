@@ -48,7 +48,7 @@ struct CreateSheet: View {
             Spacer()
             Text(title).font(.system(size: 15, weight: .bold))
             Spacer()
-            Button("Share") { model.share() }
+            Button(model.isScheduling ? "Schedule" : "Share") { model.share() }
                 .buttonStyle(.prominentCompact)
                 .disabled(!model.canShare)
                 .keyboardShortcut(.return, modifiers: .command)
@@ -137,6 +137,21 @@ struct CreateSheet: View {
                     }
                     .padding(14)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.panel))
+                }
+                // Manager mode: Instagram publishes it later.
+                if model.canSchedule {
+                    VStack(alignment: .leading, spacing: 14) {
+                        SettingRow(title: "Schedule",
+                                   detail: "Instagram publishes it at the time you pick, even when your Mac is off. Needs a professional account.",
+                                   isOn: Binding(get: { model.scheduleAt != nil },
+                                                 set: { model.scheduleAt = $0 ? SchedulePicker.clamp(.now.addingTimeInterval(3600)) : nil }))
+                        if let at = model.scheduleAt {
+                            SchedulePicker(date: Binding(get: { at }, set: { model.scheduleAt = $0 }))
+                        }
+                    }
+                    .padding(14)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.panel))
+                    .animation(.easeOut(duration: 0.16), value: model.scheduleAt == nil)
                 }
             }
             .padding(18)

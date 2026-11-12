@@ -6,7 +6,7 @@ import ImageIO
 enum IGIcon: CaseIterable {
     case heart, heartFilled, comment, share, save, saveFilled, home, homeFilled, reels, reelsFilled, direct, directFilled
     case more, explore, exploreFilled, search, repost
-    case newPost, newPostFilled, media, cropSquare, cropPortrait, cropLandscape
+    case newPost, newPostFilled, media, cropSquare, cropPortrait, cropLandscape, calendar, calendarFilled
 
     fileprivate var spec: (path: String, box: CGFloat, stroked: Bool) {
         switch self {
@@ -52,6 +52,10 @@ enum IGIcon: CaseIterable {
             ("M16 23H8a4.004 4.004 0 0 1-4-4V5a4.004 4.004 0 0 1 4-4h8a4.004 4.004 0 0 1 4 4v14a4.004 4.004 0 0 1-4 4ZM8 3a2.002 2.002 0 0 0-2 2v14a2.002 2.002 0 0 0 2 2h8a2.002 2.002 0 0 0 2-2V5a2.002 2.002 0 0 0-2-2Z", 24, false)
         case .cropLandscape:
             ("M19 20H5a4.004 4.004 0 0 1-4-4V8a4.004 4.004 0 0 1 4-4h14a4.004 4.004 0 0 1 4 4v8a4.004 4.004 0 0 1-4 4ZM5 6a2.002 2.002 0 0 0-2 2v8a2.002 2.002 0 0 0 2 2h14a2.002 2.002 0 0 0 2-2V8a2.002 2.002 0 0 0-2-2Z", 24, false)
+        case .calendar:
+            ("M5.5 4h13A2.5 2.5 0 0 1 21 6.5v12a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18.5v-12A2.5 2.5 0 0 1 5.5 4ZM3 9h18M8 2v4M16 2v4", 24, true)
+        case .calendarFilled:
+            ("M5.5 3h13A3.5 3.5 0 0 1 22 6.5v12a3.5 3.5 0 0 1-3.5 3.5h-13A3.5 3.5 0 0 1 2 18.5v-12A3.5 3.5 0 0 1 5.5 3ZM4 10v8.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V10ZM7 12.5h2.5V15H7ZM10.75 12.5h2.5V15h-2.5ZM14.5 12.5H17V15h-2.5ZM7 16.25h2.5v2.25H7ZM10.75 16.25h2.5v2.25h-2.5Z", 24, false)
         case .more:
             ("M6.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm7 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm7 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z", 24, false)
         }

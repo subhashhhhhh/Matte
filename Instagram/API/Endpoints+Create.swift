@@ -11,6 +11,8 @@ extension IGClient {
         var caption = ""
         var hideCounts = false
         var commentsOff = false
+        /// Instagram publishes it then (professional accounts) instead of now.
+        var scheduledAt: Date?
     }
 
     /// The clips-creation flow id the web app tags its reel publish with (recorded).
@@ -232,11 +234,14 @@ extension IGClient {
 
     /// The fields `PolarisCreationAPI.prepareConfigureMediaData` sends for a plain post or reel
     /// (no location, tags, collaborators or alt text), in its order.
+    /// Scheduled (`o.scheduledAt`): the schedule fields too, in the same alphabetical order.
     nonisolated static func configureFields(uploadId: String, options o: PostOptions) -> [(String, OrderedJSON)] {
-        [("archive_only", .bool(false)), ("caption", .string(o.caption)), ("clips_share_preview_to_feed", .string("1")),
+        let base: [(String, OrderedJSON)] = [("archive_only", .bool(false)), ("caption", .string(o.caption)), ("clips_share_preview_to_feed", .string("1")),
          ("disable_comments", .string(o.commentsOff ? "1" : "0")), ("disable_oa_reuse", .bool(false)),
          ("like_and_view_counts_disabled", .string(o.hideCounts ? "1" : "0")), ("media_share_flow", .string("creation_flow")),
          ("source_type", .string("library")), ("upload_id", .string(uploadId)), ("video_subtitles_enabled", .string("0"))]
+        guard let at = o.scheduledAt else { return base }
+        return (base + scheduleFields(at)).sorted { $0.0 < $1.0 }
     }
 
     /// Form values as the browser writes them (`false` → "false").
@@ -257,6 +262,8 @@ extension IGClient {
     /// Publishes uploaded photos as one carousel (recorded: `media/configure_sidecar/`, a JSON
     /// body with the page tokens at the end).
     func configureSidecar(uploadIds: [String], options o: PostOptions) async throws -> Media? {
+        // Only a single photo's scheduled publish has been recorded so far.
+        if o.scheduledAt != nil { throw IGError.api("Scheduling a carousel isn't supported yet. Schedule a single photo, or post it now.") }
         let tokens = formTokens()
         let body = OrderedJSON.object([
             ("archive_only", .bool(false)), ("caption", .string(o.caption)),
@@ -273,6 +280,7 @@ extension IGClient {
     /// One `configure_to_clips` attempt (recorded): a comet form with the page fields, the
     /// configure fields, and the same fields signed (`SIGNATURE.` + their JSON).
     private func configureClipsOnce(uploadId: String, options: PostOptions) async throws -> JSON {
+        if options.scheduledAt != nil { throw IGError.api("Scheduling a reel isn't supported yet. Schedule a single photo, or post it now.") }
         await prepare()
         let fields = Self.configureFields(uploadId: uploadId, options: options)
         var form = page.commonForm(counter: nextCounter(), userId: await session.userId)

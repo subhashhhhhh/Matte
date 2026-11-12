@@ -43,6 +43,8 @@ final class CreateModel {
     var caption = ""
     var hideCounts = false
     var commentsOff = false
+    /// Manager mode: Instagram publishes it at this time instead of now (nil: share now).
+    var scheduleAt: Date?
     var target: Target = .post {
         didSet { if target != oldValue { fitShape() } }
     }
@@ -109,7 +111,14 @@ final class CreateModel {
 
     var canShare: Bool {
         !items.isEmpty && targets.contains(target) && caption.count <= Self.captionLimit && !isSharing
+            && (!isScheduling || scheduleAt.map(SchedulePicker.isAllowed) == true)
     }
+
+    /// What can be scheduled so far: a single photo post (the only scheduled publish recorded),
+    /// in Manager mode.
+    var canSchedule: Bool { app?.managerMode == true && target == .post && items.count <= 1 && !isVideo }
+    /// This share is a scheduled one.
+    var isScheduling: Bool { canSchedule && scheduleAt != nil && !items.isEmpty }
 
     // MARK: Files
 
@@ -255,7 +264,8 @@ final class CreateModel {
     }
 
     private func run() async {
-        let options = IGClient.PostOptions(caption: caption, hideCounts: hideCounts, commentsOff: commentsOff)
+        let options = IGClient.PostOptions(caption: caption, hideCounts: hideCounts, commentsOff: commentsOff,
+                                           scheduledAt: isScheduling ? scheduleAt : nil)
         do {
             let media: Media?
             switch target {
@@ -318,7 +328,7 @@ final class CreateModel {
             done += Int64(file.bytes)
             uploadProgress(done: done, total: total)
         }
-        status = "Sharing…"
+        status = options.scheduledAt == nil ? "Sharing…" : "Scheduling…"
         progress = 0.9
         let ids = items.compactMap { uploaded[$0.id] }
         if ids.count == 1 { return try await client.configurePhoto(uploadId: ids[0], options: options) }
@@ -387,12 +397,18 @@ final class CreateModel {
 
     private func finish(_ media: Media?) {
         progress = 1
-        let message = switch target {
-        case .post: "Shared to your profile"
-        case .reel: "Your reel is shared"
-        case .story: "Added to your story"
+        let scheduled = isScheduling ? scheduleAt : nil
+        let message: String
+        if let scheduled {
+            message = "Scheduled for " + scheduled.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+        } else {
+            message = switch target {
+            case .post: "Shared to your profile"
+            case .reel: "Your reel is shared"
+            case .story: "Added to your story"
+            }
         }
-        app?.created(media, story: target == .story)
+        if scheduled != nil { app?.planner?.didSchedule() } else { app?.created(media, story: target == .story) }
         app?.show(message)
         for p in prepared.values {
             try? FileManager.default.removeItem(at: p.file)

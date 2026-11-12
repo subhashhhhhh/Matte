@@ -51,6 +51,22 @@ from the web app's scripts (`PolarisCreationAPI`, `PolarisCreationV2Actions`,
 - Limits (`PolarisCreationConstants`/`PolarisMediaConstants`): files 5 KB–1 GB, video 1 s–1200 s
   (reels), up to 20 carousel items, photo aspect 3:4…1.91:1, caption 2,200 characters.
 
+## Scheduling (professional accounts, Manager mode)
+
+Recorded 2026-11-13 on a professional account: scheduling a photo, the scheduled list, cancelling.
+Instagram holds the post and publishes it itself (Matte needn't be running).
+
+| What | Request | Body |
+|---|---|---|
+| Scheduled photo (**R**) | `POST /api/v1/media/configure/` (as a photo post) | the photo-post form plus `async_publish=1`, `content_scheduling_metadata={"scheduled_publish_time":"<unix s>"}` (a JSON string, the time as a string), `publish_mode=scheduled` |
+| List (**R**) | GraphQL `PolarisScheduledContentCalendarQuery` (doc 28886777017638780), variables `{}` | `data.viewer.xdt_user.all_scheduled_ig_content[]`: `id` (the scheduled item), `scheduled_publish_time`, `caption_text`, `carousel_children`, `media{id, product_type, image_versions2}` |
+| Cancel (**R**) | GraphQL `PolarisScheduledContentMutationsDeleteMutation` (doc 26836322409389162) | `input: {actor_id, client_mutation_id, scheduled_content_id}` → `xig_delete_scheduled_ig_content.deleted_id` |
+
+- The web app sends both GraphQL requests to `/api/graphql`; Matte's `/graphql/query` works for them too.
+- The configure response has the media `is_in_profile_grid: false`, `integrity_review_decision: pending`.
+- Carousel and reel scheduling aren't recorded yet: Matte refuses them (only a single photo can be scheduled).
+- Window offered in Matte: 15 minutes to 75 days ahead, on 5-minute marks (`IGClient.scheduleWindow`).
+
 ## Your posts
 
 - Caption (**R**): `POST /api/v1/media/<pk>/edit_media/`, JSON `{"caption_text":…,

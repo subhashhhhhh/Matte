@@ -10,7 +10,13 @@ import WebKit
 enum DebugCapture {
     static func runIfAsked() {
         guard let dir = UserDefaults.standard.string(forKey: "IGCapture") else { return }
-        guard let session = SessionStore.shared.load() else { print("capture: not signed in"); exit(1) }
+        // `-IGCaptureAccount <username>`: record as another signed-in (parked) account.
+        let wanted = UserDefaults.standard.string(forKey: "IGCaptureAccount")?.lowercased()
+        let parked = wanted.flatMap { name in
+            AccountStore.shared.list().first { $0.username.lowercased() == name }.flatMap { AccountStore.shared.unpark($0.id) }
+        }
+        guard let session = parked ?? SessionStore.shared.load() else { print("capture: not signed in"); exit(1) }
+        if wanted != nil, parked == nil { print("capture: that account isn't parked; using the current one") }
         let pages = (UserDefaults.standard.string(forKey: "IGCapturePages") ?? "/,/reels/,/direct/inbox/")
             .split(separator: ",").map(String.init)
         let dwell = UserDefaults.standard.double(forKey: "IGCaptureSeconds").nonZero ?? 12
