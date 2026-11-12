@@ -38,6 +38,7 @@ enum DebugStoryEditor {
                 }
             }
             try? await Task.sleep(for: .milliseconds(300))
+            if d.bool(forKey: "IGStorySelfTest") { await selfTest(model) }
             apply(model)
             if let dir = d.string(forKey: "IGStoryExport") { await exportAndQuit(model, to: URL(fileURLWithPath: dir)) }
             if d.bool(forKey: "IGStoryShare"), d.string(forKey: "IGDryRunWrites") != nil { model.share() }
@@ -98,6 +99,73 @@ enum DebugStoryEditor {
                          StoryStroke(brush: .eraser, color: .white, width: StoryStroke.widths[0],
                                      points: [CGPoint(x: 520, y: 700), CGPoint(x: 540, y: 840)])]
         }
+    }
+
+    /// `-IGStorySelfTest YES`: runs the editor's edits and undo through the model, prints
+    /// PASS/FAIL lines and quits (exit 0 when all pass).
+    static func selfTest(_ m: StoryEditorModel) async {
+        var failures = 0
+        func check(_ name: String, _ ok: Bool) {
+            print((ok ? "PASS " : "FAIL ") + name)
+            if !ok { failures += 1 }
+        }
+        check("starts blank", m.hasMedia && m.doc.isBlank && !m.canUndo && !m.hasEdits)
+        m.addText()
+        m.draft.string = "Hi"
+        m.finishText()
+        let first = m.doc.items.first?.id
+        check("text added as one step", m.doc.items.count == 1 && m.canUndo && m.selection == first)
+        m.undo()
+        check("undo removes it", m.doc.items.isEmpty && m.canRedo)
+        m.redo()
+        check("redo brings it back", m.doc.items.first?.text?.string == "Hi")
+        m.addText()
+        m.draft.string = "   "
+        m.finishText()
+        check("empty text is dropped", m.doc.items.count == 1)
+        m.undo()
+        check("…and left no undo step", m.doc.items.isEmpty)
+        m.redo()
+        if let id = m.doc.items.first?.id {
+            m.editText(id)
+            m.draft.string = "Hello"
+            m.draft.style = .neon
+            m.finishText()
+            check("edit applies", m.doc.items.first?.text?.string == "Hello" && m.doc.items.first?.text?.style == .neon)
+            m.undo()
+            check("undo the edit", m.doc.items.first?.text?.string == "Hi")
+        }
+        m.addSticker("🔥")
+        let sticker = m.selection
+        check("sticker added and selected", m.doc.items.count == 2 && sticker == m.doc.items.last?.id)
+        if let sticker {
+            let before = m.doc.items.last?.center
+            m.nudge(sticker, by: CGSize(width: 20, height: -2))
+            check("nudge moves it", m.doc.items.last?.center.x == (before?.x ?? 0) + 20)
+            m.delete(sticker)
+            check("delete removes it", m.doc.items.count == 1 && m.selection == nil)
+            m.undo()
+            check("undo delete", m.doc.items.count == 2)
+        }
+        m.setMode(.draw)
+        m.brush = .neon
+        m.addStroke([CGPoint(x: 100, y: 100), CGPoint(x: 300, y: 200)])
+        check("stroke drawn", m.doc.strokes.count == 1 && m.drawingImage != nil)
+        m.undo()
+        check("undo stroke clears the drawing", m.doc.strokes.isEmpty && m.drawingImage == nil)
+        m.redo()
+        m.setMode(.normal)
+        m.setFilter(.oslo)
+        try? await Task.sleep(for: .milliseconds(500))
+        check("filter previewed", m.doc.filter == .oslo && m.filtered != nil)
+        m.stepFilter(1)
+        check("arrow steps the filter", m.doc.filter == .lagos)
+        m.undoAll()
+        check("undo all", !m.hasEdits && m.doc.isBlank && m.doc.filter == .normal)
+        m.undo()
+        check("undo all can be undone", m.doc.items.count == 2 && m.doc.strokes.count == 1)
+        print(failures == 0 ? "ALL PASS" : "\(failures) FAILED")
+        exit(failures == 0 ? 0 : 1)
     }
 
     /// Keeps a copy of what's about to be shared (`-IGStoryKeep <dir>`).

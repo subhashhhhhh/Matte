@@ -418,13 +418,14 @@ final class StoryEditorModel {
         let doc = doc, gradient = gradient
         export = .rendering(0)
         video?.pause()
+        let report: @Sendable (Double) -> Void = { [weak self] p in
+            Task { @MainActor in if case .rendering = self?.export { self?.export = .rendering(p) } }
+        }
         exportTask = Task {
             do {
                 let media: PreparedMedia
                 if source.isVideo {
-                    media = try await StoryExport.video(source, doc: doc, gradient: gradient) { [weak self] p in
-                        Task { @MainActor in if case .rendering = self?.export { self?.export = .rendering(p) } }
-                    }
+                    media = try await StoryExport.video(source, doc: doc, gradient: gradient, progress: report)
                 } else {
                     media = try await StoryExport.photo(source, doc: doc, gradient: gradient)
                 }
