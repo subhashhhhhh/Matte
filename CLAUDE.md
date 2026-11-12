@@ -68,6 +68,11 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
   real-time DM sockets, only listens, writes frame/delta/event counts. Rewind replays the last N deltas.
   Presence: counts only; `-IGProbePresenceReport YES` also reports IDLE like the web app,
   `-IGProbePresenceNoContacts YES` skips asking for thread participants.
+- DM screenshots (nothing is sent): `-IGStageFile <path>` (with `-IGOpenThread N`) puts a photo/video in the composer,
+  `-IGForwardLast YES` opens "Forward to…", `-IGInboxFolder requests`, `-IGNewMessage <query>`, `-IGNewChatWith <query>`,
+  `-IGTestNotification YES` posts a local notification for the first chat. Add `-ApplePersistenceIgnoreState YES`
+  so the window isn't restored full screen.
+- DM writes (upload, media send, edit, forward, requests, story replies): docs/dm-protocol.md §10b.
 
 ## Real-time DMs
 
