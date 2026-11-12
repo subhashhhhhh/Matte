@@ -3,26 +3,97 @@ import SwiftUI
 struct MessagesView: View {
     @Environment(AppModel.self) private var app
     let model: InboxModel
+    /// The shared-items column, when the window is wide enough for it.
+    @AppStorage("showSharedPane") private var showPane = true
+    @State private var viewer: MediaDetailModel?
+    @State private var viewerItemId: String?
 
     var body: some View {
-        @Bindable var model = model
-        HStack(spacing: 0) {
-            ThreadList(model: model)
-                .frame(width: 320)
-            Rectangle().fill(Theme.hairline).frame(width: 1)
-            Group {
-                if let conversation = model.conversation {
-                    ConversationView(model: conversation)
-                        .id(conversation.thread.id)
-                } else {
-                    EmptyState(symbol: "paperplane", title: "Your messages",
-                               message: "Pick a conversation on the left.")
+        GeometryReader { geo in
+            let paneFits = geo.size.width >= 1080
+            let paneWidth = min(520, max(340, geo.size.width * 0.3))
+            let listWidth: CGFloat = geo.size.width >= 1300 ? 330 : 290
+            HStack(spacing: 0) {
+                ThreadList(model: model)
+                    .frame(width: listWidth)
+                Rectangle().fill(Theme.hairline).frame(width: 1)
+                conversationColumn(paneFits: paneFits)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if paneFits, showPane {
+                    Rectangle().fill(Theme.hairline).frame(width: 1)
+                    SharedPane(conversation: model.conversation, items: items, viewer: viewer, viewerItemId: viewerItemId,
+                               open: open, close: closeViewer)
+                        .frame(width: paneWidth)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Narrow window: an opened item covers the conversation instead.
+            .overlay(alignment: .trailing) {
+                if !(paneFits && showPane), viewer != nil {
+                    SharedPane(conversation: model.conversation, items: items, viewer: viewer, viewerItemId: viewerItemId,
+                               open: open, close: closeViewer)
+                        .frame(width: min(geo.size.width - listWidth, 520))
+                        .background(Theme.background)
+                        .overlay(alignment: .leading) { Rectangle().fill(Theme.hairline).frame(width: 1) }
+                        .transition(.move(edge: .trailing))
+                }
+            }
+            .environment(\.openInViewer, openRequest)
+            .environment(\.sharedPaneToggle, paneFits ? { withAnimation(.smooth(duration: 0.25)) { showPane.toggle() } } : nil)
+            .environment(\.sharedPaneShown, paneFits && showPane)
         }
+        .animation(.smooth(duration: 0.25), value: viewer?.id)
+        .onChange(of: model.selectedId) { closeViewer() }
         .task { await model.loadIfNeeded() }
     }
+
+    @ViewBuilder
+    private func conversationColumn(paneFits: Bool) -> some View {
+        if let conversation = model.conversation {
+            ConversationView(model: conversation)
+                .id(conversation.thread.id)
+        } else {
+            EmptyState(symbol: "paperplane", title: "Your messages",
+                       message: "Pick a conversation on the left.")
+        }
+    }
+
+    private var items: [SharedItem] { SharedItem.items(in: model.conversation?.messages ?? []) }
+
+    private func open(_ item: SharedItem) {
+        viewerItemId = item.id
+        viewer = makeViewer(item.request)
+    }
+
+    private func openRequest(_ request: ViewerRequest) {
+        if let item = items.first(where: { $0.request == request }) { open(item); return }
+        viewerItemId = nil
+        viewer = makeViewer(request)
+    }
+
+    private func makeViewer(_ request: ViewerRequest) -> MediaDetailModel? {
+        switch request {
+        case .share(let share):
+            guard let pk = share.mediaPk else {
+                if let url = share.targetURL { NSWorkspace.shared.open(url) }
+                return nil
+            }
+            return MediaDetailModel(pk: pk, client: app.client, fallbackURL: share.targetURL)
+        case .attachment(let a):
+            return MediaDetailModel(attachment: a)
+        }
+    }
+
+    private func closeViewer() {
+        viewer = nil
+        viewerItemId = nil
+    }
+}
+
+extension EnvironmentValues {
+    /// Shows or hides the Messages shared column (nil when the window is too narrow for it).
+    @Entry var sharedPaneToggle: (() -> Void)? = nil
+    @Entry var sharedPaneShown = false
 }
 
 // MARK: - Thread list
@@ -127,6 +198,8 @@ struct ThreadAvatar: View {
 struct ConversationView: View {
     let model: ConversationModel
     @Environment(AppModel.self) private var app
+    @Environment(\.sharedPaneToggle) private var togglePane
+    @Environment(\.sharedPaneShown) private var paneShown
 
     var body: some View {
         VStack(spacing: 0) {
@@ -178,6 +251,10 @@ struct ConversationView: View {
             Spacer()
             if let key = model.thread.threadKey, let url = URL(string: "https://www.instagram.com/direct/t/\(key)/") {
                 ChromeButton("Open on Instagram", symbol: "arrow.up.right") { NSWorkspace.shared.open(url) }
+            }
+            if let togglePane {
+                ChromeButton(paneShown ? "Hide Shared" : "Show Shared", symbol: "sidebar.right", shortcut: "s", modifiers: [.command, .shift],
+                             action: togglePane)
             }
         }
         .padding(.horizontal, 16)

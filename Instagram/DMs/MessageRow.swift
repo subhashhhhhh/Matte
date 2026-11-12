@@ -156,6 +156,7 @@ struct MessageBody: View {
 struct AttachmentView: View {
     let attachment: DMAttachment
     @State private var video: LoopingVideo?
+    @Environment(\.openInViewer) private var openInViewer
 
     var body: some View {
         switch attachment.kind {
@@ -167,7 +168,10 @@ struct AttachmentView: View {
                 RemoteImage(url: attachment.url ?? attachment.preview, contentMode: .fit)
                     .frame(width: w, height: w / max(0.3, attachment.aspect))
                     .clipShape(RoundedRectangle(cornerRadius: attachment.kind == .sticker ? 0 : 16, style: .continuous))
-                    .onTapGesture { if let url = attachment.url { NSWorkspace.shared.open(url) } }
+                    .onTapGesture {
+                        if let openInViewer, attachment.kind == .image { openInViewer(.attachment(attachment)) }
+                        else if let url = attachment.url { NSWorkspace.shared.open(url) }
+                    }
             }
         case .video:
             if let url = attachment.url { videoBox(url: url, width: 240, autoplay: false) }
@@ -243,6 +247,7 @@ struct VoiceNote: View {
 struct ShareCard: View {
     let share: DMShare
     @State private var hovering = false
+    @Environment(\.openInViewer) private var openInViewer
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -278,8 +283,11 @@ struct ShareCard: View {
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(hovering ? Theme.selected : Theme.panelStroke))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .onTapGesture { if let url = share.targetURL { NSWorkspace.shared.open(url) } }
-        .help(share.targetURL == nil ? "" : "Open on Instagram")
+        .onTapGesture {
+            if let openInViewer, share.mediaPk != nil { openInViewer(.share(share)) }
+            else if let url = share.targetURL { NSWorkspace.shared.open(url) }
+        }
+        .help(share.targetURL == nil ? "" : share.mediaPk != nil && openInViewer != nil ? "Open beside the chat" : "Open on Instagram")
     }
 }
 

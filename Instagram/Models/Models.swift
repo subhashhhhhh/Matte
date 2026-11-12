@@ -186,3 +186,27 @@ nonisolated struct DMMessage: Hashable, Sendable, Identifiable {
         }
     }
 }
+
+/// A comment under a post or reel.
+nonisolated struct IGComment: Hashable, Sendable, Identifiable {
+    var id: String
+    var user: User?
+    var text: String
+    var createdAt: Date?
+    var likeCount = 0
+    var replyCount = 0
+}
+
+extension DMShare {
+    /// The shared post's media id: `?id=<pk>_<owner>` on post/reel links, the last path part on
+    /// story links.
+    var mediaPk: String? {
+        guard let url = targetURL else { return nil }
+        if let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "id" })?.value,
+           let pk = id.split(separator: "_").first, pk.allSatisfy(\.isNumber) {
+            return String(pk)
+        }
+        if isStory, let last = url.pathComponents.last(where: { $0 != "/" }), last.allSatisfy(\.isNumber) { return last }
+        return nil
+    }
+}
