@@ -204,6 +204,15 @@ final class StoryViewerModel {
         }
     }
 
+    /// Opens "Send to…" for the current story (sent as a story share).
+    func share() {
+        guard var item else { return }
+        if item.user == nil { item.user = reel.user }
+        if item.expiresAt == nil { item.expiresAt = .now.addingTimeInterval(86_400) }
+        if !paused { togglePause() }
+        app?.sharing = item
+    }
+
     /// Whether you can reply to the current story (not your own).
     var canReply: Bool { item != nil && reel.user.id != app?.viewerId }
 
@@ -299,7 +308,19 @@ private struct StoryReplyBar: View {
                 .offset(x: 46)
                 .animation(.spring(response: 0.25, dampingFraction: 0.5), value: model.isLiked)
             }
-            .padding(.trailing, 46)
+            .overlay(alignment: .trailing) {
+                // Send the story to a chat (Instagram's paper plane beside the heart).
+                Button { model.share() } label: {
+                    IGGlyph(icon: .share, size: 22)
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .help("Send to…")
+                .offset(x: 88)
+            }
+            .padding(.trailing, 88)
         }
         .animation(.smooth(duration: 0.2), value: focused)
         .onChange(of: focused) { _, isFocused in

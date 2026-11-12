@@ -3,14 +3,12 @@ import Foundation
 /// One post or reel by id, and its comments (REST endpoints that accept the web session).
 extension IGClient {
     /// Doc ids of the post mutations, as instagram.com sent them (recorded 2026-11-12). A newer
-    /// one read from the scripts wins. The unsave was not recorded: its name is the save's
-    /// sibling in the same module and its doc id is only ever read from the scripts; until one
-    /// is known, the older `PolarisAPIUnsavePostMutation` (from the scripts) is sent instead.
+    /// one read from the scripts wins.
     nonisolated static let postActionDocIds: [String: String] = [
         "usePolarisLikeMediaXIGLikeMutation": "27182485238052618",
         "usePolarisLikeMediaXIGUnlikeMutation": "27345296031770102",
         "usePolarisSaveMediaSaveMutation": "27365486596441074",
-        "PolarisAPIUnsavePostMutation": "27203919972607144",
+        "usePolarisSaveMediaUnsaveMutation": "27371251859134880",
         "usePolarisCreateMediaRepostMutation": "27933176649688558",
         "usePolarisDeleteMediaRepostMutation": "26656683127335602",
         "usePolarisUpdateMediaRepostMutation": "30190616567193660",
@@ -36,9 +34,8 @@ extension IGClient {
         try await setLiked(liked, media: Media(id: pk, pk: pk, kind: .image))
     }
 
-    /// Saves a post (recorded: `usePolarisSaveMediaSaveMutation`), or removes it from saved
-    /// (`usePolarisSaveMediaUnsaveMutation` once the scripts name it, inferred; else the older
-    /// `PolarisAPIUnsavePostMutation`).
+    /// Saves a post, or removes it from saved, as instagram.com does (both recorded). The save
+    /// names the surface and the media's `logging_info_token`; the unsave sends only the pk.
     func setSaved(_ saved: Bool, media m: Media, containerModule: String = "feed_timeline") async throws {
         await prepare()
         if saved {
@@ -47,12 +44,9 @@ extension IGClient {
                                           "media_id": .string(m.pk)]
             if let t = m.loggingToken { fields["logging_info_token"] = .string(t) }
             _ = try await graphQL(name, variables: ["input": mutationInput(fields)], docId: doc(name))
-        } else if let unsaveDoc = knownOperations()["usePolarisSaveMediaUnsaveMutation"] {
-            let fields: [String: JSON] = ["container_module": .string(containerModule), "media_id": .string(m.pk)]
-            _ = try await graphQL("usePolarisSaveMediaUnsaveMutation", variables: ["input": mutationInput(fields)], docId: unsaveDoc)
         } else {
-            let name = "PolarisAPIUnsavePostMutation"
-            _ = try await graphQL(name, variables: ["input": ["media_id": .string(m.pk)]], docId: doc(name))
+            let name = "usePolarisSaveMediaUnsaveMutation"
+            _ = try await graphQL(name, variables: ["input": mutationInput(["media_id": .string(m.pk)])], docId: doc(name))
         }
     }
 
@@ -103,9 +97,7 @@ extension IGClient {
         return Page(items: items, cursor: next, hasMore: more && next != nil)
     }
 
-    /// Comment like and delete as recorded from instagram.com (2026-11-12); create's doc id
-    /// matched the recording too. Unlike was not recorded: its doc id is from the same scripts
-    /// that gave the like's (which matched), and it is sent in the like's recorded shape.
+    /// Comment create, like, unlike and delete, as recorded from instagram.com (2026-11-12).
     nonisolated static let commentDocIds: [String: String] = [
         "PolarisCommentActionsLikeMutation": "27184292767848867",
         "PolarisCommentActionsUnlikeMutation": "27318337671093716",
@@ -113,7 +105,7 @@ extension IGClient {
         "usePolarisCommentCreateMutation": "39617891021192323",
     ]
 
-    /// Recorded (like): `input` {comment_id, actor_id, client_mutation_id}.
+    /// Recorded: `input` {comment_id, actor_id, client_mutation_id}.
     func setCommentLiked(_ liked: Bool, comment id: String) async throws {
         let name = liked ? "PolarisCommentActionsLikeMutation" : "PolarisCommentActionsUnlikeMutation"
         await prepare()
@@ -134,11 +126,12 @@ extension IGClient {
 
     /// Posts a comment, or a reply when `replyTo` is a comment id. Returns the new comment.
     /// Recorded for a top-level comment: `data` {comment_text, media_id} and the Relay
-    /// connection the web app adds it to. A reply's `replied_to_comment_id` is from the scripts.
+    /// connection the web app adds it to; for a reply, `replied_to_comment_fbid` (a string) and no
+    /// connection.
     func postComment(_ text: String, media pk: String, replyTo: String? = nil) async throws -> IGComment? {
         let name = "usePolarisCommentCreateMutation"
         var data: [String: JSON] = ["comment_text": .string(text), "media_id": .string(pk)]
-        if let replyTo, let n = Int64(replyTo) { data["replied_to_comment_id"] = .integer(n) }
+        if let replyTo { data["replied_to_comment_fbid"] = .string(replyTo) }
         let connection = #"client:XIGPolarisImageMedia:POLARIS_\#(pk):__PolarisPostComments__comments_connection_connection(input:{"sort_order":"popular"})"#
         await prepare()
         let result = try await graphQL(name, variables: [

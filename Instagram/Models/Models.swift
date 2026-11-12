@@ -133,6 +133,8 @@ nonisolated struct DMThread: Hashable, Sendable, Identifiable {
     var isUnread = false
     var isMuted = false
     var isPinned = false
+    /// Messages pinned to the top of the chat (`pinned_messages`).
+    var pinnedMessageIds: [String] = []
     var isRequest = false
     var imageURL: URL?
     /// Each participant's read watermark, by messaging id.

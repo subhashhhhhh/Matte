@@ -150,6 +150,7 @@ nonisolated enum Parser {
         thread.lastActivity = ms(t["last_activity_timestamp_ms"])
         thread.isMuted = t["is_muted"].bool ?? false
         thread.isPinned = t["is_pin"].bool ?? false
+        thread.pinnedMessageIds = t["pinned_messages"].array.compactMap { $0["message_id"].string ?? $0["id"].string }
         let folder = t["system_folder"].string ?? ""
         thread.isRequest = folder == "PENDING" || folder == "SPAM"
         thread.imageURL = t["thread_image_url"].string.flatMap(URL.init(string:))

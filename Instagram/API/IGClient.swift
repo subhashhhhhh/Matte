@@ -261,7 +261,12 @@ actor IGClient {
         }
         var request = URLRequest(url: comps.url!)
         request.httpMethod = method.rawValue
-        if let form {
+        if var form {
+            // The web app's REST posts carry the page's form token (recorded: news/inbox_seen,
+            // accounts/edit).
+            let common = page.commonForm(counter: "0", userId: nil)
+            if form["fb_dtsg"] == nil, let dtsg = common["fb_dtsg"] { form["fb_dtsg"] = dtsg }
+            if form["jazoest"] == nil, let jazoest = common["jazoest"] { form["jazoest"] = jazoest }
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
             request.httpBody = Self.formBody(form)
         }
@@ -283,6 +288,9 @@ actor IGClient {
         if !path.hasSuffix("graphql") && !path.hasSuffix("/graphql/query") {
             request.setValue(wwwClaim, forHTTPHeaderField: "x-ig-www-claim")
             request.setValue("XMLHttpRequest", forHTTPHeaderField: "x-requested-with")
+            // Also on the web app's REST calls (recorded): the build number and its web session id.
+            if let rev = page.rev { request.setValue(rev, forHTTPHeaderField: "X-Instagram-AJAX") }
+            request.setValue(page.webSessionId, forHTTPHeaderField: "X-Web-Session-ID")
         }
         request.setValue("0", forHTTPHeaderField: "X-IG-Max-Touch-Points")
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")

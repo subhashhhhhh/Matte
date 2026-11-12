@@ -169,6 +169,30 @@ final class MediaDetailModel: Identifiable {
         }
     }
 
+    /// Whether the comment is yours (only those can be deleted here).
+    func isMine(_ c: IGComment) -> Bool {
+        guard let me = app?.viewerId, !c.id.hasPrefix("local-") else { return false }
+        return c.user?.id == me
+    }
+
+    /// Deletes one of your comments: it goes at once and comes back if Instagram refuses.
+    func delete(_ c: IGComment) {
+        guard let client, isMine(c) else { return }
+        let parent = c.parentId
+        let saved = (comments, replies)
+        remove(c.id, parent: parent)
+        if parent == nil { replies[c.id] = nil }
+        if let parent, let i = comments.firstIndex(where: { $0.id == parent }) {
+            comments[i].replyCount = max(0, comments[i].replyCount - 1)
+        }
+        Task {
+            do { try await client.deleteComment(c.id, media: pk) } catch {
+                (comments, replies) = saved
+                app?.report(error)
+            }
+        }
+    }
+
     private func update(_ id: String, _ change: (inout IGComment) -> Void) {
         if let i = comments.firstIndex(where: { $0.id == id }) { change(&comments[i]); return }
         for (parent, list) in replies {
@@ -472,6 +496,10 @@ struct CommentRow: View {
                     }
                     if !comment.id.hasPrefix("local-") {
                         Button("Reply") { model.replyingTo = comment }
+                            .buttonStyle(.plain)
+                    }
+                    if model.isMine(comment) {
+                        Button("Delete") { model.delete(comment) }
                             .buttonStyle(.plain)
                     }
                 }

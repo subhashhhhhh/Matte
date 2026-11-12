@@ -122,7 +122,9 @@ extension IGClient {
         return Parser.messages(data.first("slide_messages") ?? .null)
     }
 
-    /// Sends text (optionally as a reply). Returns the new message's id.
+    /// Sends text (optionally as a reply). Returns the new message's id. Exactly what
+    /// instagram.com sends (recorded 2026-11-12, plain and reply): the thread IGID, empty
+    /// `mentions` arrays, a reply named by `reply_to_message_id` only.
     @discardableResult
     func sendText(_ text: String, thread id: String, replyTo: String? = nil, offlineId: String) async throws -> String? {
         let data = try await dmQuery("IGDirectTextSendMutation", variables: [
@@ -130,28 +132,85 @@ extension IGClient {
             "replied_to_client_context": nil, "replied_to_item_id": nil,
             "reply_to_message_id": replyTo.map(JSON.string) ?? .null, "sampled": nil,
             "text": ["sensitive_string_value": .string(text)],
-            "mentions": nil, "mentioned_user_ids": nil, "commands": nil,
+            "mentions": [], "mentioned_user_ids": [], "commands": nil,
             "forwarded_from_thread_id": nil, "is_forwarded_from_own_message": nil,
             "send_attribution": "igd_web_chat_tab:in_thread",
         ])
         return data.first("message_id")?.string ?? data.first("id")?.string
     }
 
-    /// Sends a post or reel into a chat, as the web app's share sheet does: reels by their id
-    /// with the clip mutation, everything else as a media share.
+    /// Where a share goes: a chat, or a person by user id (what the web app's share sheet sends
+    /// for a one-to-one chat: `recipient_users` and no thread).
+    enum ShareTarget: Sendable {
+        case thread(String)
+        case user(String)
+    }
+
+    /// The `send_data` of the share mutations (recorded): offline id, recipients as a JSON
+    /// string array, and the forward fields.
+    private func shareSendData(_ target: ShareTarget, otid: String, forwardedFrom: String? = nil, own: Bool? = nil,
+                               extra: [String: JSON] = [:]) -> JSON {
+        var d: [String: JSON] = [
+            "forwarded_from_thread_id": forwardedFrom.map(JSON.string) ?? .null,
+            "is_forwarded_from_own_message": own.map(JSON.bool) ?? .null,
+            "offline_threading_id": .string(otid), "recipient_users": nil, "thread_id": nil,
+        ]
+        switch target {
+        case .thread(let id): d["thread_id"] = .string(id)
+        case .user(let id): d["recipient_users"] = .string("[\"\(id)\"]")
+        }
+        d.merge(extra) { $1 }
+        return .object(d)
+    }
+
     func share(_ media: Media, toThread id: String) async throws {
+        try await share(media, to: .thread(id))
+    }
+
+    /// Sends a post or reel into a chat, as the web app does (both recorded): reels by their
+    /// pk with the clip mutation, everything else as a media share by its bare pk. A forward of
+    /// a shared reel or post out of a chat names the chat it came from.
+    func share(_ media: Media, to target: ShareTarget, forwardedFrom: String? = nil, own: Bool? = nil) async throws {
         let otid = OfflineThreadingId.next()
-        let target: JSON = ["forwarded_from_thread_id": nil, "is_forwarded_from_own_message": nil,
-                            "offline_threading_id": .string(otid), "recipient_users": nil, "thread_id": .string(id)]
+        let send = shareSendData(target, otid: otid, forwardedFrom: forwardedFrom, own: own)
         if media.productType == "clips" {
+            // Recorded (a forward): every clip_share_params value null. A share-sheet send adds
+            // the attribution read from the scripts.
+            let attribution: JSON = forwardedFrom == nil ? "igd_web_share_sheet:reel" : .null
             _ = try await dmQuery("IGDirectReelShareMutation", variables: [
-                "clip_share_params": ["inventory_source": nil, "send_attribution": "igd_web_share_sheet:reel",
+                "ig_media_igid": .string(media.pk), "otid": .string(otid), "data": send,
+                "clip_share_params": ["inventory_source": nil, "send_attribution": attribution,
                                       "social_context_share_type": nil, "text": nil, "tracking_token": nil],
-                "data": target, "ig_media_igid": .string(media.pk), "otid": .string(otid),
             ])
         } else {
             _ = try await dmQuery("IGDirectMediaShareMutation", variables: [
-                "data": ["media_id": .string(media.id)], "send_data": target,
+                "send_data": send, "data": ["media_id": .string(media.pk)],
+            ])
+        }
+    }
+
+    /// Sends someone's story into a chat (recorded: `IGDirectStoryShareMutation`). The story
+    /// is named by `pk_owner` and its reel id; the offline id doubles as the mutation token.
+    func shareStory(_ item: Media, reelId: String, to target: ShareTarget) async throws {
+        let otid = OfflineThreadingId.next()
+        let storyId = item.id.contains("_") ? item.id : "\(item.pk)_\(item.user?.id ?? reelId)"
+        _ = try await dmQuery("IGDirectStoryShareMutation", variables: [
+            "send_data": shareSendData(target, otid: otid, extra: ["reply_to_message_id": nil]),
+            "data": ["is_shh_mode": false, "mutation_token": .string(otid), "nullable_text": nil, "reel_id": .string(reelId),
+                     "sampled": false, "share_client_context": .string(otid), "story_media_id": .string(storyId),
+                     "story_share_type": nil],
+        ])
+    }
+
+    /// Pins a message to the top of a chat, or unpins it (both recorded). Takes the thread IGID.
+    func setPinned(_ pinned: Bool, message messageId: String, thread id: String) async throws {
+        if pinned {
+            _ = try await dmQuery("useIGDPinMessageOffMsysMutation", variables: [
+                "thread_fbid": .string(id), "message_id": .string(messageId), "should_replace_oldest_pin": false,
+            ])
+        } else {
+            _ = try await dmQuery("useIGDUnpinMessageOffMsysMutation", variables: [
+                "thread_fbid": .string(id), "message_id": .string(messageId),
             ])
         }
     }
@@ -202,7 +261,8 @@ extension IGClient {
         }
     }
 
-    /// Last known DM doc ids (from the web app on 2026-11-12, else from mautrix-instagram).
+    /// Last known DM doc ids: as recorded from instagram.com (2026-11-12) for every one it sent;
+    /// the rest from its scripts.
     nonisolated static let fallbackDocIds: [String: String] = [
         "PolarisDirectInboxQuery": "28881837051457834",
         "IGDirectMediaShareMutation": "29164221929874709",
@@ -210,26 +270,31 @@ extension IGClient {
         "IGDThreadDetailQuery": "29620840297508799",
         "IGDThreadListOffMsysPaginationQuery": "27712934271665380",
         "IGDMessageListOffMsysQuery": "27502152406082940",
-        "IGDirectTextSendMutation": "26911679871773184",
-        "IGDirectMediaSendMutation": "25766288509716264",
-        "IGDirectReactionSendMutation": "24374451552236906",
-        "useIGDMarkThreadAsReadMutation": "27356881703909995",
+        "IGDirectTextSendMutation": "28737274835943013",
+        "IGDirectMediaSendMutation": "28887524104237595",
+        "IGDirectReactionSendMutation": "28788023287533800",
+        "useIGDMarkThreadAsReadMutation": "27399783383056109",
+        "IGDirectStoryShareMutation": "29148462828171666",
+        "useIGDPinMessageOffMsysMutation": "27027218840244998",
+        "useIGDUnpinMessageOffMsysMutation": "26919110827778778",
         "useIGDMarkThreadAsReadValidationMutation": "35211594988486314",
         "IGDMessageUnsendDialogOffMsysMutation": "26948700068153789",
     ]
 }
 
-/// Offline threading ids: `(unix ms << 22) | (counter << 12) | 42`, unique per message we send.
+/// Offline threading ids: `(unix ms << 22) | 22 random bits`, as instagram.com makes them
+/// (recorded: the low bits vary freely), unique per message we send.
 nonisolated enum OfflineThreadingId {
     private static let lock = NSLock()
-    nonisolated(unsafe) private static var lastMs: Int64 = 0
-    nonisolated(unsafe) private static var counter: Int64 = 0
+    nonisolated(unsafe) private static var recent: [Int64] = []
 
     static func next() -> String {
         lock.lock(); defer { lock.unlock() }
         let ms = Int64(Date.now.timeIntervalSince1970 * 1000)
-        counter = ms == lastMs ? (counter + 1) & 0x3FF : 0
-        lastMs = ms
-        return String((ms << 22) | (counter << 12) | 42)
+        var id: Int64
+        repeat { id = (ms << 22) | Int64.random(in: 0..<(1 << 22)) } while recent.contains(id)
+        recent.append(id)
+        if recent.count > 64 { recent.removeFirst() }
+        return String(id)
     }
 }
