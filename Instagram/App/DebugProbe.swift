@@ -32,6 +32,35 @@ enum DebugProbe {
             } else if let name = raw("IGProbeGQL") {
                 let vars = try JSON(data: Data((raw("IGProbeVars") ?? "{}").utf8))
                 json = ["data": try await client.graphQL(name, variables: vars, docId: raw("IGProbeDoc"))]
+            } else if d.bool(forKey: "IGProbeEndpoints") {
+                // Read-only check of every parser against live data; prints counts, not content.
+                var out: [String: JSON] = [:]
+                let feed = try await client.homeFeed()
+                out["feed"] = .string("\(feed.items.count) posts, kinds \(Set(feed.items.map(\.kind.rawValue)).sorted()), images \(feed.items.filter { !$0.images.isEmpty }.count), users \(feed.items.filter { $0.user != nil }.count), more \(feed.hasMore)")
+                if let c = feed.cursor { let p2 = try await client.homeFeed(after: c); out["feed2"] = .string("\(p2.items.count) posts, overlap \(Set(p2.items.map(\.pk)).intersection(feed.items.map(\.pk)).count)") }
+                let reels = try await client.reels()
+                out["reels"] = .string("\(reels.items.count) reels, with video \(reels.items.filter { !$0.videos.isEmpty }.count), more \(reels.hasMore)")
+                if let c = reels.cursor { let p2 = try await client.reels(after: c); out["reels2"] = .string("\(p2.items.count) reels") }
+                let tray = try await client.storyTray()
+                out["tray"] = .string("\(tray.count) reels, unseen \(tray.filter { !$0.seen }.count)")
+                if !tray.isEmpty {
+                    let r = try await client.storyReels(ids: tray.prefix(3).map(\.id))
+                    out["stories"] = .string("\(r.count) reels, items \(r.map(\.items.count)), videos \(r.flatMap(\.items).filter(\.isVideo).count)")
+                }
+                let inbox = try await client.inbox()
+                out["inbox"] = .string("\(inbox.threads.count) threads, unread \(inbox.threads.filter(\.isUnread).count), groups \(inbox.threads.filter(\.isGroup).count), long ids \(inbox.threads.filter { $0.longId != nil }.count), seq \(inbox.seqId != nil), more \(inbox.hasMore)")
+                if let c = inbox.cursor, inbox.hasMore { let older = try await client.olderThreads(cursor: c); out["inbox2"] = .string("\(older.threads.count) threads") }
+                if let t = inbox.threads.first {
+                    let th = try await client.thread(t.id)
+                    var kinds: [String: Int] = [:]
+                    for m in th.messages.items { kinds[String(describing: m.body).prefix { $0 != "(" }.description, default: 0] += 1 }
+                    out["thread"] = .string("\(th.messages.items.count) messages \(kinds), more \(th.messages.hasMore)")
+                    if let c = th.messages.cursor, th.messages.hasMore {
+                        let older = try await client.olderMessages(thread: t.id, cursor: c)
+                        out["thread2"] = .string("\(older.items.count) older, overlap \(Set(older.items.map(\.id)).intersection(th.messages.items.map(\.id)).count)")
+                    }
+                }
+                json = .object(out)
             } else if let file = raw("IGProbeReplay") {
                 // `-IGProbeReplay <capture.json> [-IGProbeDrop 'k1,k2']`: replays a captured form.
                 let cap = try JSON(data: Data(contentsOf: URL(fileURLWithPath: file)))

@@ -138,6 +138,20 @@ actor IGClient {
 
     func knownOperations() -> [String: String] { registry.docIds }
 
+    /// Reads another page of the site (the inbox, say) for the doc ids its scripts declare.
+    /// Once per path per run.
+    func scanPage(_ path: String) async {
+        guard scannedPages.insert(path).inserted,
+              let html = try? await fetchText(URL(string: Self.origin + path)!, accept: "text/html") else { return }
+        _ = registry.absorb(script: html)
+        let other = WebPageConfig(html: html)
+        if page.dmDeviceId == nil { page.dmDeviceId = other.dmDeviceId }
+        if page.messagingId == nil { page.messagingId = other.messagingId }
+        await scanScripts(extra: other.scripts)
+    }
+
+    private var scannedPages = Set<String>()
+
     // MARK: GraphQL
 
     /// Runs a Relay query by its friendly name and returns its `data`. A missing or stale
@@ -405,6 +419,10 @@ nonisolated struct WebPageConfig: Sendable {
     var jazoest: String?
     /// `BootloaderConfig.nonce`, sent as `X-FB-Entry-Nonce` on GraphQL requests.
     var entryNonce: String?
+    /// `IGDMqttWebDeviceID.clientId`: the inbox query and the DM socket send it.
+    var dmDeviceId: String?
+    /// `CurrentUserInitialData.IG_USER_EIMU`: our own messaging id (DM senders are named by it).
+    var messagingId: String?
     var cometReq = "7"
     var dpr = "2"
     /// A random web session id for this run, `xxxxxx:xxxxxx:xxxxxx`.
@@ -432,6 +450,8 @@ nonisolated struct WebPageConfig: Sendable {
         actorId = first(#""actorID":"(\d+)""#)
         if let u = first(#""CurrentUserInitialData",\[\],\{[^}]*?"USER_ID":"(\d+)""#) { user = u }
         jazoest = first(#"[?&]jazoest=(\d+)"#)
+        dmDeviceId = first(#""IGDMqttWebDeviceID",\[\],\{"clientId":"([^"]+)""#)
+        messagingId = first(#""IG_USER_EIMU":"(\d+)""#)
         entryNonce = first(#""BootloaderConfig",\[\],\{[^}]*?"nonce":"([^"]+)""#)
         if let c = first(#"[?&]__comet_req=(\d+)"#) { cometReq = c }
         if let pr = first(#""SiteData",\[\],\{[^}]*?"pr":([\d.]+)"#) { dpr = pr }

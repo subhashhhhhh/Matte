@@ -1,0 +1,247 @@
+import Foundation
+
+/// Instagram JSON → models. Field names follow the v1 media dict, which feed, reels,
+/// stories and DMs all share; the containers around it are found by key, not fixed paths.
+nonisolated enum Parser {
+    // MARK: Users and media
+
+    /// A string id that may arrive as a string or a number.
+    static func idString(_ j: JSON) -> String? {
+        if let s = j.string { return s }
+        return j.int.map(String.init)
+    }
+
+    static func user(_ j: JSON) -> User? {
+        guard let id = idString(j["pk"]) ?? idString(j["id"]), let username = j["username"].string else { return nil }
+        return User(id: id, username: username, fullName: j["full_name"].string ?? "",
+                    avatar: (j["profile_pic_url"].string).flatMap(URL.init(string:)),
+                    isVerified: j["is_verified"].bool ?? false,
+                    messagingId: idString(j["interop_messaging_user_fbid"]),
+                    latestStory: j["latest_reel_media"].int.flatMap { $0 > 0 ? $0 : nil })
+    }
+
+    static func media(_ j: JSON) -> Media? {
+        guard let pk = j["pk"].string ?? j["pk"].int.map(String.init) else { return nil }
+        let type = j["media_type"].int ?? 1
+        var m = Media(id: j["id"].string ?? pk, pk: pk, code: j["code"].string,
+                      kind: Media.Kind(rawValue: type) ?? .image)
+        m.user = user(j["user"]) ?? user(j["owner"])
+        m.caption = j["caption"]["text"].string
+        m.takenAt = j["taken_at"].double.map { Date(timeIntervalSince1970: $0) }
+        m.expiresAt = j["expiring_at"].double.map { Date(timeIntervalSince1970: $0) }
+        m.likeCount = j["like_count"].int
+        m.commentCount = j["comment_count"].int
+        m.viewCount = j["play_count"].int ?? j["view_count"].int
+        m.hasLiked = j["has_liked"].bool ?? false
+        m.hasSaved = j["has_viewer_saved"].bool ?? false
+        m.images = renditions(j["image_versions2"]["candidates"])
+        m.videos = renditions(j["video_versions"])
+        m.hasAudio = j["has_audio"].bool ?? true
+        m.width = j["original_width"].int ?? m.images.first?.width ?? 1
+        m.height = j["original_height"].int ?? m.images.first?.height ?? 1
+        m.productType = j["product_type"].string
+        m.children = j["carousel_media"].array.compactMap(media)
+        if m.kind == .carousel, m.images.isEmpty, let first = m.children.first {
+            m.images = first.images
+            m.width = first.width
+            m.height = first.height
+        }
+        return m
+    }
+
+    static func renditions(_ j: JSON) -> [Rendition] {
+        j.array.compactMap { r in
+            guard let s = r["url"].string, let url = URL(string: s) else { return nil }
+            return Rendition(url: url, width: r["width"].int ?? 0, height: r["height"].int ?? 0)
+        }
+    }
+
+    // MARK: Feed and reels
+
+    /// A Relay connection of `{node: {media: …}}` edges (home feed, reels).
+    static func mediaConnection(_ data: JSON, root: String) -> Page<Media> {
+        let conn = data.first(root) ?? .null
+        let items = conn["edges"].array.compactMap { edge -> Media? in
+            let node = edge["node"]
+            let m = node["media"]
+            // Ads and suggestion units: no plain `media`, or one marked as an ad.
+            guard !m.isNull, node["ad"].isNull, m["ad_id"].isNull, m["product_type"].string != "ad" else { return nil }
+            return media(m)
+        }
+        let info = conn["page_info"]
+        return Page(items: dedupe(items), cursor: info["end_cursor"].string, hasMore: info["has_next_page"].bool ?? false)
+    }
+
+    private static func dedupe(_ items: [Media]) -> [Media] {
+        var seen = Set<String>()
+        return items.filter { seen.insert($0.pk).inserted }
+    }
+
+    // MARK: Stories
+
+    static func storyTray(_ data: JSON) -> [StoryReel] {
+        let tray = data.first("tray")?.array ?? []
+        return tray.compactMap { r in
+            guard let u = user(r["user"]) else { return nil }
+            let id = r["id"].string ?? r["id"].int.map(String.init) ?? u.id
+            let latest = r["latest_reel_media"].int ?? 0
+            let seenAt = r["seen"].int ?? 0
+            return StoryReel(id: id, user: u, seen: latest > 0 && seenAt >= latest,
+                             latest: latest > 0 ? Date(timeIntervalSince1970: TimeInterval(latest)) : nil)
+        }
+    }
+
+    static func storyReels(_ data: JSON) -> [StoryReel] {
+        let reels = data.first("reels_media")?.array ?? []
+        return reels.compactMap { r in
+            guard let u = user(r["user"]) ?? user(r["owner"]) else { return nil }
+            let id = r["id"].string ?? r["id"].int.map(String.init) ?? u.id
+            let items = r["items"].array.compactMap(media).map { m -> Media in
+                var m = m
+                if m.user == nil { m.user = u }
+                return m
+            }
+            let seen = r["seen"].int ?? 0
+            let latest = r["latest_reel_media"].int ?? 0
+            return StoryReel(id: id, user: u, seen: latest > 0 && seen >= latest,
+                             latest: latest > 0 ? Date(timeIntervalSince1970: TimeInterval(latest)) : nil, items: items)
+        }
+    }
+
+    // MARK: DMs
+
+    static func inbox(_ data: JSON) -> (threads: [DMThread], cursor: String?, hasMore: Bool) {
+        let box = data.first("threads_by_folder") ?? .null
+        let threads = box["edges"].array.compactMap { thread($0["node"]["as_ig_direct_thread"]) }
+        return (threads, box["page_info"]["end_cursor"].string, box["page_info"]["has_next_page"].bool ?? false)
+    }
+
+    static func thread(_ t: JSON) -> DMThread? {
+        guard let id = t["thread_fbid"].string ?? t["id"].string else { return nil }
+        let users = t["users"].array.compactMap(user)
+        let viewerMid = t["viewer"]["interop_messaging_user_fbid"].string
+        var thread = DMThread(id: id, longId: t["thread_id"].string, threadKey: t["thread_key"].string, title: t["thread_title"].string ?? "",
+                              users: users, isGroup: (t["is_group"].bool ?? false) || users.count > 1)
+        if thread.title.isEmpty { thread.title = users.map(\.username).joined(separator: ", ") }
+        thread.lastActivity = ms(t["last_activity_timestamp_ms"])
+        thread.isMuted = t["is_muted"].bool ?? false
+        thread.isPinned = t["is_pin"].bool ?? false
+        let folder = t["system_folder"].string ?? ""
+        thread.isRequest = folder == "PENDING" || folder == "SPAM"
+        thread.imageURL = t["thread_image_url"].string.flatMap(URL.init(string:))
+        thread.viewerMessagingId = viewerMid
+        for r in t["slide_read_receipts"].array {
+            if let who = r["participant_fbid"].string, let at = ms(r["watermark_timestamp_ms"]) { thread.readUpTo[who] = at }
+        }
+        if let newest = t["slide_messages"]["edges"].array.first.flatMap({ message($0["node"]) }) {
+            thread.snippet = t["slide_messages"]["edges"][0]["node"]["igd_snippet"].string ?? newest.previewText
+            thread.lastSenderIsViewer = newest.senderId == viewerMid
+        }
+        // Unread: our own watermark is older than the last activity (or it's marked unread).
+        if let viewerMid, let last = thread.lastActivity {
+            let mine = thread.readUpTo[viewerMid] ?? .distantPast
+            thread.isUnread = !thread.lastSenderIsViewer && mine < last
+        }
+        if t["marked_as_unread"].bool == true { thread.isUnread = true }
+        return thread
+    }
+
+    /// Messages newest first, as Instagram sends them, and the cursor for older ones.
+    static func messages(_ conn: JSON) -> Page<DMMessage> {
+        let items = conn["edges"].array.compactMap { message($0["node"]) }
+        return Page(items: items, cursor: conn["page_info"]["end_cursor"].string,
+                    hasMore: conn["page_info"]["has_next_page"].bool ?? false)
+    }
+
+    static func message(_ m: JSON) -> DMMessage? {
+        guard let id = m["id"].string ?? m["message_id"].string else { return nil }
+        let sender = m["sender_fbid"].string ?? m["sender"]["id"].string ?? ""
+        var msg = DMMessage(id: id, senderId: sender, sentAt: ms(m["timestamp_ms"]) ?? .now, body: body(m))
+        msg.offlineId = m["offline_threading_id"].string
+        msg.isForwarded = m["igd_is_forwarded"].bool ?? false
+        msg.isEdited = !m["slide_edit_history"].array.isEmpty
+        msg.reactions = m["reactions"].array.compactMap { r in
+            guard let e = r["reaction"].string else { return nil }
+            return DMReaction(emoji: e, senderId: r["sender_fbid"].string ?? "")
+        }
+        let reply = m["replied_to_message"]
+        if !reply.isNull, let rid = reply["id"].string ?? m["replied_to_message_id"].string {
+            let preview = (reply["text_body"].string ?? message(reply)?.previewText) ?? ""
+            msg.replyTo = .init(id: rid, senderId: reply["sender_fbid"].string ?? "", text: preview)
+        }
+        return msg
+    }
+
+    private static func body(_ m: JSON) -> DMMessage.Body {
+        let c = m["content"]
+        let text = m["text_body"].string.flatMap { $0.isEmpty ? nil : $0 }
+        switch c["__typename"].string ?? "" {
+        case "SlideMessageText":
+            return .text(text ?? c["text_body"].string ?? "")
+        case "SlideMessageImageContent":
+            return .media(c["attachments"].array.compactMap { attachment($0, kind: .image) })
+        case "SlideMessageVideosContent":
+            return .media(c["videos"].array.compactMap { attachment($0, kind: .video) })
+        case "SlideMessageMultiMediaContent":
+            return .media(c["ordered_photo_video_attachments"].array.compactMap {
+                attachment($0, kind: ($0["__typename"].string ?? "").contains("Video") || !$0["dash_manifest"].isNull ? .video : .image)
+            })
+        case "SlideMessageRavenImageContent", "SlideMessageRavenVideoContent":
+            let kind: DMAttachment.Kind = c["__typename"].string == "SlideMessageRavenVideoContent" ? .video : .image
+            if let a = attachment(c["attachment"], kind: kind) { return .media([a]) }
+            return .notice(kind == .video ? "Video (opened)" : "Photo (opened)")
+        case "SlideMessageAudiosContent":
+            return .media(c["audio_attachments"].array.compactMap { a in
+                guard let url = a["attachment_cdn_url"].string.flatMap(URL.init(string:)) else { return nil }
+                return DMAttachment(kind: .audio, id: a["attachment_fbid"].string, url: url, durationMs: a["playable_duration_ms"].int)
+            })
+        case "SlideMessageAnimatedMediaContent":
+            return .media(c["animated_media"].array.compactMap { a in
+                let sticker = a["is_sticker"].bool ?? false
+                let url = (sticker ? a["attachment_webp_url"].string : a["attachment_mp4_url"].string ?? a["attachment_webp_url"].string)
+                    ?? a["preview_cdn_url"].string
+                return DMAttachment(kind: sticker ? .sticker : .gif, url: url.flatMap(URL.init(string:)),
+                                    preview: a["preview_cdn_url"].string.flatMap(URL.init(string:)),
+                                    width: a["preview_width"].int ?? 0, height: a["preview_height"].int ?? 0)
+            })
+        case let t where t.hasSuffix("StickerContent") || t.hasSuffix("StickerXMAContent") && t != "SlideMessageMusicStickerXMAContent":
+            return .media([DMAttachment(kind: .sticker, url: c["preview_url"].string.flatMap(URL.init(string:)),
+                                        width: c["preview_width"].int ?? 0, height: c["preview_height"].int ?? 0)])
+        case "SlideMessageXMAContent", "SlideMessageMusicStickerXMAContent":
+            let x = c["xma"]
+            let xmaText = c["xma_text_body"].string.flatMap { $0.isEmpty ? nil : $0 }
+            if x.isNull || (x["target_id"].string ?? "").isEmpty && x["preview_image"].isNull {
+                // A text message whose link got a preview card.
+                return .text(xmaText ?? text ?? x["target_url"].string ?? "")
+            }
+            let image = x["preview_image"].isNull ? x["xmaPreviewImage"] : x["preview_image"]
+            let share = DMShare(title: x["title_text"].string ?? x["header_title_text"].string ?? x["xmaHeaderTitle"].string,
+                                subtitle: x["subtitle_text"].string, caption: x["caption_body_text"].string,
+                                eyebrow: x["eyebrow_text"].string,
+                                preview: (image["url"].string ?? image["fallback_url"].string).flatMap(URL.init(string:)),
+                                previewWidth: image["width"].int ?? 0, previewHeight: image["height"].int ?? 0,
+                                targetURL: x["target_url"].string.flatMap(URL.init(string:)), targetId: x["target_id"].string,
+                                headerIcon: x["header_icon"]["url"].string.flatMap(URL.init(string:)))
+            return .share(share, text: xmaText)
+        case "SlideMessageAdminText":
+            let parts = c["text_fragments"].array.compactMap { $0["plaintext"].string }.joined()
+            return .notice(parts.isEmpty ? (text ?? "") : parts)
+        default:
+            if let text { return .text(text) }
+            return .unsupported(m["igd_snippet"].string ?? "Open Instagram to see this message")
+        }
+    }
+
+    private static func attachment(_ a: JSON, kind: DMAttachment.Kind) -> DMAttachment? {
+        guard !a.isNull else { return nil }
+        let url = (a["attachment_cdn_url"].string ?? a["attachment_cdn_fallback_url"].string).flatMap(URL.init(string:))
+        let preview = (a["preview_cdn_url"].string ?? a["preview_cdn_fallback_url"].string).flatMap(URL.init(string:))
+        guard url != nil || preview != nil else { return nil }
+        return DMAttachment(kind: kind, id: a["attachment_fbid"].string, url: url ?? preview, preview: preview ?? url,
+                            width: a["preview_width"].int ?? 0, height: a["preview_height"].int ?? 0)
+    }
+
+    static func ms(_ j: JSON) -> Date? {
+        j.double.map { Date(timeIntervalSince1970: $0 / 1000) }
+    }
+}
