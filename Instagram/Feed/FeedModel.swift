@@ -162,10 +162,11 @@ final class FeedModel {
         return true
     }
 
-    /// The stories tray alone, read again (you added a story).
-    func refreshTray() async {
+    /// The stories tray alone, read again (you added or deleted a story). `mine`: you have a
+    /// story now (shown first as "Your story" even if the tray leaves it out).
+    func refreshTray(mine: Bool) async {
         guard var t = try? await client.storyTray() else { return }
-        if let me = app?.me, !t.contains(where: { $0.user.id == me.id }) {
+        if mine, let me = app?.me, !t.contains(where: { $0.user.id == me.id }) {
             t.insert(StoryReel(id: me.id, user: me, seen: true), at: 0)
         }
         tray = t

@@ -281,8 +281,9 @@ final class StoryViewerModel {
             pausedForDelete = false
             confirmingDelete = false
             app?.show("Story deleted")
-            Task { await app?.feed?.refreshTray() }
             reels[reelIndex].items.removeAll { $0.pk == item.pk }
+            let left = !reels[reelIndex].items.isEmpty
+            Task { await app?.feed?.refreshTray(mine: left) }
             if reels[reelIndex].items.isEmpty {
                 close()
                 return

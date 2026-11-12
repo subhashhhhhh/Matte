@@ -214,7 +214,7 @@ final class AppModel {
     /// and an open profile of yours reloads now.
     func created(_ media: Media?, story: Bool) {
         refreshMyProfile()
-        if story { Task { await feed?.refreshTray() } }
+        if story { Task { await feed?.refreshTray(mine: true) } }
     }
 
     /// One of your posts was deleted: it leaves your open profile's grids and the viewer.

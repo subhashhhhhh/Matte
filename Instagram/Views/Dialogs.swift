@@ -53,7 +53,6 @@ struct ConfirmDialog: View {
                 }
                 .buttonStyle(.pressable)
                 .disabled(busy)
-                .keyboardShortcut(.defaultAction)
                 Rectangle().fill(Theme.hairline).frame(height: 1)
                 Button(action: cancel) {
                     Text("Cancel").font(.system(size: 14)).frame(maxWidth: .infinity).frame(height: 48).contentShape(Rectangle())

@@ -15,7 +15,9 @@ struct CreateSheet: View {
                 header
                 Rectangle().fill(Theme.hairline).frame(height: 1)
                 if model.items.isEmpty {
-                    DropZone(loading: model.loading, notice: model.notice) { pick() }
+                    DropZone(loading: model.loading, notice: model.notice, pick: pick) { urls in
+                        Task { await model.add(urls) }
+                    }
                 } else {
                     HStack(spacing: 0) {
                         editor
@@ -226,11 +228,12 @@ private struct DropZone: View {
     let loading: Bool
     let notice: String?
     let pick: () -> Void
+    let drop: ([URL]) -> Void
     @State private var targeted = false
 
     var body: some View {
         VStack(spacing: 16) {
-            IGGlyph(icon: .media, size: 72).foregroundStyle(.primary.opacity(0.8))
+            IGGlyph(icon: .media, size: 72).foregroundStyle(.primary.opacity(targeted ? 1 : 0.8))
             Text("Drag photos and videos here").font(.system(size: 19, weight: .regular))
             if let notice {
                 Text(notice).font(.system(size: 12.5)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
@@ -247,7 +250,10 @@ private struct DropZone: View {
             .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
             .foregroundStyle(.primary.opacity(targeted ? 0.35 : 0))
             .padding(16))
-        .onDrop(of: [.fileURL], isTargeted: $targeted) { _ in false }
+        .onDrop(of: [.fileURL], isTargeted: $targeted) { providers in
+            Task { drop(await CreateSheet.urls(from: providers)) }
+            return true
+        }
     }
 }
 
