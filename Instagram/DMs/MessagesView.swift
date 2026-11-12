@@ -221,6 +221,10 @@ struct ConversationView: View {
     @Environment(\.sharedPaneToggle) private var togglePane
     @Environment(\.sharedPaneShown) private var paneShown
     @State private var atBottom = true
+    /// Whether the chat sticks to the newest message: on until you scroll up, back on when you
+    /// scroll to the bottom. Loading content never turns it off.
+    @State private var following = true
+    @State private var programmaticScroll = Date.distantPast
     /// Set once the chat has opened at the newest message.
     @State private var settled = false
 
@@ -282,8 +286,16 @@ struct ConversationView: View {
                 } action: { old, new in
                     atBottom = new.isAtBottom
                     let resized = new.content != old.content || new.container != old.container || new.width != old.width
-                    if resized, !settled || old.isAtBottom {
-                        proxy.scrollTo("bottom", anchor: .bottom)
+                    if resized {
+                        // Content above or below changed size (rows measured, older messages
+                        // loaded, the shared column toggled): keep following if we were.
+                        if following || !settled {
+                            programmaticScroll = .now
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                        }
+                    } else if Date.now.timeIntervalSince(programmaticScroll) > 0.4 {
+                        // Only the position moved, and not by us: that's you scrolling.
+                        following = new.offset + new.container >= new.content - 60
                     }
                 }
                 // Follow new messages only when you're already at the bottom, or when it's yours.
@@ -305,7 +317,11 @@ struct ConversationView: View {
                     }
                     // Your own message always brings you down; others' only if you were there
                     // (the size change above already handled that case).
-                    if mine { withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) } }
+                    if mine {
+                        following = true
+                        programmaticScroll = .now
+                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                    }
                 }
             }
             .overlay { if model.isLoading && model.messages.isEmpty { Spinner(size: 20) } }

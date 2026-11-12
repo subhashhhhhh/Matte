@@ -22,6 +22,7 @@ struct FeedView: View {
                         if !storiesColumn, !model.tray.isEmpty {
                             StoryTray(reels: model.tray) { app.openStories(model.tray, at: $0) }
                         }
+                        FeedControls(model: model)
                         Masonry(model: model, columns: columns, columnWidth: columnWidth)
                         if model.isLoadingMore { Spinner().padding(20) }
                     }
@@ -45,13 +46,51 @@ struct FeedView: View {
             if let opened = model.opened {
                 PostLightbox(model: opened,
                              canPrevious: (model.openedIndex ?? 0) > 0,
-                             canNext: (model.openedIndex ?? 0) < model.posts.count - 1,
+                             canNext: (model.openedIndex ?? 0) < model.visible.count - 1,
                              step: { model.step($0) }, close: { model.closeOpened() })
                     .transition(.opacity)
             }
         }
         .animation(.easeOut(duration: 0.16), value: model.opened == nil)
         .task { await model.loadIfNeeded() }
+    }
+}
+
+/// Filter chips and the sort menu above the grid.
+private struct FeedControls: View {
+    @Bindable var model: FeedModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(FeedFilter.allCases) { f in
+                let on = model.filter == f
+                Button { model.filter = f } label: {
+                    Text(f.title)
+                        .font(.system(size: 12.5, weight: on ? .semibold : .medium))
+                        .padding(.horizontal, 12)
+                        .frame(height: 28)
+                        .background(Capsule().fill(on ? Color.primary : Theme.panel))
+                        .foregroundStyle(on ? Theme.background : .primary)
+                }
+                .buttonStyle(.pressable)
+            }
+            Spacer()
+            if model.filter != .all || model.sort != .instagram {
+                Text("\(model.visible.count) of \(model.posts.count) loaded")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            Menu {
+                Picker("Sort", selection: $model.sort) {
+                    ForEach(FeedSort.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                Text("Sort: \(model.sort.title)").font(.system(size: 12.5, weight: .medium))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
     }
 }
 
@@ -63,19 +102,20 @@ private struct Masonry: View {
     let columnWidth: CGFloat
 
     var body: some View {
-        let lanes = layout()
+        let posts = model.visible
+        let lanes = layout(posts)
         HStack(alignment: .top, spacing: 16) {
             ForEach(0..<columns, id: \.self) { c in
                 LazyVStack(spacing: 16) {
                     ForEach(lanes[c], id: \.self) { i in
-                        let post = model.posts[i]
+                        let post = posts[i]
                         PostTile(post: post, width: columnWidth, isPreviewing: model.playing == post.pk,
                                  setPreviewing: { on in
                                      if on { model.playing = post.pk } else if model.playing == post.pk { model.playing = nil }
                                  },
                                  open: { model.open(at: i) })
                             .onAppear {
-                                if i >= model.posts.count - 4 { Task { await model.loadMore() } }
+                                if i >= posts.count - 4 { Task { await model.loadMore() } }
                             }
                     }
                 }
@@ -84,10 +124,10 @@ private struct Masonry: View {
         }
     }
 
-    private func layout() -> [[Int]] {
+    private func layout(_ posts: [Media]) -> [[Int]] {
         var lanes = Array(repeating: [Int](), count: columns)
         var heights = Array(repeating: CGFloat(0), count: columns)
-        for (i, post) in model.posts.enumerated() {
+        for (i, post) in posts.enumerated() {
             let c = heights.indices.min { heights[$0] < heights[$1] } ?? 0
             lanes[c].append(i)
             heights[c] += PostTile.estimatedHeight(post, width: columnWidth) + 16

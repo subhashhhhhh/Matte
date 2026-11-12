@@ -1,5 +1,42 @@
 import SwiftUI
 
+/// How Home orders the posts it has loaded.
+enum FeedSort: String, CaseIterable, Identifiable {
+    case instagram, newest, mostLiked, mostCommented
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .instagram: "Instagram's order"
+        case .newest: "Newest first"
+        case .mostLiked: "Most liked"
+        case .mostCommented: "Most commented"
+        }
+    }
+}
+
+/// Which kinds of posts Home shows.
+enum FeedFilter: String, CaseIterable, Identifiable {
+    case all, photos, videos, carousels
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .photos: "Photos"
+        case .videos: "Videos"
+        case .carousels: "Carousels"
+        }
+    }
+
+    func matches(_ m: Media) -> Bool {
+        switch self {
+        case .all: true
+        case .photos: m.children.count <= 1 && !m.isVideo
+        case .videos: m.children.count <= 1 && m.isVideo
+        case .carousels: m.children.count > 1
+        }
+    }
+}
+
 /// The home feed and the stories tray above it.
 @Observable
 final class FeedModel {
@@ -9,6 +46,36 @@ final class FeedModel {
     private(set) var loadFailed = false
     private var cursor: String?
     private var hasMore = true
+    var sort: FeedSort = FeedSort(rawValue: UserDefaults.standard.string(forKey: "feedSort") ?? "") ?? .instagram {
+        didSet { UserDefaults.standard.set(sort.rawValue, forKey: "feedSort"); closeOpened() }
+    }
+    var filter: FeedFilter = .all {
+        didSet {
+            closeOpened()
+            Task { await fillForFilter() }
+        }
+    }
+
+    /// The loaded posts, filtered and sorted as chosen (what the grid shows).
+    var visible: [Media] {
+        let shown = posts.filter(filter.matches)
+        switch sort {
+        case .instagram: return shown
+        case .newest: return shown.sorted { ($0.takenAt ?? .distantPast) > ($1.takenAt ?? .distantPast) }
+        case .mostLiked: return shown.sorted { ($0.countsHidden ? -1 : $0.likeCount ?? 0) > ($1.countsHidden ? -1 : $1.likeCount ?? 0) }
+        case .mostCommented: return shown.sorted { ($0.commentCount ?? 0) > ($1.commentCount ?? 0) }
+        }
+    }
+
+    /// A narrow filter can leave the grid nearly empty: load a few more pages to fill it.
+    private func fillForFilter() async {
+        var tries = 0
+        while visible.count < 8, hasMore, tries < 4 {
+            tries += 1
+            await loadMore()
+        }
+    }
+
     /// Post whose video is previewing in the grid (one at a time).
     var playing: String?
     /// The post opened large over the grid, and where it sits in `posts`.
@@ -82,11 +149,12 @@ final class FeedModel {
     private(set) var isLoadingMore = false
 
     func open(at index: Int) {
-        guard posts.indices.contains(index) else { return }
+        let shown = visible
+        guard shown.indices.contains(index) else { return }
         playing = nil
         openedIndex = index
-        opened = MediaDetailModel(pk: posts[index].pk, media: posts[index], client: client)
-        if posts.count - index < 4 { Task { await loadMore() } }
+        opened = MediaDetailModel(pk: shown[index].pk, media: shown[index], client: client)
+        if shown.count - index < 4 { Task { await loadMore() } }
     }
 
     func step(_ delta: Int) {

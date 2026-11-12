@@ -49,8 +49,42 @@ struct SharedPane: View {
     let viewerItemId: String?
     let open: (SharedItem) -> Void
     let close: () -> Void
+    /// How many shared items to have loaded: grows by a batch each time the grid's end shows.
+    @State private var target = Self.batch
+    @State private var exhausted = false
+    static let batch = 15
 
     var body: some View {
+        content
+            .task(id: FillKey(thread: conversation?.thread.id, target: target, loaded: conversation?.isLoading == false)) {
+                await fill()
+            }
+            .onChange(of: conversation?.thread.id) { target = Self.batch; exhausted = false }
+    }
+
+    private struct FillKey: Equatable { var thread: String?; var target: Int; var loaded: Bool }
+
+    /// Loads older messages until the chat has `target` shared items or no history is left;
+    /// gives up after 8 pages in a row with no share (a "Load more" button takes over).
+    private func fill() async {
+        guard let conversation, !conversation.isLoading else { return }
+        var barren = 0
+        while !Task.isCancelled, conversation.hasOlder, !exhausted {
+            let count = SharedItem.items(in: conversation.messages).count
+            guard count < target else { break }
+            // The chat itself may be loading a page: wait for it rather than count it.
+            if conversation.loadingOlder {
+                try? await Task.sleep(for: .milliseconds(150))
+                continue
+            }
+            await conversation.loadOlder()
+            barren = SharedItem.items(in: conversation.messages).count > count ? 0 : barren + 1
+            if barren >= 8 { exhausted = true }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if let viewer {
             SharedViewer(model: viewer, position: position, open: open, close: close)
                 .id(viewer.id)
@@ -91,12 +125,18 @@ struct SharedPane: View {
                     }
                     .padding(8)
                     if let conversation, conversation.hasOlder {
-                        Button(conversation.loadingOlder ? "Loading…" : "Look further back") {
-                            Task { await conversation.loadOlder() }
+                        if exhausted {
+                            // Many pages in a row without a share: stop paging on its own.
+                            Button("Load more") { exhausted = false; target = items.count + Self.batch }
+                                .buttonStyle(SecondaryPillStyle())
+                                .padding(.vertical, 14)
+                        } else {
+                            // Reaching the end asks for the next batch (re-armed as items arrive).
+                            Spinner(size: 14)
+                                .padding(.vertical, 14)
+                                .id(items.count)
+                                .onAppear { target = max(target, items.count + Self.batch) }
                         }
-                        .buttonStyle(SecondaryPillStyle())
-                        .disabled(conversation.loadingOlder)
-                        .padding(.vertical, 14)
                     }
                 }
                 .scrollIndicators(.never)

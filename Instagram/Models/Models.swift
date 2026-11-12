@@ -218,7 +218,27 @@ extension DMShare {
             return String(pk)
         }
         if isStory, let last = url.pathComponents.last(where: { $0 != "/" }), last.allSatisfy(\.isNumber) { return last }
+        // Posts are linked by shortcode only (/p/<code>/): the code is the id in base 64.
+        let parts = url.pathComponents.filter { $0 != "/" }
+        if parts.count >= 2, ["p", "reel", "reels", "tv"].contains(parts[0]) { return Self.pk(fromShortcode: parts[1]) }
         return nil
+    }
+
+    /// Instagram's shortcode → numeric media id (base 64 over `A–Z a–z 0–9 - _`). Long codes of
+    /// private posts carry extra characters after the first 11; nil if it doesn't decode.
+    static func pk(fromShortcode code: String) -> String? {
+        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        let chars = Array(code.prefix(11))
+        guard !chars.isEmpty else { return nil }
+        var value: UInt64 = 0
+        for c in chars {
+            guard let i = alphabet.firstIndex(of: c) else { return nil }
+            let (shifted, o1) = value.multipliedReportingOverflow(by: 64)
+            let (sum, o2) = shifted.addingReportingOverflow(UInt64(i))
+            guard !o1, !o2 else { return nil }
+            value = sum
+        }
+        return value > 0 ? String(value) : nil
     }
 }
 
