@@ -75,16 +75,23 @@ enum DebugProbe {
                 let inbox = try await client.inbox()
                 guard let seq = inbox.seqId.flatMap(Int64.init) else { fail("inbox has no seq id") }
                 let params = await client.dgwParameters()
-                let rt = DMRealtime(client: client, seqId: seq)
+                // `-IGProbeDGWRewind N`: start N deltas back, so the server replays recent ones
+                // (exercises the delta parser on real data; still read-only).
+                let rewind = Int64(d.integer(forKey: "IGProbeDGWRewind"))
+                let rt = DMRealtime(client: client, seqId: max(0, seq - rewind),
+                                    snapshotAt: rewind > 0 ? .now.addingTimeInterval(-86_400) : .now)
                 await rt.start(typing: true)
                 let started = Date.now
                 var events: [String: Int] = [:]
                 var firstConnectedAfter: Double?
+                let known = Set(inbox.threads.map(\.id))
                 let collector = Task {
                     var local: [String: Int] = [:]
                     var connectedAt: Double?
                     for await e in rt.events {
                         local[e.name, default: 0] += 1
+                        // Do event thread ids name inbox threads (the first page's)?
+                        if let t = e.threadId { local[known.contains(t) ? "threadId.inInbox" : "threadId.notOnFirstPage", default: 0] += 1 }
                         if e == .connected, connectedAt == nil { connectedAt = Date.now.timeIntervalSince(started) }
                     }
                     return (local, connectedAt)
