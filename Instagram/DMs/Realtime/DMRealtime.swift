@@ -226,6 +226,7 @@ actor DMRealtime {
             case .subscribe(let sub, let latest):
                 subscribed = true
                 note("main: subscribed (replaying \(max(0, latest - sub)) deltas)")
+                log.info("Main stream subscribed")
             case .resnapshot(let type, _):
                 note("main: resnapshot (type \(type))")
                 return .resnapshot
@@ -320,6 +321,7 @@ actor DMRealtime {
                     started = true
                     watchdog.cancel()
                     note("typing: subscription started")
+                    log.info("Typing stream started")
                 }
                 for e in events {
                     // Our own typing from another device isn't news.
