@@ -505,6 +505,26 @@ Verified against our implementation with `-IGProbeDGW` (both streams subscribe; 
 * Server establish answer: `{"code":200}`; first main data frame: `{"request_id":4,"payload":"<b64 LSResponse>"}`
   with a `subscribe` op (groupID 223).
 
+### 5.11 Activity status ("Active now" / "Active 12m ago") — presence stream
+From the web app's `PresenceUnifiedClient`, `IGDDesktopPresenceUnifiedClientSingleton`, `XDTUserDictPresenceInfoResolver`
+and `usePresenceUnifiedStatusText` modules (lazy scripts), checked with `-IGProbeDGW` (2026-11-12).
+* A stream on the **stream-controller socket** (the web app uses stream 2; we use 1, after typing on 0). EstablishStream params:
+  `{"x-dgw-app-XRSS-method":"PresenceUnifiedJSON","x-dgw-app-xrs-body":"true","x-dgw-app-XRS-Accept-Ack":"RSAck","x-dgw-app-XRSS-http_referer":"https://www.instagram.com/direct/inbox/"}`.
+* After `{"code":200}`, one Data frame (ack required), Thrift `Payload{2: RequestStreamBody{1: JSON}}` with
+  `{"appFamily":3,"pollingMode":1,"appId":"936619743392459","publishEncoding":2}`. The web app adds
+  `"presenceReportingRequest":{"capabilities":"268435466","mutationId":<uuid>,"availability":2}` (2 = IDLE; 1 = ACTIVE, 3 = OFFLINE)
+  and later amends its own availability. **Not needed to receive presence** (same results with or without), so we don't report.
+* Server Data frames: `Payload{5: StreamResponse{2: [delta]}}`; delta `{1: flow_status}` (2 = started) or `{4: {1: JSON}}`:
+  `{"publishId","publishType":1 (Full: replace the map) | 2 (Incremental),"presenceUpdates":[{"userId":"<messaging id (EIMU)>",
+  "presenceStatus":2 (Active) | 0 (Inactive) | null,"lastActiveTimeSeconds":<unix s>|null,…}]}`. Entries with `userId:"0"` occur; skip them.
+  Amend acks arrive as `{6: {1: amendment_id, 2: true}}`.
+* Asking for specific people (`addAdditionalContacts`, by messaging id): an amendment Data frame (ack required, ack id = amendment id)
+  `Payload{3: AmendStream{1: i64 amendment_id (1, 2, …), 2: JSON}}` with
+  `{"payload":{"additionalContacts":{"additionalContacts":["<messaging id>",…]}}}`; the web app repeats it every 2.5 min.
+  The answer is an incremental publish.
+* Text: "Active now" if any other participant has `presenceStatus == 2`; else, 1:1 only, "Active {relative time} ago" from
+  `lastActiveTimeSeconds` if > 0; otherwise nothing. People with activity status off (or not shared with you) never appear.
+
 ---
 
 ## 6. Parsing deltas (incoming events)
