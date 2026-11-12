@@ -35,6 +35,16 @@ struct Sidebar: View {
                 .keyboardShortcut(d.shortcut)
             }
             Spacer()
+            // Create: instagram.com's "+" (filled while the create sheet is open).
+            Button { app.openCreate() } label: {
+                IGGlyph(icon: app.creating == nil ? .newPost : .newPostFilled, size: 22)
+                    .frame(width: 48, height: 44)
+                    .foregroundStyle(app.creating == nil ? .secondary : .primary)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.pressable)
+            .help("Create (⌘N)")
+            .keyboardShortcut("n")
             // You: opens your profile; right-click to sign out.
             Button {
                 if let me = app.me { app.openProfile(me) }

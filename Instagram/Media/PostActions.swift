@@ -99,6 +99,64 @@ final class PostActions {
         }
     }
 
+    // MARK: Your own posts
+
+    /// Commenting turned off (true) or on (false) in this run, per pk.
+    private(set) var commentsOff: [String: Bool] = [:]
+    /// Captions edited in this run, per pk.
+    private(set) var captions: [String: String] = [:]
+
+    func isMine(_ m: Media) -> Bool {
+        guard let me = app?.viewerId, let owner = m.user?.id else { return false }
+        return owner == me && m.expiresAt == nil
+    }
+
+    func caption(_ m: Media) -> String? { captions[m.pk] ?? m.caption }
+
+    func commentsDisabled(_ m: Media) -> Bool { commentsOff[m.pk] ?? m.commentsDisabled ?? false }
+
+    /// Turns commenting on or off for your post; shows at once, undone if Instagram refuses.
+    func setCommenting(_ enabled: Bool, on m: Media) {
+        let old = commentsOff[m.pk]
+        commentsOff[m.pk] = !enabled
+        Task {
+            do {
+                try await client.setCommentsEnabled(enabled, pk: m.pk)
+                app?.show(enabled ? "Commenting turned on" : "Commenting turned off")
+            } catch {
+                commentsOff[m.pk] = old
+                app?.report(error)
+            }
+        }
+    }
+
+    /// Saves a new caption for your post. True when Instagram took it.
+    func saveCaption(_ text: String, for m: Media) async -> Bool {
+        do {
+            try await client.editCaption(text, media: m)
+            captions[m.pk] = text
+            MediaDetailModel.updateCaption(pk: m.pk, text: text)
+            app?.show("Caption updated")
+            return true
+        } catch {
+            app?.report(error)
+            return false
+        }
+    }
+
+    /// Deletes your post or reel (after the dialog's confirmation).
+    func delete(_ m: Media) async -> Bool {
+        do {
+            try await client.deletePost(pk: m.pk)
+            app?.removedPost(m.pk)
+            app?.show(m.productType == "clips" ? "Reel deleted" : "Post deleted")
+            return true
+        } catch {
+            app?.report(error)
+            return false
+        }
+    }
+
     /// Your repost's note id: from this run's repost, the media's own notes, or else the
     /// media read again.
     /// Adds (or changes) the thought on your repost, as instagram.com's "Add a thought…" does.
@@ -297,6 +355,16 @@ struct PostMenu: View {
             Divider()
             Button(media.children.count > 1 ? "Download All (\(media.children.count))" : media.isVideo ? "Download Video" : "Download Photo") {
                 actions.download(media)
+            }
+            if actions.isMine(media) {
+                Divider()
+                Button("Edit Caption") { app.editingCaption = media }
+                if actions.commentsDisabled(media) {
+                    Button("Turn On Commenting") { actions.setCommenting(true, on: media) }
+                } else {
+                    Button("Turn Off Commenting") { actions.setCommenting(false, on: media) }
+                }
+                Button(media.productType == "clips" ? "Delete Reel…" : "Delete Post…", role: .destructive) { app.confirmingDelete = media }
             }
         }
     }

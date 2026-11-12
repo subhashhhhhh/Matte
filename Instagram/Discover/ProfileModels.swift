@@ -132,6 +132,18 @@ final class MediaFeed {
         }
     }
 
+    /// Page 1 again, in place of what's shown (one of your own posts was added).
+    func reload() async {
+        guard settled else { return }
+        stale = true
+        await loadMore()
+    }
+
+    func remove(pk: String) {
+        browser.remove(pk: pk)
+        firstPage?.removeAll { $0.pk == pk }
+    }
+
     func retry() async {
         guard !stale else { return await loadMore() }
         hasMore = true
@@ -315,6 +327,22 @@ final class ProfileModel: Identifiable {
             if let id { try await client.collectionPosts(id: id, maxId: cursor) } else { try await client.savedPosts(maxId: cursor) }
         }
         Task { await saved.loadIfNeeded() }
+    }
+
+    /// Your post or reel went up: the header (post count) and the grids are read again.
+    func reloadAfterChange() async {
+        snapshotSaved = false
+        async let header: Void = loadHeader()
+        async let grid: Void = posts.reload()
+        async let clips: Void = reels.reload()
+        _ = await (header, grid, clips)
+    }
+
+    /// One of your posts was deleted.
+    func remove(pk: String) {
+        for feed in [posts, reels, tagged, saved] { feed.remove(pk: pk) }
+        snapshotSaved = false
+        if let n = profile?.postCount { profile?.postCount = max(0, n - 1) }
     }
 
     /// Plays a highlight in the story viewer (the rest of the row follows it).

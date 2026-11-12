@@ -34,6 +34,13 @@ final class MediaBrowser {
         closeOpened()
     }
 
+    /// Takes a deleted post out (closing it if it's the one open).
+    func remove(pk: String) {
+        guard let i = items.firstIndex(where: { $0.pk == pk }) else { return }
+        if openedIndex == i { closeOpened() } else if let o = openedIndex, o > i { openedIndex = o - 1 }
+        items.remove(at: i)
+    }
+
     func open(at index: Int) {
         guard items.indices.contains(index) else { return }
         playing = nil

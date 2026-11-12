@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
@@ -32,6 +33,23 @@ struct RootView: View {
                     .transition(.opacity)
                     .zIndex(20)
             }
+            if let create = app.creating {
+                CreateSheet(model: create)
+                    .transition(.opacity)
+                    .zIndex(21)
+            }
+            if let media = app.editingCaption {
+                CaptionEditSheet(media: media)
+                    .id(media.pk)
+                    .transition(.opacity)
+                    .zIndex(22)
+            }
+            if let media = app.confirmingDelete {
+                DeletePostDialog(media: media)
+                    .id(media.pk)
+                    .transition(.opacity)
+                    .zIndex(23)
+            }
             if let stories = app.stories {
                 StoryViewer(model: stories)
                     .transition(.opacity)
@@ -52,6 +70,19 @@ struct RootView: View {
         .animation(Motion.pop, value: app.toast)
         .animation(.easeOut(duration: 0.2), value: app.stories == nil)
         .animation(.easeOut(duration: 0.16), value: app.sharing == nil)
+        .animation(.easeOut(duration: 0.16), value: app.creating == nil)
+        .animation(.easeOut(duration: 0.14), value: app.editingCaption == nil)
+        .animation(.easeOut(duration: 0.14), value: app.confirmingDelete == nil)
+        // Photos or videos dropped anywhere on the window open the create sheet with them
+        // (places that take files themselves, like a chat's composer, get them first).
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            guard app.authState == .signedIn, app.creating == nil else { return false }
+            Task {
+                let urls = await CreateSheet.urls(from: providers).filter(CreateMedia.isMedia)
+                if !urls.isEmpty { app.openCreate(urls) }
+            }
+            return true
+        }
         .animation(.easeOut(duration: 0.14), value: app.showSwitcher)
         .background(Theme.background)
         .ignoresSafeArea()

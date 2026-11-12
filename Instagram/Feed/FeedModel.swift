@@ -162,6 +162,16 @@ final class FeedModel {
         return true
     }
 
+    /// The stories tray alone, read again (you added a story).
+    func refreshTray() async {
+        guard var t = try? await client.storyTray() else { return }
+        if let me = app?.me, !t.contains(where: { $0.user.id == me.id }) {
+            t.insert(StoryReel(id: me.id, user: me, seen: true), at: 0)
+        }
+        tray = t
+        cache?.save(t.map { var r = $0; r.items = []; return r }, "tray")
+    }
+
     func refresh() async {
         guard !isLoading else { return }
         isLoading = true

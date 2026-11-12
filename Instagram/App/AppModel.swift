@@ -78,6 +78,12 @@ final class AppModel {
     var sharing: Media?
     /// Like/save/send/copy/download for posts and reels everywhere.
     private(set) var actions: PostActions?
+    /// The create sheet, when open.
+    private(set) var creating: CreateModel?
+    /// Your post whose caption is being edited.
+    var editingCaption: Media?
+    /// Your post waiting for "Delete?" to be confirmed.
+    var confirmingDelete: Media?
 
     private(set) var feed: FeedModel?
     private(set) var reels: ReelsModel?
@@ -184,6 +190,45 @@ final class AppModel {
         MemoryRelief.soon()
     }
 
+    // MARK: Creating
+
+    /// Opens the create sheet (with files dropped on the window or picked, if any). Files
+    /// dropped while it's open are added to it.
+    func openCreate(_ urls: [URL] = []) {
+        guard let client else { return }
+        stories?.close()
+        let model = creating ?? CreateModel(app: self, client: client)
+        creating = model
+        let media = urls.filter(CreateMedia.isMedia)
+        if !media.isEmpty { Task { await model.add(media) } }
+    }
+
+    func closeCreate() {
+        creating?.cancel()
+        creating = nil
+        MemoryRelief.soon()
+    }
+
+    /// A post, reel or story of yours went up: your profile (and stories) show it next time,
+    /// and an open profile of yours reloads now.
+    func created(_ media: Media?, story: Bool) {
+        refreshMyProfile()
+        if story { Task { await feed?.refreshTray() } }
+    }
+
+    /// One of your posts was deleted: it leaves your open profile's grids and the viewer.
+    func removedPost(_ pk: String) {
+        for case .profile(let model) in profiles { model.remove(pk: pk) }
+        if openedMedia?.pk == pk { openedMedia = nil }
+        if let me = viewerId { cache?.remove("profile-" + me) }
+    }
+
+    private func refreshMyProfile() {
+        guard let me = viewerId else { return }
+        cache?.remove("profile-" + me)
+        for case .profile(let model) in profiles where model.user.id == me { Task { await model.reloadAfterChange() } }
+    }
+
     func openChat(_ threadId: String) {
         destination = .messages
         inbox?.selectedId = threadId
@@ -219,6 +264,10 @@ final class AppModel {
         viewerId = nil
         actions = nil
         sharing = nil
+        creating?.cancel()
+        creating = nil
+        editingCaption = nil
+        confirmingDelete = nil
         stories = nil
         authState = .signedOut
     }

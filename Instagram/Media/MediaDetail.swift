@@ -94,6 +94,11 @@ final class MediaDetailModel: Identifiable {
     private static var recent: [String: MediaDetailModel] = [:]
     private static var order: [String] = []
 
+    /// Shows an edited caption wherever the post is open or cached.
+    static func updateCaption(pk: String, text: String) {
+        recent[pk]?.media?.caption = text.isEmpty ? nil : text
+    }
+
     /// Forgets every cached post (sign-out: the next account must not see this one's).
     static func clearCache() {
         recent = [:]
@@ -416,6 +421,15 @@ struct MediaDetailsColumn: View {
         HStack(spacing: 10) {
             AuthorLine(media: media, avatarSize: 34, fontSize: 13.5, subtitle: media.takenAt?.shortAge)
             Spacer()
+            if model.isRemote {
+                Menu { PostMenu(media: media) } label: {
+                    IGGlyph(icon: .more, size: 20).frame(width: 32, height: 28).contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("More")
+            }
         }
     }
 
