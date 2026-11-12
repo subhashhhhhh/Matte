@@ -76,6 +76,7 @@ struct QuickSwitcher: View {
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.background))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.panelStroke))
             .shadow(color: .black.opacity(0.35), radius: 30, y: 10)
+            .popIn(from: 0.95)
             .padding(.top, 90)
         }
         .onAppear { focused = true }

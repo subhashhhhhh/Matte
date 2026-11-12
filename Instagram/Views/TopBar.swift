@@ -37,13 +37,6 @@ struct TopBar: View {
                 .buttonStyle(.pressable)
                 .help("Notifications")
             }
-            if let me = app.me {
-                Button { app.openProfile(me) } label: {
-                    Avatar(url: me.avatar, size: 28)
-                }
-                .buttonStyle(.pressable)
-                .help("Your profile")
-            }
         }
         .padding(.horizontal, 20)
         .frame(height: 56)

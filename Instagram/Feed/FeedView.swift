@@ -53,11 +53,11 @@ struct FeedView: View {
                 PostLightbox(model: opened,
                              canPrevious: (model.openedIndex ?? 0) > 0,
                              canNext: (model.openedIndex ?? 0) < model.visible.count - 1,
-                             step: { model.step($0) }, close: { model.closeOpened() })
+                             step: { model.step($0) }, close: { withAnimation(Motion.hero) { model.closeOpened() } })
                     .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.16), value: model.opened == nil)
+        .environment(\.heroOpened, model.opened?.pk)
         .task { await model.loadIfNeeded() }
     }
 }
@@ -65,6 +65,7 @@ struct FeedView: View {
 /// Which feed (For you / Following / Favorites), above the grid.
 private struct FeedControls: View {
     @Bindable var model: FeedModel
+    @Namespace private var pill
 
     var body: some View {
         HStack(spacing: 8) {
@@ -72,12 +73,17 @@ private struct FeedControls: View {
             HStack(spacing: 2) {
                 ForEach(FeedSource.allCases) { source in
                     let on = model.source == source
-                    Button { model.source = source } label: {
+                    Button { withAnimation(Motion.slide) { model.source = source } } label: {
                         Text(source.title)
                             .font(.system(size: 13, weight: on ? .semibold : .medium))
                             .padding(.horizontal, 12)
                             .frame(height: 28)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(on ? Theme.selected : .clear))
+                            .background {
+                                if on {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.selected)
+                                        .matchedGeometryEffect(id: "feed-source", in: pill)
+                                }
+                            }
                             .foregroundStyle(on ? .primary : .secondary)
                     }
                     .buttonStyle(.pressable)
@@ -109,7 +115,7 @@ private struct Masonry: View {
                                  setPreviewing: { on in
                                      if on { model.playing = post.pk } else if model.playing == post.pk { model.playing = nil }
                                  },
-                                 open: { model.open(at: i) })
+                                 open: { withAnimation(Motion.hero) { model.open(at: i) } })
                             .onAppear {
                                 if i >= posts.count - 4 { Task { await model.loadMore() } }
                             }
@@ -135,6 +141,7 @@ private struct Masonry: View {
 /// A post opened over the grid: the media as large as the window allows, the caption and
 /// comments beside it. ←/→ step through the feed, Esc closes.
 struct PostLightbox: View {
+    @Environment(\.heroNamespace) private var heroNS
     let model: MediaDetailModel
     let canPrevious: Bool
     let canNext: Bool
@@ -156,6 +163,7 @@ struct PostLightbox: View {
                     if let media {
                         MediaStage(media: media, cornerRadius: 0)
                             .frame(width: stageH * aspect, height: stageH)
+                            .hero(model.pk, in: heroNS)
                     }
                     MediaDetailsColumn(model: model)
                         .frame(width: panel, height: stageH)

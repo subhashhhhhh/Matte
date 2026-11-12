@@ -6,7 +6,11 @@ import AVFoundation
 @Observable
 final class StoryViewerModel {
     private(set) var reels: [StoryReel]
-    private(set) var reelIndex: Int
+    private(set) var reelIndex: Int {
+        didSet { forward = reelIndex >= oldValue }
+    }
+    /// Which way the last move between accounts went (the cube turns that way).
+    private(set) var forward = true
     private(set) var itemIndex = 0
     /// 0…1 through the current item.
     private(set) var progress: Double = 0
@@ -261,13 +265,20 @@ struct StoryViewer: View {
                         NeighborCard(reel: model.reels[i], size: small).onTapGesture { model.jump(toReel: i) }
                     }
                     sideButton("chevron.left", enabled: model.reelIndex > 0 || model.itemIndex > 0) { model.previous() }
-                    card(width: width, height: height)
+                    ZStack {
+                        card(width: width, height: height)
+                            .id(model.reelIndex)
+                            .transition(.cube(forward: model.forward))
+                    }
+                    .frame(width: width, height: height)
                     sideButton("chevron.right", enabled: true) { model.next() }
                     ForEach(neighbors(before: false, count: fits), id: \.self) { i in
                         NeighborCard(reel: model.reels[i], size: small).onTapGesture { model.jump(toReel: i) }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .animation(Motion.page, value: model.reelIndex)
+                .popIn(from: 0.9)
             }
             VStack {
                 HStack {

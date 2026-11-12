@@ -23,7 +23,6 @@ struct ExploreView: View {
             }
         }
         .overlay { BrowserLightbox(browser: model.browser) }
-        .animation(.easeOut(duration: 0.16), value: model.browser.opened == nil)
         .task { await model.loadIfNeeded() }
     }
 }

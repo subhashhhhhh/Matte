@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
+    @Namespace private var heroNS
 
     var body: some View {
         @Bindable var app = app
@@ -49,10 +50,11 @@ struct RootView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.smooth(duration: 0.25), value: app.toast)
-        .animation(.easeOut(duration: 0.18), value: app.stories == nil)
-        .animation(.easeOut(duration: 0.15), value: app.sharing == nil)
-        .animation(.easeOut(duration: 0.12), value: app.showSwitcher)
+        .animation(Motion.pop, value: app.toast)
+        .animation(.easeOut(duration: 0.2), value: app.stories == nil)
+        .animation(.easeOut(duration: 0.16), value: app.sharing == nil)
+        .animation(.easeOut(duration: 0.14), value: app.showSwitcher)
+        .environment(\.heroNamespace, heroNS)
         .background(Theme.background)
         .ignoresSafeArea()
         .sheet(isPresented: $app.showSignIn) {
@@ -66,26 +68,24 @@ struct RootView: View {
         // only the visible one does any work (Reels pauses when hidden).
         ZStack {
             if let feed = app.feed, app.visited.contains(.home) {
-                FeedView(model: feed).opacity(app.destination == .home ? 1 : 0)
-                    .allowsHitTesting(app.destination == .home)
+                FeedView(model: feed).pageVisibility(app.destination == .home)
             }
             if let explore = app.explore, app.visited.contains(.explore) {
-                ExploreView(model: explore).opacity(app.destination == .explore ? 1 : 0)
-                    .allowsHitTesting(app.destination == .explore)
+                ExploreView(model: explore).pageVisibility(app.destination == .explore)
             }
             if let reels = app.reels, app.destination == .reels, app.profiles.isEmpty {
                 ReelsView(model: reels)
+                    .transition(.opacity.combined(with: .offset(y: Motion.reduced ? 0 : 10)))
             }
             if let inbox = app.inbox, app.visited.contains(.messages) {
-                MessagesView(model: inbox).opacity(app.destination == .messages ? 1 : 0)
-                    .allowsHitTesting(app.destination == .messages)
+                MessagesView(model: inbox).pageVisibility(app.destination == .messages)
             }
             // A profile opened from anywhere covers the page until you go back.
             if let page = app.profiles.last {
                 StackPageView(page: page)
                     .id(page.id)
                     .background(Theme.background)
-                    .transition(.opacity)
+                    .transition(.push)
             }
         }
         .overlay(alignment: .trailing) {
@@ -101,7 +101,8 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
-        .animation(.smooth(duration: 0.25), value: app.activity?.isOpen)
-        .animation(.easeOut(duration: 0.15), value: app.profiles.count)
+        .animation(Motion.page, value: app.activity?.isOpen)
+        .animation(Motion.page, value: app.profiles.count)
+        .animation(Motion.page, value: app.destination)
     }
 }

@@ -130,7 +130,9 @@ final class FeedModel {
         #if DEBUG
         // `-IGOpen post|story`: open the first post or a story on launch (for screenshots).
         switch UserDefaults.standard.string(forKey: "IGOpen") {
-        case "post": open(at: 0)
+        case "post":
+            try? await Task.sleep(for: .seconds(3))
+            withAnimation(Motion.hero) { open(at: 0) }
         case "story": app?.openStories(tray, at: min(3, max(0, tray.count - 1)))
         default: break
         }

@@ -12,6 +12,8 @@ struct PostTile: View {
 
     @State private var hovering = false
     @State private var hoverTask: Task<Void, Never>?
+    @Environment(\.heroNamespace) private var heroNS
+    @Environment(\.heroOpened) private var heroOpened
 
     /// Instagram's own limits: no taller than 4:5, no wider than 1.91:1.
     static func mediaAspect(_ post: Media) -> CGFloat { min(1.91, max(0.8, post.aspect)) }
@@ -34,6 +36,9 @@ struct PostTile: View {
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(hovering ? Theme.hover : Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.panelStroke))
+        .scaleEffect(hovering && !Motion.reduced ? 1.006 : 1)
+        .shadow(color: .black.opacity(hovering ? 0.18 : 0), radius: hovering ? 14 : 0, y: hovering ? 6 : 0)
+        .animation(.easeOut(duration: 0.25), value: hovering)
         .contentShape(Rectangle())
         .onTapGesture(perform: open)
         .contextMenu { PostMenu(media: post, open: open) }
@@ -72,6 +77,8 @@ struct PostTile: View {
         }
         .frame(width: w, height: w / Self.mediaAspect(post))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .hero(post.pk, in: heroNS, isSource: heroOpened != post.pk)
+        .opacity(heroOpened == post.pk ? 0 : 1)
         .overlay(alignment: .topTrailing) {
             if post.children.count > 1 {
                 badge("square.on.square.fill", text: "\(post.children.count)")

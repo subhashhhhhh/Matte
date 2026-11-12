@@ -94,16 +94,28 @@ struct MessagesView: View {
 
     @ViewBuilder
     private func conversationColumn(paneFits: Bool) -> some View {
-        if let user = model.newChatUser {
-            NewChatView(model: model, user: user)
-                .id("new-\(user.id)")
-        } else if let conversation = model.conversation {
-            ConversationView(model: conversation)
-                .id(conversation.thread.id)
-        } else {
-            EmptyState(symbol: "paperplane", title: "Your messages",
-                       message: "Pick a conversation on the left.")
+        // Switching chats: the new one slides in a little from the right as the old one fades.
+        ZStack {
+            if let user = model.newChatUser {
+                NewChatView(model: model, user: user)
+                    .id("new-\(user.id)")
+                    .transition(Self.chatTransition)
+            } else if let conversation = model.conversation {
+                ConversationView(model: conversation)
+                    .id(conversation.thread.id)
+                    .transition(Self.chatTransition)
+            } else {
+                EmptyState(symbol: "paperplane", title: "Your messages",
+                           message: "Pick a conversation on the left.")
+                    .transition(.opacity)
+            }
         }
+        .animation(Motion.page, value: model.selectedId)
+        .animation(Motion.page, value: model.newChatUser?.id)
+    }
+
+    private static var chatTransition: AnyTransition {
+        Motion.reduced ? .opacity : .asymmetric(insertion: .offset(x: 28).combined(with: .opacity), removal: .opacity)
     }
 
     private var items: [SharedItem] { SharedItem.items(in: model.conversation?.messages ?? []) }
@@ -147,6 +159,7 @@ extension EnvironmentValues {
 // MARK: - Thread list
 
 private struct ThreadList: View {
+    @Namespace private var selection
     let model: InboxModel
     @Binding var composing: Bool
     @State private var folder = Folder.chats
@@ -228,8 +241,9 @@ private struct ThreadList: View {
     }
 
     private func row(_ thread: DMThread) -> some View {
-        ThreadRow(thread: thread, selected: model.selectedId == thread.id, presence: model.presence(for: thread))
-            .onTapGesture { model.selectedId = thread.id }
+        ThreadRow(thread: thread, selected: model.selectedId == thread.id, presence: model.presence(for: thread),
+                  selection: selection)
+            .onTapGesture { withAnimation(Motion.slide) { model.selectedId = thread.id } }
     }
 }
 
@@ -237,6 +251,8 @@ private struct ThreadRow: View {
     let thread: DMThread
     let selected: Bool
     var presence: Presence?
+    /// The selection highlight glides between rows.
+    var selection: Namespace.ID?
     @State private var hovering = false
 
     /// Instagram's snippet sometimes already says "You…" ("You sent an attachment").
@@ -273,10 +289,17 @@ private struct ThreadRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(selected ? Theme.selected : hovering ? Theme.hover : .clear))
+        .background {
+            if selected {
+                let shape = RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.selected)
+                if let selection { shape.matchedGeometryEffect(id: "selected-thread", in: selection) } else { shape }
+            } else if hovering {
+                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.hover)
+            }
+        }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
     }
 }
 
@@ -302,6 +325,13 @@ struct ThreadAvatar: View {
 // MARK: - Conversation
 
 struct ConversationView: View {
+    /// A message arriving: grows out of its corner (yours from the right, theirs from the left).
+    static func arrival(mine: Bool) -> AnyTransition {
+        Motion.reduced ? .opacity : .asymmetric(
+            insertion: .scale(scale: 0.8, anchor: mine ? .bottomTrailing : .bottomLeading).combined(with: .opacity),
+            removal: .opacity)
+    }
+
     let model: ConversationModel
     @Environment(AppModel.self) private var app
     @Environment(\.sharedPaneToggle) private var togglePane
@@ -346,6 +376,7 @@ struct ConversationView: View {
                             MessageRow(message: message, model: model,
                                        showAvatar: showsAvatar(at: i))
                                 .id(message.id)
+                                .transition(Self.arrival(mine: message.senderId == model.viewerId))
                         }
                         if let status = deliveryStatus {
                             Text(status)
@@ -360,6 +391,8 @@ struct ConversationView: View {
                         Color.clear.frame(height: 8).id("bottom")
                     }
                     .padding(.horizontal, 16)
+                    // New messages pop in from their side (not the first load or older history).
+                    .animation(settled ? Motion.pop : nil, value: model.messages.last?.id)
                 }
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .scrollIndicators(.never)

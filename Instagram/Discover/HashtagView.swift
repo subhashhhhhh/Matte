@@ -22,7 +22,6 @@ struct HashtagView: View {
         }
         .scrollIndicators(.never)
         .overlay { BrowserLightbox(browser: model.feed.browser) }
-        .animation(.easeOut(duration: 0.16), value: model.feed.browser.opened == nil)
         .task { await model.start() }
     }
 

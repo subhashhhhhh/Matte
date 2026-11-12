@@ -35,6 +35,7 @@ struct ShareSheet: View {
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.background))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.panelStroke))
             .shadow(color: .black.opacity(0.3), radius: 30)
+            .popIn()
         }
         .task { await app.inbox?.loadIfNeeded() }
         .onAppear { searchFocused = true }

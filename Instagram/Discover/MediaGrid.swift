@@ -12,11 +12,12 @@ struct MediaGrid: View {
                 GridTile(media: media, isPreviewing: browser.playing == media.pk) { on in
                     if on { browser.playing = media.pk } else if browser.playing == media.pk { browser.playing = nil }
                 }
-                .onTapGesture { browser.open(at: i) }
-                .contextMenu { PostMenu(media: media) { browser.open(at: i) } }
+                .onTapGesture { withAnimation(Motion.hero) { browser.open(at: i) } }
+                .contextMenu { PostMenu(media: media) { withAnimation(Motion.hero) { browser.open(at: i) } } }
                 .onAppear { browser.appeared(i) }
             }
         }
+        .environment(\.heroOpened, browser.opened?.pk)
     }
 }
 
@@ -24,6 +25,8 @@ struct GridTile: View {
     let media: Media
     var isPreviewing: Bool
     var setPreviewing: (Bool) -> Void
+    @Environment(\.heroNamespace) private var heroNS
+    @Environment(\.heroOpened) private var heroOpened
     @State private var hovering = false
     @State private var hoverTask: Task<Void, Never>?
 
@@ -37,9 +40,13 @@ struct GridTile: View {
             .aspectRatio(3.0 / 4, contentMode: .fit)
             .overlay {
                 RemoteImage(url: media.image(minWidth: 480), contentMode: .fill)
+                    .scaleEffect(hovering && !Motion.reduced ? 1.04 : 1)
                 if isPreviewing, let url = previewVideo { HoverPreview(url: url) }
             }
             .clipped()
+            .animation(.easeOut(duration: 0.35), value: hovering)
+            .hero(media.pk, in: heroNS, isSource: heroOpened != media.pk)
+            .opacity(heroOpened == media.pk ? 0 : 1)
             .overlay(alignment: .topTrailing) {
                 Group {
                     if media.children.count > 1 {
@@ -98,7 +105,7 @@ struct BrowserLightbox: View {
             PostLightbox(model: opened,
                          canPrevious: (browser.openedIndex ?? 0) > 0,
                          canNext: (browser.openedIndex ?? 0) < browser.items.count - 1,
-                         step: { browser.step($0) }, close: { browser.closeOpened() })
+                         step: { browser.step($0) }, close: { withAnimation(Motion.hero) { browser.closeOpened() } })
                 .transition(.opacity)
         }
     }

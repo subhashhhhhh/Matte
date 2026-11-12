@@ -40,7 +40,6 @@ struct ProfileView: View {
         }
         .scrollIndicators(.never)
         .overlay { BrowserLightbox(browser: model.activeFeed.browser) }
-        .animation(.easeOut(duration: 0.16), value: model.activeFeed.browser.opened == nil)
         .overlay {
             if let list = model.followList {
                 FollowListPanel(model: list) { model.followList = nil }
@@ -260,7 +259,7 @@ struct ProfileTabBar: View {
         }
         .frame(maxWidth: .infinity)
         .overlay(alignment: .top) { Rectangle().fill(Theme.hairline).frame(height: 1) }
-        .animation(.smooth(duration: 0.22), value: selection)
+        .animation(Motion.slide, value: selection)
     }
 
     @ViewBuilder

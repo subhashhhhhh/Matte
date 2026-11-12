@@ -7,7 +7,13 @@ import AppKit
 @Observable
 final class ReelsModel {
     private(set) var items: [Media] = []
-    private(set) var index = 0
+    private(set) var index = 0 {
+        didSet { forward = index >= oldValue }
+    }
+    /// Which way the last move went (the next reel slides in from that side).
+    private(set) var forward = true
+    /// The reel `current` plays (an outgoing reel mid-slide shows its cover, not the new video).
+    private(set) var currentPk: String?
     private(set) var current: LoopingVideo?
     @ObservationIgnored private var upcoming: (pk: String, video: LoopingVideo)?
     private(set) var isLoading = false
@@ -76,6 +82,7 @@ final class ReelsModel {
             upcoming = nil
             current = reel.video(minWidth: 720).map { LoopingVideo(url: $0, muted: SoundSetting.shared.muted) }
         }
+        currentPk = reel.pk
         current?.isMuted = SoundSetting.shared.muted
         if isVisible { current?.play() }
         // Buffer the next one so swiping to it starts at once.
@@ -153,23 +160,30 @@ struct ReelsView: View {
 
     @ViewBuilder
     private func player(width: CGFloat, height: CGFloat, captionInPanel: Bool) -> some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack {
             Color.black
             if let reel = model.reel {
-                RemoteImage(url: reel.image(minWidth: 720), contentMode: .fit).id(reel.pk)
-                if let v = model.current {
-                    PlayerLayerView(player: v.player, gravity: .resizeAspect)
-                        .onTapGesture { v.toggle() }
-                    if !v.isPlaying {
-                        Image(systemName: "play.fill").font(.system(size: 30)).foregroundStyle(.white.opacity(0.85))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .allowsHitTesting(false)
+                // Each reel is its own card: moving slides the next one in, as swiping does.
+                ZStack(alignment: .bottomLeading) {
+                    Color.black
+                    RemoteImage(url: reel.image(minWidth: 720), contentMode: .fit)
+                    if let v = model.current, model.currentPk == reel.pk {
+                        PlayerLayerView(player: v.player, gravity: .resizeAspect)
+                            .onTapGesture { v.toggle() }
+                        if !v.isPlaying {
+                            Image(systemName: "play.fill").font(.system(size: 30)).foregroundStyle(.white.opacity(0.85))
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .allowsHitTesting(false)
+                        }
                     }
+                    info(reel, caption: !captionInPanel)
+                    if let v = model.current, model.currentPk == reel.pk { ScrubBar(video: v) }
                 }
-                info(reel, caption: !captionInPanel)
-                if let v = model.current { ScrubBar(video: v) }
+                .id(reel.pk)
+                .transition(.step(model.forward ? .bottom : .top, distance: max(height, 300) * 0.5))
             }
         }
+        .animation(Motion.page, value: model.index)
         .frame(width: max(width, 200), height: max(height, 300))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu { if let reel = model.reel { PostMenu(media: reel) } }

@@ -35,19 +35,31 @@ struct Sidebar: View {
                 .keyboardShortcut(d.shortcut)
             }
             Spacer()
-            Menu {
-                Button("Sign Out") { app.signOut() }
+            // You: opens your profile; right-click to sign out.
+            Button {
+                if let me = app.me { app.openProfile(me) }
             } label: {
-                Image(systemName: "person.crop.circle").font(.system(size: 19))
+                Group {
+                    if let me = app.me {
+                        let onMine = app.profiles.last?.id == me.id
+                        Avatar(url: me.avatar, size: 30)
+                            .padding(3)
+                            .overlay(Circle().strokeBorder(onMine ? Color.primary : .clear, lineWidth: 2))
+                    } else {
+                        Image(systemName: "person.crop.circle").font(.system(size: 22)).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 48, height: 48)
+                .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(width: 48, height: 44)
+            .buttonStyle(.pressable)
+            .help("Your profile")
+            .contextMenu { Button("Sign Out") { app.signOut() } }
             .padding(.bottom, 12)
         }
         .frame(width: 72)
         .frame(maxHeight: .infinity)
         .background(Theme.panel)
-        .animation(.smooth(duration: 0.25), value: app.destination)
+        .animation(Motion.slide, value: app.destination)
     }
 }
