@@ -59,6 +59,12 @@ final class AppModel {
 
     init() {
         if let session = IGSession.restore() { start(IGClient(session: session)) }
+        #if DEBUG
+        // `-IGStartPage home|reels|messages`: open on that page (for screenshots).
+        if let raw = UserDefaults.standard.string(forKey: "IGStartPage"), let d = Destination(rawValue: raw) {
+            destination = d
+        }
+        #endif
     }
 
     private func start(_ client: IGClient) {

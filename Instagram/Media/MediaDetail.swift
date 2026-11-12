@@ -278,8 +278,9 @@ struct CommentRow: View {
                         Text(t.shortAge).font(.system(size: 11.5)).foregroundStyle(.secondary)
                     }
                 }
-                Text(comment.text)
+                Text(comment.text.isEmpty ? "GIF" : comment.text)
                     .font(.system(size: 12.5))
+                    .foregroundStyle(comment.text.isEmpty ? .secondary : .primary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                 if comment.likeCount > 0 || comment.replyCount > 0 {

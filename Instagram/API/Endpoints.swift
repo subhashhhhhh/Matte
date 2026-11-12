@@ -61,7 +61,15 @@ extension IGClient {
     // MARK: DMs
 
     /// The inbox's first page, and the sequence id the real-time socket resumes from.
+    /// Loads the page config the DM variables are built from (device and messaging ids)
+    /// before they're read: on a cold start the first call would otherwise send them empty.
+    private func ensureDMConfig() async {
+        await prepare()
+        if page.dmDeviceId == nil || page.messagingId == nil { await scanPage("/direct/inbox/") }
+    }
+
     func inbox() async throws -> (threads: [DMThread], cursor: String?, hasMore: Bool, seqId: String?) {
+        await ensureDMConfig()
         let data = try await dmQuery("PolarisDirectInboxQuery", variables: [
             "device_id_for_iris_subscription": .string(page.dmDeviceId ?? ""),
             "__relay_internal__pv__IGDIsProfessionalAccountGKrelayprovider": false,
@@ -75,6 +83,7 @@ extension IGClient {
     }
 
     func olderThreads(cursor: String) async throws -> (threads: [DMThread], cursor: String?, hasMore: Bool) {
+        await ensureDMConfig()
         let data = try await dmQuery("IGDThreadListOffMsysPaginationQuery", variables: [
             "count": 15, "cursor": .string(cursor), "folder": "INBOX", "newer_than_timestamp_ms": nil,
             "id": .string(page.messagingId ?? ""),

@@ -9,8 +9,11 @@ final class FeedModel {
     private(set) var loadFailed = false
     private var cursor: String?
     private var hasMore = true
-    /// Post whose video is playing inline (one at a time).
+    /// Post whose video is previewing in the grid (one at a time).
     var playing: String?
+    /// The post opened large over the grid, and where it sits in `posts`.
+    private(set) var opened: MediaDetailModel?
+    private(set) var openedIndex: Int?
 
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let client: IGClient
@@ -44,8 +47,12 @@ final class FeedModel {
             app?.report(error)
         }
         if let t = await trayTask { tray = t }
-        // The feed's first page is short (ads and suggestions are left out): fill the screen.
-        if posts.count < 8 { await loadMore() }
+        // Feed pages are short (ads and suggestions are left out): fill a few grid rows.
+        var tries = 0
+        while posts.count < 12, hasMore, tries < 3 {
+            tries += 1
+            await loadMore()
+        }
     }
 
     func loadMore() async {
@@ -65,6 +72,25 @@ final class FeedModel {
     }
 
     private(set) var isLoadingMore = false
+
+    func open(at index: Int) {
+        guard posts.indices.contains(index) else { return }
+        playing = nil
+        openedIndex = index
+        opened = MediaDetailModel(pk: posts[index].pk, media: posts[index], client: client)
+        if posts.count - index < 4 { Task { await loadMore() } }
+    }
+
+    func step(_ delta: Int) {
+        guard let i = openedIndex else { return }
+        open(at: i + delta)
+    }
+
+    func closeOpened() {
+        opened = nil
+        openedIndex = nil
+        MemoryRelief.soon()
+    }
 
     /// Marks a reel in the tray seen after it was watched.
     func markSeen(_ reelId: String) {

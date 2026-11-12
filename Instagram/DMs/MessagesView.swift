@@ -140,6 +140,12 @@ private struct ThreadRow: View {
     let selected: Bool
     @State private var hovering = false
 
+    /// Instagram's snippet sometimes already says "You…" ("You sent an attachment").
+    private var snippet: String {
+        let text = thread.snippet ?? ""
+        return thread.lastSenderIsViewer && !text.hasPrefix("You") ? "You: " + text : text
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             ThreadAvatar(thread: thread, size: 50)
@@ -151,7 +157,7 @@ private struct ThreadRow: View {
                     if thread.users.count == 1, thread.users[0].isVerified { VerifiedBadge(size: 11) }
                 }
                 HStack(spacing: 4) {
-                    Text((thread.lastSenderIsViewer ? "You: " : "") + (thread.snippet ?? ""))
+                    Text(snippet)
                         .lineLimit(1)
                         .foregroundStyle(thread.isUnread ? .primary : .secondary)
                         .fontWeight(thread.isUnread ? .semibold : .regular)
