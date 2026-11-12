@@ -5,11 +5,13 @@ import Foundation
 /// X's response layout shifts often, so parsers navigate it with
 /// forgiving subscripts (missing keys yield `.null`) and recursive searches
 /// rather than strict `Decodable` models.
-nonisolated enum JSON: Sendable, Equatable {
+nonisolated enum JSON: Sendable {
     case object([String: JSON])
     case array([JSON])
     case string(String)
     case number(Double)
+    /// Integers are kept exact: Instagram ids ("pk") are 19 digits, more than a Double holds.
+    case integer(Int64)
     case bool(Bool)
     case null
 
@@ -25,7 +27,14 @@ nonisolated enum JSON: Sendable, Equatable {
         case let a as [Any]: self = .array(a.map(JSON.init(any:)))
         case let s as String: self = .string(s)
         case let n as NSNumber:
-            self = CFGetTypeID(n) == CFBooleanGetTypeID() ? .bool(n.boolValue) : .number(n.doubleValue)
+            if CFGetTypeID(n) == CFBooleanGetTypeID() {
+                self = .bool(n.boolValue)
+            } else if !CFNumberIsFloatType(n), n.compare(NSNumber(value: Int64.max)) != .orderedDescending,
+                      n.compare(NSNumber(value: Int64.min)) != .orderedAscending {
+                self = .integer(n.int64Value)
+            } else {
+                self = .number(n.doubleValue)
+            }
         default: self = .null
         }
     }
@@ -36,13 +45,27 @@ nonisolated enum JSON: Sendable, Equatable {
         case .array(let a): a.map(\.anyValue)
         case .string(let s): s
         case .number(let n): n
+        case .integer(let n): NSNumber(value: n)
         case .bool(let b): b
         case .null: NSNull()
         }
     }
 
+    /// Encodes the value. A bare scalar is written as a JSON fragment (JSONSerialization
+    /// would otherwise raise an Objective-C exception); NaN and infinity throw.
     func data() throws -> Data {
-        try JSONSerialization.data(withJSONObject: anyValue, options: [])
+        guard isEncodable else { throw CocoaError(.propertyListWriteInvalid) }
+        return try JSONSerialization.data(withJSONObject: anyValue, options: [.fragmentsAllowed])
+    }
+
+    /// False if a NaN or infinity is anywhere inside (JSONSerialization would raise for it).
+    private var isEncodable: Bool {
+        switch self {
+        case .number(let n): n.isFinite
+        case .object(let o): o.values.allSatisfy(\.isEncodable)
+        case .array(let a): a.allSatisfy(\.isEncodable)
+        default: true
+        }
     }
 
     // MARK: Navigation
@@ -61,11 +84,21 @@ nonisolated enum JSON: Sendable, Equatable {
     var double: Double? {
         switch self {
         case .number(let n): n
+        case .integer(let n): Double(n)
         case .string(let s): Double(s)
         default: nil
         }
     }
-    var int: Int? { double.map { Int($0) } }
+    /// The value as an integer: exact for integers and integer strings; nil for anything that
+    /// isn't a finite whole number in range (never a crash).
+    var int: Int? {
+        switch self {
+        case .integer(let n): Int(exactly: n)
+        case .number(let n): Int(exactly: n.rounded(.towardZero))
+        case .string(let s): Int(s) ?? Double(s).flatMap { Int(exactly: $0.rounded(.towardZero)) }
+        default: nil
+        }
+    }
     var bool: Bool? { if case .bool(let b) = self { b } else { nil } }
     var array: [JSON] { if case .array(let a) = self { a } else { [] } }
     var object: [String: JSON]? { if case .object(let o) = self { o } else { nil } }
@@ -81,12 +114,13 @@ nonisolated enum JSON: Sendable, Equatable {
         return out
     }
 
-    /// First value stored under `key`, anywhere in the tree.
+    /// First value stored under `key`, anywhere in the tree: the same one `all(key).first`
+    /// gives (sorted sibling keys, so it doesn't change between launches).
     func first(_ key: String) -> JSON? {
         switch self {
         case .object(let o):
             if let v = o[key] { return v }
-            for v in o.values { if let hit = v.first(key) { return hit } }
+            for k in o.keys.sorted() { if let hit = o[k]!.first(key) { return hit } }
             return nil
         case .array(let a):
             for v in a { if let hit = v.first(key) { return hit } }
@@ -110,6 +144,25 @@ nonisolated enum JSON: Sendable, Equatable {
     }
 }
 
+// MARK: Equality
+
+nonisolated extension JSON: Equatable {
+    /// `.integer(1)` equals `.number(1)`: the same JSON number, read two ways.
+    static func == (a: JSON, b: JSON) -> Bool {
+        switch (a, b) {
+        case (.object(let x), .object(let y)): x == y
+        case (.array(let x), .array(let y)): x == y
+        case (.string(let x), .string(let y)): x == y
+        case (.number(let x), .number(let y)): x == y
+        case (.integer(let x), .integer(let y)): x == y
+        case (.integer(let x), .number(let y)), (.number(let y), .integer(let x)): Double(x) == y && Int64(exactly: y) == x
+        case (.bool(let x), .bool(let y)): x == y
+        case (.null, .null): true
+        default: false
+        }
+    }
+}
+
 // MARK: Merging streamed parts
 
 nonisolated extension JSON {
@@ -128,6 +181,8 @@ nonisolated extension JSON {
         case (.object(var o), .string(let k)):
             o[k] = (o[k] ?? .null).merging(value, at: rest)
             return .object(o)
+        case (.array, .integer(let n)):
+            return merging(value, at: [.number(Double(n))] + rest)
         case (.array(var a), .number(let n)):
             // Only an existing index or the next one: a malformed part (negative, fractional
             // or huge index) is ignored rather than growing the array without bound.
@@ -138,7 +193,7 @@ nonisolated extension JSON {
             return .array(a)
         case (.null, .string(let k)):
             return .object([k: JSON.null.merging(value, at: rest)])
-        case (.null, .number):
+        case (.null, .number), (.null, .integer):
             return JSON.array([]).merging(value, at: path)
         default:
             return self
@@ -155,7 +210,7 @@ nonisolated extension JSON: ExpressibleByDictionaryLiteral, ExpressibleByArrayLi
     }
     init(arrayLiteral elements: JSON...) { self = .array(elements) }
     init(stringLiteral value: String) { self = .string(value) }
-    init(integerLiteral value: Int) { self = .number(Double(value)) }
+    init(integerLiteral value: Int) { self = .integer(Int64(value)) }
     init(booleanLiteral value: Bool) { self = .bool(value) }
     init(nilLiteral: ()) { self = .null }
 }

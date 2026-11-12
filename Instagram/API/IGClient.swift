@@ -67,6 +67,8 @@ actor IGClient {
     func prepare() async {
         if bootstrap == nil { bootstrap = Task { await loadAppPage() } }
         await bootstrap?.value
+        // The page didn't load (offline at launch): try again on the next request.
+        if page.dtsg == nil { bootstrap = nil }
     }
 
     /// The page's HTML, kept only while the probe asks for it.
@@ -187,10 +189,11 @@ actor IGClient {
     func rest(_ method: Method, _ path: String, query: [String: String] = [:], form: [String: String]? = nil) async throws -> JSON {
         await prepare()
         let full = path.hasPrefix("/") ? path : "/api/v1/" + path
-        var comps = URLComponents(string: Self.origin + full)!
+        guard var comps = URLComponents(string: Self.origin + full) else { throw IGError.api("Bad path \(path)") }
         if !query.isEmpty {
-            comps.percentEncodedQuery = query.sorted { $0.key < $1.key }
-                .map { "\($0.key)=\(Self.percentEncode($0.value))" }.joined(separator: "&")
+            // Added to any query already in `path`.
+            let added = query.sorted { $0.key < $1.key }.map { "\($0.key)=\(Self.percentEncode($0.value))" }
+            comps.percentEncodedQuery = ((comps.percentEncodedQuery.map { [$0] } ?? []) + added).joined(separator: "&")
         }
         var request = URLRequest(url: comps.url!)
         request.httpMethod = method.rawValue
@@ -198,8 +201,8 @@ actor IGClient {
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
             request.httpBody = Self.formBody(form)
         }
-        let json = try await send(request, path: full)
-        dump(full.replacingOccurrences(of: "/", with: "_"), json)
+        let json = try await send(request, path: comps.path)
+        dump(comps.path.replacingOccurrences(of: "/", with: "_"), json)
         return json
     }
 
