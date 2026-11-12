@@ -69,3 +69,23 @@ from the web app's scripts (`PolarisCreationAPI`, `PolarisCreationV2Actions`,
 - Seen but not used: `PolarisCreationEditRootQuery` (the edit dialog reads the post first),
   `PolarisPostOptionToggleProfileGridVisibilityRemoveMutation` (hide from grid),
   `useIGCreateNoncesMutation` (one-tap login nonces, unrelated to posting).
+
+## Story editor (Matte's own)
+
+Instagram edits nothing server-side: a story is one finished photo or video. instagram.com's
+web story flow takes a photo as is (phone mode only) and has no editor. Matte's editor
+(`Instagram/StoryEditor/`) flattens everything on its 9:16 canvas and uploads the result
+through the unchanged story path above (`CreateModel.shareFinishedStory` → `uploadPhoto`, or
+`uploadStoryVideo` + cover, then `configure_to_story`). Only the file differs:
+
+- Photo: 1080×1920 JPEG at the create flow's quality (0.92). The background is decoded only as
+  large as the canvas shows it.
+- Video: 1080×1920 H.264 MP4, AAC sound unless muted (muted = no audio track), the trimmed part
+  only (1 s to 60 s, `CreateMedia.maxStorySeconds`), cover = the frame at 1 s (as before).
+  Frames are drawn by a Core Image video composition with the same recipe as the photo
+  (gradient, placed and filtered picture, overlay). `AVVideoCompositionCoreAnimationTool` is
+  ignored by Core Image compositions (tried), so the overlay is composited in that pass.
+- Around a picture that isn't 9:16: a top-to-bottom gradient of its dominant colours, as
+  Instagram fills it. Filters are colour-only, so the screen-size preview matches the export.
+- Dry run (`-IGProbeCreate`, "story editor photo/video"): the same requests, headers, rupload
+  params and form fields as "story photo/video", with 1080×1920 sizes.
