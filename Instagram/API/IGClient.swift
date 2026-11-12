@@ -384,12 +384,12 @@ nonisolated struct WebPageConfig: Sendable {
 // MARK: - doc_id registry
 
 /// Relay query names → `doc_id`, read from instagram.com's scripts, which declare each as
-/// `__d("PolarisFooQuery_instagramRelayOperation",[],(function(a,b,c,d,e,f){e.exports="123"}),null)`.
+/// `__d("PolarisFooQuery_instagramRelayOperation",[],(function(t,n,r,o,a,i){a.exports="123"}),null)` (minified parameter names vary).
 nonisolated struct DocRegistry: Codable, Sendable {
     var docIds: [String: String] = [:]
     var scannedAt: Date?
 
-    private static let pattern = NSRegularExpression(#"__d\("([A-Za-z0-9_]+?)_(?:instagram)?RelayOperation",\[\],\(function\([^)]*\)\{e\.exports="(\d+)""#)
+    private static let pattern = NSRegularExpression(#"__d\("([A-Za-z0-9_]+?)_(?:instagram|facebook)?RelayOperation",\[\],\(function\([^)]*\)\{[A-Za-z_$]\.exports="(\d+)""#)
 
     /// Takes in every declaration in `script`; returns how many it found.
     mutating func absorb(script: String) -> Int {
