@@ -51,10 +51,12 @@ final class AppModel {
     private(set) var authState: AuthState = .signedOut
     private(set) var client: IGClient?
     var showSignIn = false
-    var destination: Destination = .messages {
+    /// Opens where you left it (Home the first time).
+    var destination: Destination = Destination(rawValue: UserDefaults.standard.string(forKey: "lastPage") ?? "") ?? .home {
         didSet {
             visited.insert(destination)
             profiles = []
+            UserDefaults.standard.set(destination.rawValue, forKey: "lastPage")
         }
     }
     /// Profiles and hashtags opened on top of the current page, newest last (Back pops one).
@@ -63,7 +65,7 @@ final class AppModel {
     private(set) var me: User?
     private(set) var viewerId: String?
     /// Pages opened at least once: only these are built (a page never visited loads nothing).
-    private(set) var visited: Set<Destination> = [.messages]
+    private(set) var visited: Set<Destination> = [Destination(rawValue: UserDefaults.standard.string(forKey: "lastPage") ?? "") ?? .home]
     /// The story viewer, when open.
     var stories: StoryViewerModel?
     /// A post opened from a DM or elsewhere, shown over the current page.
