@@ -25,6 +25,7 @@ targets:
         INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Subhash"
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         COMBINE_HIDPI_IMAGES: YES
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: NO
