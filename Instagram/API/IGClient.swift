@@ -38,6 +38,15 @@ actor IGClient {
 
     nonisolated static let origin = "https://www.instagram.com"
 
+    /// The web app posts most queries to `/api/graphql` (some, like the feed, to `/graphql/query`;
+    /// both accept either).
+    nonisolated static var graphQLPath: String {
+        #if DEBUG
+        if let p = UserDefaults.standard.string(forKey: "IGGQLPath") { return p }
+        #endif
+        return "/api/graphql"
+    }
+
     let session: IGSession
     private let http: URLSession
     private(set) var page = WebPageConfig()
@@ -150,7 +159,7 @@ actor IGClient {
             form["server_timestamps"] = "true"
             form["doc_id"] = docId
 
-            var request = URLRequest(url: URL(string: Self.origin + (UserDefaults.standard.string(forKey: "IGGQLPath") ?? "/graphql/query"))!)
+            var request = URLRequest(url: URL(string: Self.origin + Self.graphQLPath)!)
             request.httpMethod = "POST"
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
             request.httpBody = Self.formBody(form)
@@ -163,7 +172,8 @@ actor IGClient {
             #endif
             request.setValue(name, forHTTPHeaderField: "x-fb-friendly-name")
             if let lsd = page.lsd { request.setValue(lsd, forHTTPHeaderField: "x-fb-lsd") }
-            let json = try await send(request, path: "/api/graphql")
+            if let nonce = page.entryNonce { request.setValue(nonce, forHTTPHeaderField: "x-fb-entry-nonce") }
+            let json = try await send(request, path: Self.graphQLPath)
             dump(name, json)
             if json["data"].isNull, let message = json["errors"][0]["message"].string {
                 // A doc id from an old build answers with an error, not a 404.
@@ -180,6 +190,20 @@ actor IGClient {
             return json["data"]
         }
     }
+
+    #if DEBUG
+    /// Sends a captured web form as is (debug comparison of our form against the web app's).
+    func replay(form: [String: String], path: String) async throws -> JSON {
+        await prepare()
+        var request = URLRequest(url: URL(string: Self.origin + path)!)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Self.formBody(form)
+        if let name = form["fb_api_req_friendly_name"] { request.setValue(name, forHTTPHeaderField: "x-fb-friendly-name") }
+        if let lsd = form["lsd"] { request.setValue(lsd, forHTTPHeaderField: "x-fb-lsd") }
+        return try await send(request, path: path)
+    }
+    #endif
 
     // MARK: REST
 
@@ -215,15 +239,21 @@ actor IGClient {
         request.setValue(csrf, forHTTPHeaderField: "x-csrftoken")
         request.setValue(page.appId, forHTTPHeaderField: "x-ig-app-id")
         request.setValue(page.asbdId, forHTTPHeaderField: "x-asbd-id")
-        request.setValue(wwwClaim, forHTTPHeaderField: "x-ig-www-claim")
-        request.setValue("XMLHttpRequest", forHTTPHeaderField: "x-requested-with")
-        if let mid = await session.cookie("mid") { request.setValue(mid, forHTTPHeaderField: "x-mid") }
+        // The web app sends these on REST calls only, not on GraphQL.
+        if !path.hasSuffix("graphql") && !path.hasSuffix("/graphql/query") {
+            request.setValue(wwwClaim, forHTTPHeaderField: "x-ig-www-claim")
+            request.setValue("XMLHttpRequest", forHTTPHeaderField: "x-requested-with")
+        }
         request.setValue("0", forHTTPHeaderField: "X-IG-Max-Touch-Points")
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(Self.origin, forHTTPHeaderField: "Origin")
         request.setValue(Self.origin + "/", forHTTPHeaderField: "Referer")
         request.setValue("*/*", forHTTPHeaderField: "Accept")
         request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+        // What a browser adds to the web app's own requests; Meta's CSRF checks look for them.
+        request.setValue("empty", forHTTPHeaderField: "Sec-Fetch-Dest")
+        request.setValue("cors", forHTTPHeaderField: "Sec-Fetch-Mode")
+        request.setValue("same-origin", forHTTPHeaderField: "Sec-Fetch-Site")
 
         let (data, response) = try await http.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw IGError.badResponse }
@@ -373,6 +403,8 @@ nonisolated struct WebPageConfig: Sendable {
     /// `CurrentUserInitialData.USER_ID` ("0" for Instagram accounts), sent as `__user`.
     var user = "0"
     var jazoest: String?
+    /// `BootloaderConfig.nonce`, sent as `X-FB-Entry-Nonce` on GraphQL requests.
+    var entryNonce: String?
     var cometReq = "7"
     var dpr = "2"
     /// A random web session id for this run, `xxxxxx:xxxxxx:xxxxxx`.
@@ -400,6 +432,7 @@ nonisolated struct WebPageConfig: Sendable {
         actorId = first(#""actorID":"(\d+)""#)
         if let u = first(#""CurrentUserInitialData",\[\],\{[^}]*?"USER_ID":"(\d+)""#) { user = u }
         jazoest = first(#"[?&]jazoest=(\d+)"#)
+        entryNonce = first(#""BootloaderConfig",\[\],\{[^}]*?"nonce":"([^"]+)""#)
         if let c = first(#"[?&]__comet_req=(\d+)"#) { cometReq = c }
         if let pr = first(#""SiteData",\[\],\{[^}]*?"pr":([\d.]+)"#) { dpr = pr }
         let srcs = NSRegularExpression(#"<script[^>]+src="(https://static\.cdninstagram\.com/rsrc\.php/[^"]+)""#).captures(in: html)

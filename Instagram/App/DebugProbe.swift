@@ -32,6 +32,13 @@ enum DebugProbe {
             } else if let name = raw("IGProbeGQL") {
                 let vars = try JSON(data: Data((raw("IGProbeVars") ?? "{}").utf8))
                 json = ["data": try await client.graphQL(name, variables: vars, docId: raw("IGProbeDoc"))]
+            } else if let file = raw("IGProbeReplay") {
+                // `-IGProbeReplay <capture.json> [-IGProbeDrop 'k1,k2']`: replays a captured form.
+                let cap = try JSON(data: Data(contentsOf: URL(fileURLWithPath: file)))
+                var form = (cap["form"].object ?? [:]).compactMapValues(\.string)
+                for k in (raw("IGProbeDrop") ?? "").split(separator: ",") { form[String(k)] = nil }
+                let path = URL(string: cap["url"].string ?? "")?.path() ?? "/api/graphql"
+                json = try await client.replay(form: form, path: path)
             } else if d.bool(forKey: "IGProbePage") {
                 await client.reloadAppPage(keepHTML: true)
                 let dir = outURL.deletingLastPathComponent()

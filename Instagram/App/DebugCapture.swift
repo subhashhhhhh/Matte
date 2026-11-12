@@ -80,16 +80,18 @@ enum DebugCapture {
             const url = typeof input === 'string' ? input : input.url;
             const body = init && typeof init.body === 'string' ? init.body : '';
             const r = await of.apply(this, arguments);
-            if (interesting(url)) { r.clone().text().then(t => post({kind:'fetch', url, name: nameOf(body) || url.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(body), response: t.slice(0, 400000)})); }
+            if (interesting(url)) { r.clone().text().then(t => post({kind:'fetch', url, headers: (init && init.headers) ? JSON.parse(JSON.stringify(init.headers)) : {}, name: nameOf(body) || url.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(body), response: t.slice(0, 400000)})); }
             return r;
           };
           const oo = XMLHttpRequest.prototype.open, os = XMLHttpRequest.prototype.send;
-          XMLHttpRequest.prototype.open = function(m, u) { this.__u = u; this.__m = m; return oo.apply(this, arguments); };
+          XMLHttpRequest.prototype.open = function(m, u) { this.__u = u; this.__m = m; this.__h = {}; return oo.apply(this, arguments); };
+          const osh = XMLHttpRequest.prototype.setRequestHeader;
+          XMLHttpRequest.prototype.setRequestHeader = function(k, v) { if (this.__h) this.__h[k] = /token|csrf|lsd|claim/i.test(k) ? '<' + String(v).length + '>' : v; return osh.apply(this, arguments); };
           XMLHttpRequest.prototype.send = function(body) {
             const u = String(this.__u || '');
             if (interesting(u)) {
               const b = typeof body === 'string' ? body : '';
-              this.addEventListener('load', () => post({kind:'xhr', method:this.__m, url:u, name: nameOf(b) || u.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(b), response: String(this.responseText || '').slice(0, 400000)}));
+              this.addEventListener('load', () => post({kind:'xhr', method:this.__m, url:u, headers:this.__h, cookies: document.cookie.split('; ').map(c => c.split('=')[0]), name: nameOf(b) || u.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(b), response: String(this.responseText || '').slice(0, 400000)}));
             }
             return os.apply(this, arguments);
           };
