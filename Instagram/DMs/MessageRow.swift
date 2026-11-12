@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import AVFoundation
 
 struct MessageRow: View {
@@ -291,11 +292,90 @@ struct ShareCard: View {
     }
 }
 
+/// Photos and videos waiting to be sent, above the message box.
+private struct StagedTray: View {
+    let model: ConversationModel
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(model.staged) { m in
+                    RemoteImage(url: m.preview, contentMode: .fill)
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(alignment: .bottomLeading) {
+                            if m.isVideo {
+                                Image(systemName: "play.fill").font(.system(size: 10)).foregroundStyle(.white)
+                                    .padding(5).shadow(radius: 2)
+                            }
+                        }
+                        .overlay(alignment: .topTrailing) {
+                            Button { model.unstage(m.id) } label: {
+                                Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(.white)
+                                    .frame(width: 18, height: 18).background(Circle().fill(.black.opacity(0.6)))
+                            }
+                            .buttonStyle(.pressable)
+                            .padding(4)
+                            .help("Remove")
+                        }
+                }
+                if model.preparing > 0 {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel)
+                        .frame(width: 64, height: 64).overlay { Spinner(size: 14) }
+                }
+            }
+            .padding(.horizontal, 8)
+        }
+        .scrollIndicators(.never)
+    }
+}
+
+/// Instagram's "photo" glyph (a framed landscape), drawn in the current foreground style.
+struct PhotoGlyph: View {
+    var body: some View {
+        GeometryReader { g in
+            let s = min(g.size.width, g.size.height) / 24
+            ZStack(alignment: .topLeading) {
+                SVGPathShape(path: "M18.44 2.004A3.56 3.56 0 0 1 22 5.564v12.873a3.56 3.56 0 0 1-3.56 3.56H5.568a3.56 3.56 0 0 1-3.56-3.56V5.563a3.56 3.56 0 0 1 3.56-3.56Z M2.004 17.554l3.802-3.804a1.06 1.06 0 0 1 1.502 0l2.84 2.84a1.06 1.06 0 0 0 1.5 0l5.15-5.15a1.06 1.06 0 0 1 1.5 0l3.7 3.7",
+                             box: 24)
+                    .stroke(style: StrokeStyle(lineWidth: 2 * s, lineCap: .round, lineJoin: .round))
+                Circle().frame(width: 3.2 * s, height: 3.2 * s).offset(x: 5 * s, y: 5 * s)
+            }
+        }
+    }
+}
+
 /// The message box: Return sends, Option-Return adds a line.
 struct Composer: View {
     @Bindable var model: ConversationModel
     @FocusState private var focused: Bool
     @State private var typingStop: Task<Void, Never>?
+    @State private var pasteMonitor: Any?
+
+    private func pickFiles() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.image, .movie]
+        panel.message = "Photos and videos up to 25 MB"
+        panel.prompt = "Add"
+        let model = model
+        panel.begin { response in
+            if response == .OK { model.stage(files: panel.urls) }
+        }
+    }
+
+    /// Copied photo/video files, or image data, into the tray.
+    static func paste(into model: ConversationModel) {
+        let pb = NSPasteboard.general
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] {
+            let media = urls.filter(OutgoingMedia.isMediaFile)
+            if !media.isEmpty { model.stage(files: media); return }
+        }
+        for type in [NSPasteboard.PasteboardType.png, .tiff, .init("public.jpeg"), .init("public.heic")] {
+            if let data = pb.data(forType: type) { model.stage(imageData: data); return }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -310,27 +390,47 @@ struct Composer: View {
                 }
                 .padding(.horizontal, 10)
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Message…", text: $model.draft, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14))
-                    .lineLimit(1...6)
-                    .focused($focused)
-                    .onSubmit { Task { await model.send() } }
-                    .padding(.vertical, 9)
-                if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Button("Send") { Task { await model.send() } }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.link)
-                        .padding(.bottom, 9)
+            VStack(alignment: .leading, spacing: 0) {
+                if !model.staged.isEmpty || model.preparing > 0 { StagedTray(model: model).padding(.top, 10) }
+                HStack(alignment: .bottom, spacing: 8) {
+                    Button(action: pickFiles) {
+                        PhotoGlyph().frame(width: 22, height: 22).frame(width: 30, height: 36)
+                    }
+                    .buttonStyle(.pressable)
+                    .help("Add photos or videos")
+                    .disabled(model.staged.count >= ConversationModel.maxStaged)
+                    TextField(model.staged.isEmpty ? "Message…" : "Add a message…", text: $model.draft, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 14))
+                        .lineLimit(1...6)
+                        .focused($focused)
+                        .onSubmit { Task { await model.send() } }
+                        .padding(.vertical, 9)
+                    if model.canSend {
+                        Button("Send") { Task { await model.send() } }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.link)
+                            .padding(.bottom, 9)
+                    }
                 }
             }
-            .padding(.horizontal, 14)
+            .padding(.leading, 6)
+            .padding(.trailing, 14)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.panelStroke, lineWidth: 1.5))
         }
         .padding(12)
-        .onAppear { focused = true }
+        .onAppear {
+            focused = true
+            // ⌘V with a copied photo or video file puts it in the tray (text pastes as usual).
+            pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [model] event in
+                guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                      event.charactersIgnoringModifiers == "v", OutgoingMedia.pasteboardHasMedia() else { return event }
+                Composer.paste(into: model)
+                return nil
+            }
+        }
+        .onDisappear { if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }; pasteMonitor = nil }
         .onChange(of: model.replyingTo) { if model.replyingTo != nil { focused = true } }
         // Tell the other side we're typing; stop after 4 s without a keystroke, or when cleared.
         .onChange(of: model.draft) { _, draft in

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MessagesView: View {
     @Environment(AppModel.self) private var app
@@ -54,6 +55,11 @@ struct MessagesView: View {
                !model.threads[n].isUnread {
                 try? await Task.sleep(for: .seconds(3))
                 model.selectedId = model.threads[n].id
+                // `-IGStageFile <path>`: put a photo/video in that chat's composer (nothing is sent).
+                if let path = UserDefaults.standard.string(forKey: "IGStageFile") {
+                    try? await Task.sleep(for: .seconds(1))
+                    model.conversation?.stage(files: [URL(fileURLWithPath: path)])
+                }
             }
             #endif
         }
@@ -327,6 +333,47 @@ struct ConversationView: View {
             .overlay { if model.isLoading && model.messages.isEmpty { Spinner(size: 20) } }
             Composer(model: model)
         }
+        // Drop photos or videos anywhere on the chat to add them to the message.
+        .onDrop(of: [.fileURL, .image], isTargeted: $dropTargeted) { providers in
+            Self.accept(providers, into: model)
+        }
+        .overlay {
+            if dropTargeted {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Theme.link, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.background.opacity(0.85)))
+                    .overlay {
+                        VStack(spacing: 8) {
+                            PhotoGlyph().frame(width: 34, height: 34)
+                            Text("Drop to add to your message").font(.system(size: 14, weight: .semibold))
+                        }
+                    }
+                    .padding(10)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    @State private var dropTargeted = false
+
+    private static func accept(_ providers: [NSItemProvider], into model: ConversationModel) -> Bool {
+        var any = false
+        for p in providers {
+            if p.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                any = true
+                _ = p.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url, OutgoingMedia.isMediaFile(url) else { return }
+                    Task { @MainActor in model.stage(files: [url]) }
+                }
+            } else if p.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                any = true
+                p.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                    guard let data else { return }
+                    Task { @MainActor in model.stage(imageData: data) }
+                }
+            }
+        }
+        return any
     }
 
     private var header: some View {

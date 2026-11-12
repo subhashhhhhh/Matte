@@ -493,43 +493,106 @@ final class ConversationModel {
 
     // MARK: Actions
 
-    func send() async {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let viewerId else { return }
-        draft = ""
-        let reply = replyingTo
-        replyingTo = nil
-        let otid = OfflineThreadingId.next()
-        var local = DMMessage(id: "local-\(otid)", senderId: viewerId, sentAt: .now, body: .text(text))
-        local.pending = true
-        local.offlineId = otid
-        if let reply { local.replyTo = .init(id: reply.id, senderId: reply.senderId, text: reply.previewText) }
-        messages.append(local)
-        newestToken += 1
-        do {
-            let id = try await client.sendText(text, thread: thread.id, replyTo: reply?.id, offlineId: otid)
-            if let i = messages.firstIndex(where: { $0.offlineId == otid && $0.pending }) {
-                messages[i].pending = false
-                if let id { messages[i].id = id }
+    /// Photos and videos waiting in the composer; they go out with the next send.
+    private(set) var staged: [StagedMedia] = []
+    /// Files still being prepared for the tray.
+    private(set) var preparing = 0
+    /// Media we sent, by offline id, so a failed one can go back to the tray.
+    @ObservationIgnored private var outgoing: [String: StagedMedia] = [:]
+    static let maxStaged = 10
+
+    /// Adds photos or videos (picked or dropped files) to the composer.
+    func stage(files: [URL]) {
+        for url in files.prefix(Self.maxStaged - staged.count) {
+            preparing += 1
+            Task {
+                defer { preparing -= 1 }
+                do {
+                    let m = try await OutgoingMedia.prepare(file: url)
+                    if staged.count < Self.maxStaged { staged.append(m) }
+                } catch {
+                    inbox?.report(error)
+                }
             }
-            thread.snippet = text
-            thread.lastActivity = .now
-            thread.lastSenderIsViewer = true
-            inbox?.update(thread)
-        } catch {
-            if let i = messages.firstIndex(where: { $0.offlineId == otid }) {
-                messages[i].pending = false
-                messages[i].failed = true
-            }
-            inbox?.report(error)
         }
     }
 
-    /// Removes a failed message and puts its text back in the box.
+    /// Adds a pasted image to the composer.
+    func stage(imageData: Data) {
+        guard staged.count < Self.maxStaged else { return }
+        do { staged.append(try OutgoingMedia.prepare(imageData: imageData)) } catch { inbox?.report(error) }
+    }
+
+    func unstage(_ id: UUID) { staged.removeAll { $0.id == id } }
+
+    var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !staged.isEmpty }
+
+    /// Sends the composer: its photos and videos first (each its own message, shown at once
+    /// while it uploads), then the text.
+    func send() async {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let media = staged
+        guard !text.isEmpty || !media.isEmpty, let viewerId else { return }
+        draft = ""
+        staged = []
+        let reply = replyingTo
+        replyingTo = nil
+        // Everything appears right away, in order; then goes out one by one.
+        var queue: [(otid: String, media: StagedMedia?)] = []
+        for m in media { queue.append((OfflineThreadingId.next(), m)) }
+        if !text.isEmpty { queue.append((OfflineThreadingId.next(), nil)) }
+        // A reply quotes on the text if there is one, else on the first photo.
+        let replyOtid = text.isEmpty ? queue.first?.otid : queue.last?.otid
+        for item in queue {
+            var local = DMMessage(id: "local-\(item.otid)", senderId: viewerId, sentAt: .now,
+                                  body: item.media.map { .media([$0.attachment]) } ?? .text(text))
+            local.pending = true
+            local.offlineId = item.otid
+            if let reply, item.otid == replyOtid { local.replyTo = .init(id: reply.id, senderId: reply.senderId, text: reply.previewText) }
+            messages.append(local)
+            if let m = item.media { outgoing[item.otid] = m }
+        }
+        newestToken += 1
+        for item in queue {
+            let replyId = item.otid == replyOtid ? reply?.id : nil
+            do {
+                let id: String?
+                if let m = item.media {
+                    let attachment = try await client.uploadDMAttachment(file: m.file, mimeType: m.mimeType, isVideo: m.isVideo)
+                    id = try await client.sendMedia(attachmentId: attachment, thread: thread.id, replyTo: replyId, offlineId: item.otid)
+                } else {
+                    id = try await client.sendText(text, thread: thread.id, replyTo: replyId, offlineId: item.otid)
+                }
+                if let i = messages.firstIndex(where: { $0.offlineId == item.otid && $0.pending }) {
+                    messages[i].pending = false
+                    if let id { messages[i].id = id }
+                }
+                outgoing[item.otid] = nil
+                thread.snippet = item.media.map { $0.isVideo ? "You sent a video" : "You sent a photo" } ?? text
+                thread.lastActivity = .now
+                thread.lastSenderIsViewer = true
+                inbox?.update(thread)
+            } catch {
+                if let i = messages.firstIndex(where: { $0.offlineId == item.otid }) {
+                    messages[i].pending = false
+                    messages[i].failed = true
+                }
+                inbox?.report(error)
+            }
+        }
+    }
+
+    /// Removes a failed message and puts it back in the composer (text in the box, a photo or
+    /// video in the tray).
     func retry(_ message: DMMessage) {
-        guard case .text(let t) = message.body else { return }
-        messages.removeAll { $0.id == message.id }
-        draft = t
+        if case .text(let t) = message.body {
+            messages.removeAll { $0.id == message.id }
+            draft = t
+        } else if let otid = message.offlineId, let m = outgoing[otid] {
+            messages.removeAll { $0.id == message.id }
+            outgoing[otid] = nil
+            staged.append(m)
+        }
     }
 
     func toggleReaction(_ emoji: String, on message: DMMessage) async {
