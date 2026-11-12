@@ -1,0 +1,39 @@
+# Generate the Xcode project with: xcodegen generate
+name: Instagram
+options:
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+targets:
+  Instagram:
+    type: application
+    platform: macOS
+    sources:
+      - path: Instagram
+    settings:
+      base:
+        PRODUCT_NAME: Instagram
+        PRODUCT_BUNDLE_IDENTIFIER: com.subhash.Instagram
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Support/Info.plist
+        INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Subhash"
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        COMBINE_HIDPI_IMAGES: YES
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "6.0"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release:
+          SWIFT_COMPILATION_MODE: wholemodule
