@@ -21,7 +21,7 @@ enum DebugCapture {
 
     private static var keep: Recorder?
 
-    final class Recorder: NSObject, WKScriptMessageHandler {
+    final class Recorder: NSObject, WKScriptMessageHandler, NSWindowDelegate {
         let dir: URL
         var window: NSWindow?
         var web: WKWebView?
@@ -46,16 +46,36 @@ enum DebugCapture {
             config.userContentController.addUserScript(WKUserScript(source: Self.hook, injectionTime: .atDocumentStart, forMainFrameOnly: true))
             let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 900), configuration: config)
             web.customUserAgent = IGClient.userAgent
-            let window = NSWindow(contentRect: NSRect(x: -3000, y: -3000, width: 1280, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
+            // `-IGCaptureInteractive YES`: a normal window you use yourself (watch a story, like
+            // something…); everything the site sends is recorded until you close it.
+            let interactive = UserDefaults.standard.bool(forKey: "IGCaptureInteractive")
+            let window = interactive
+                ? NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 900), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+                : NSWindow(contentRect: NSRect(x: -3000, y: -3000, width: 1280, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
             window.contentView = web
-            window.orderFrontRegardless()
             self.web = web
             self.window = window
+            if interactive {
+                window.title = "Recording instagram.com — close this window when you're done"
+                window.delegate = self
+                window.center()
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                web.load(URLRequest(url: URL(string: IGClient.origin + (pages.first ?? "/"))!))
+                print("capture: interactive, close the window to finish")
+                return
+            }
+            window.orderFrontRegardless()
             for page in pages {
                 print("capture: \(page)")
                 web.load(URLRequest(url: URL(string: IGClient.origin + page)!))
                 try? await Task.sleep(for: .seconds(dwell))
             }
+            print("capture: \(count) requests")
+            exit(0)
+        }
+
+        func windowWillClose(_ notification: Notification) {
             print("capture: \(count) requests")
             exit(0)
         }
