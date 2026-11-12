@@ -66,6 +66,9 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `-IGRawDir <dir>` — raw responses and the (redacted) GraphQL form for each request.
 - `-IGStartPage home|reels|messages`, `-IGOpen post|story` — open on a page / open the first
   post or a story at launch (for screenshots; capture a window with `screencapture -l <id>`).
+- `-IGCapture <dir> -IGCaptureInteractive YES`: a visible, signed-in instagram.com window; the user
+  performs a write action themselves (watch a story, like…) and closes it; every request is recorded.
+  Prefer this over guessing write mutations from the scripts (the scripts' "obvious" one can be wrong).
 - `-IGCapture <dir> [-IGCapturePages '/,/reels/'] [-IGCaptureSeconds 12]` — loads the site in an
   off-screen web view with the session and records the web app's own API requests, and the
   first 40 WebSocket frames each way (hex) as `ws-send-*`/`ws-recv-*`.
