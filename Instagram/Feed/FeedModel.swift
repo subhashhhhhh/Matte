@@ -184,7 +184,11 @@ final class FeedModel {
             loadFailed = posts.isEmpty
             app?.report(error)
         }
-        if let t = await trayTask {
+        if var t = await trayTask {
+            // Your own story first, as "Your story" (the tray doesn't always include it).
+            if let me = app?.me, me.latestStory != nil, !t.contains(where: { $0.user.id == me.id }) {
+                t.insert(StoryReel(id: me.id, user: me, seen: true), at: 0)
+            }
             tray = t
             cache?.save(t.map { var r = $0; r.items = []; return r }, "tray")
         }

@@ -58,6 +58,9 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     /// Usernames Instagram names as likers when it has no profile pictures for them.
     var topLikers: [String] = []
     var repostCount: Int?
+    /// Your own story: how many people viewed it, and the first few of them.
+    var storyViewerCount: Int?
+    var storyViewers: [User] = []
     /// Reposts shown with the media (`media_notes.items`): who reposted it, and the repost's
     /// note id (removing your repost takes it).
     var repostNotes: [RepostNote] = []

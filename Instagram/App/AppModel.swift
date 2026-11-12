@@ -133,6 +133,12 @@ final class AppModel {
             viewerId = id
             me = try? await client.profile(id: id).user
             #if DEBUG
+            // `-IGOpenMyStory YES`: open your own story (to check the viewer list).
+            if UserDefaults.standard.bool(forKey: "IGOpenMyStory"), let me {
+                openStories([StoryReel(id: me.id, user: me, seen: true)], at: 0)
+            }
+            #endif
+            #if DEBUG
             // `-IGOpenProfileFor <query>`: search and open the first person found (screenshots).
             if let q = UserDefaults.standard.string(forKey: "IGOpenProfileFor"),
                let user = try? await client.search(q, sessionId: UUID().uuidString.lowercased()).users.first {

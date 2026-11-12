@@ -50,6 +50,12 @@ nonisolated enum Parser {
         }
         m.topLikers = j["top_likers"].array.compactMap(\.string)
         m.repostCount = j["media_repost_count"].int
+        m.storyViewerCount = j["viewer_count"].int ?? j["total_viewer_count"].int
+        m.storyViewers = j["viewers"].array.compactMap { u in
+            guard let id = idString(u["pk"]) ?? idString(u["id"]) else { return nil }
+            return User(id: id, username: u["username"].string ?? "", fullName: u["full_name"].string ?? "",
+                        avatar: u["profile_pic_url"].string.flatMap(URL.init(string:)))
+        }
         m.repostNotes = j["media_notes"]["items"].array.compactMap { n in
             guard let id = idString(n["id"]), let user = idString(n["user_id"]) else { return nil }
             return RepostNote(id: id, userId: user)

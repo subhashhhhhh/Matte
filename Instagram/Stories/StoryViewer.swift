@@ -99,7 +99,7 @@ final class StoryViewerModel {
     /// past doesn't count), once per item.
     private func markSeenSoon(_ item: Media, reelId: String) {
         seenTask?.cancel()
-        guard !markedSeen.contains(item.pk) else { return }
+        guard !markedSeen.contains(item.pk), reel.user.id != app?.viewerId else { return }
         #if DEBUG
         // Test launches never mark the user's stories as watched (only with `-IGMarkSeen YES`).
         guard UserDefaults.standard.bool(forKey: "IGMarkSeen") else { return }
@@ -215,6 +215,47 @@ final class StoryViewerModel {
 
     /// Whether you can reply to the current story (not your own).
     var canReply: Bool { item != nil && reel.user.id != app?.viewerId }
+    /// Your own story: show who saw it instead of a reply box.
+    var isOwn: Bool { item != nil && reel.user.id == app?.viewerId }
+
+    // MARK: Viewers (your own stories)
+
+    private(set) var viewers: [StoryViewerEntry] = []
+    private(set) var viewersTotal: Int?
+    private(set) var loadingViewers = false
+    var showingViewers = false {
+        didSet {
+            guard showingViewers != oldValue else { return }
+            if showingViewers {
+                if !paused { togglePause(); pausedForViewers = true }
+                Task { await loadViewers() }
+            } else if pausedForViewers {
+                if paused { togglePause() }
+                pausedForViewers = false
+            }
+        }
+    }
+    @ObservationIgnored private var pausedForViewers = false
+    @ObservationIgnored private var viewersFor: String?
+    @ObservationIgnored private var viewersCursor: String?
+
+    func loadViewers(more: Bool = false) async {
+        guard let item, isOwn, !loadingViewers else { return }
+        if viewersFor != item.pk { viewers = []; viewersTotal = nil; viewersCursor = nil; viewersFor = item.pk }
+        if more, viewersCursor == nil { return }
+        loadingViewers = true
+        defer { loadingViewers = false }
+        do {
+            let page = try await client.storyViewers(mediaPk: item.pk, cursor: more ? viewersCursor : nil)
+            guard viewersFor == item.pk else { return }
+            let known = Set(viewers.map(\.id))
+            viewers += page.viewers.filter { !known.contains($0.id) }
+            viewersTotal = page.total
+            viewersCursor = page.next
+        } catch {
+            app?.report(error)
+        }
+    }
 
     /// Replies to the current story (a DM to its owner): with text, or a quick reaction.
     func reply(text: String? = nil, emoji: String? = nil) async -> Bool {
@@ -430,6 +471,7 @@ struct StoryViewer: View {
                 header
                 Spacer()
                 if model.canReply { StoryReplyBar(model: model) }
+                if model.isOwn { SeenByButton(model: model) }
             }
             .padding(12)
             .background(alignment: .top) {
@@ -442,6 +484,14 @@ struct StoryViewer: View {
                 }
             }
         }
+        .overlay(alignment: .bottom) {
+            if model.showingViewers {
+                StoryViewersSheet(model: model)
+                    .frame(height: height * 0.62)
+                    .transition(.move(edge: .bottom))
+            }
+        }
+        .animation(Motion.pop, value: model.showingViewers)
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
@@ -522,5 +572,103 @@ private struct NeighborCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+    }
+}
+
+
+/// "Seen by N" with the first viewers' faces, under your own story.
+private struct SeenByButton: View {
+    let model: StoryViewerModel
+
+    var body: some View {
+        let item = model.item
+        Button { model.showingViewers = true } label: {
+            HStack(spacing: 8) {
+                HStack(spacing: -8) {
+                    ForEach(Array((item?.storyViewers ?? []).prefix(3).enumerated()), id: \.element.id) { i, u in
+                        Avatar(url: u.avatar, size: 24)
+                            .overlay(Circle().strokeBorder(.black, lineWidth: 1.5))
+                            .zIndex(Double(3 - i))
+                    }
+                }
+                Text(seenText(item?.storyViewerCount))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                Image(systemName: "chevron.up").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.8))
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(Capsule().fill(.black.opacity(0.45)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.pressable)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .help("Viewers")
+    }
+
+    private func seenText(_ n: Int?) -> String {
+        guard let n, n > 0 else { return "No viewers yet" }
+        return "Seen by \(n)"
+    }
+}
+
+/// Who viewed your story: likes marked with a red heart, replies shown under the name.
+private struct StoryViewersSheet: View {
+    let model: StoryViewerModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(model.viewersTotal.map { "\($0) \($0 == 1 ? "viewer" : "viewers")" } ?? "Viewers")
+                    .font(.system(size: 14, weight: .bold))
+                let likes = model.viewers.filter(\.liked).count
+                if likes > 0 {
+                    HStack(spacing: 3) {
+                        IGGlyph(icon: .heartFilled, size: 12).foregroundStyle(Theme.like)
+                        Text("\(likes)").font(.system(size: 12.5, weight: .semibold))
+                    }
+                    .padding(.leading, 6)
+                }
+                Spacer()
+                Button { model.showingViewers = false } label: {
+                    Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).frame(width: 28, height: 28)
+                }
+                .buttonStyle(.pressable)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 50)
+            Rectangle().fill(Theme.hairline).frame(height: 1)
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(model.viewers) { v in
+                        HStack(spacing: 10) {
+                            Avatar(url: v.user.avatar, size: 36)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(v.user.username).font(.system(size: 13.5, weight: .semibold))
+                                if let reply = v.reply {
+                                    Text("Replied: \(reply)").font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                                } else if !v.user.fullName.isEmpty {
+                                    Text(v.user.fullName).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                            }
+                            Spacer()
+                            if v.liked { IGGlyph(icon: .heartFilled, size: 16).foregroundStyle(Theme.like).help("Liked your story") }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .opensProfile(v.user)
+                        .onAppear { if v.id == model.viewers.last?.id { Task { await model.loadViewers(more: true) } } }
+                    }
+                    if model.loadingViewers { Spinner(size: 14).padding(12) }
+                    if !model.loadingViewers, model.viewers.isEmpty {
+                        Text("No one has viewed this yet").font(.system(size: 13)).foregroundStyle(.secondary).padding(24)
+                    }
+                }
+                .padding(.vertical, 6)
+            }
+            .scrollIndicators(.never)
+        }
+        .background(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16, style: .continuous).fill(Theme.background))
+        .environment(\.colorScheme, .dark)
     }
 }

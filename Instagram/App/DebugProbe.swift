@@ -30,7 +30,12 @@ enum DebugProbe {
                     let kv = pair.split(separator: "=", maxSplits: 1).map(String.init)
                     if kv.count == 2 { query[kv[0]] = kv[1].removingPercentEncoding ?? kv[1] }
                 }
-                json = try await client.rest(.get, path, query: query)
+                // `-IGProbePost YES`: send it as a form POST (read-only endpoints that use POST).
+                if UserDefaults.standard.bool(forKey: "IGProbePost") {
+                    json = try await client.rest(.post, path, form: query)
+                } else {
+                    json = try await client.rest(.get, path, query: query)
+                }
             } else if let name = raw("IGProbeGQL") {
                 let vars = try JSON(data: Data((raw("IGProbeVars") ?? "{}").utf8))
                 json = ["data": try await client.graphQL(name, variables: vars, docId: raw("IGProbeDoc"))]

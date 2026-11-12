@@ -168,6 +168,20 @@ extension IGClient {
         if liked, r["xig_send_story_like"].isNull { throw IGError.badResponse }
     }
 
+    /// Who viewed one of your stories, a page at a time: whether each liked it and any reply.
+    /// What instagram.com calls when you open a story's viewer list (a POST that only reads).
+    func storyViewers(mediaPk: String, cursor: String? = nil) async throws -> (viewers: [StoryViewerEntry], total: Int?, next: String?) {
+        var form = ["include_blacklist_sample": "true"]
+        if let cursor { form["max_id"] = cursor }
+        let json = try await rest(.post, "/api/v1/media/\(mediaPk)/list_reel_media_viewer/", form: form)
+        let viewers: [StoryViewerEntry] = json["viewers"].array.compactMap { v in
+            guard let user = Parser.user(v["user"]) else { return nil }
+            return StoryViewerEntry(user: user, liked: v["has_liked"].bool ?? false,
+                                    reply: v["reply_text"].string.flatMap { $0.isEmpty ? nil : $0 })
+        }
+        return (viewers, json["total_viewer_count"].int ?? json["user_count"].int, json["next_max_id"].string)
+    }
+
     func mediaInfo(pk: String) async throws -> Media {
         let json = try await rest(.get, "/api/v1/media/\(pk)/info/")
         guard let media = Parser.media(json["items"][0]) else { throw IGError.badResponse }
@@ -203,4 +217,13 @@ nonisolated extension Parser {
         }
         return c
     }
+}
+
+
+/// One person who viewed your story.
+nonisolated struct StoryViewerEntry: Identifiable, Hashable, Sendable {
+    var id: String { user.id }
+    var user: User
+    var liked: Bool
+    var reply: String?
 }
