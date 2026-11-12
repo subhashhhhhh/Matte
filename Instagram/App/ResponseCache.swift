@@ -142,7 +142,23 @@ extension Media {
     }
 }
 
+extension Media {
+    /// This post as a cache file keeps it: only the images `image(minWidth:)` can pick (the
+    /// ones in the post's own shape; Instagram also lists square crops of each size), which
+    /// halves the file.
+    var forCache: Media {
+        var m = self
+        let shaped = images.filter { r in
+            guard r.width > 0, r.height > 0, width > 1, height > 1 else { return false }
+            return abs(CGFloat(r.width) / CGFloat(r.height) - aspect) <= aspect * 0.03
+        }
+        if !shaped.isEmpty { m.images = shaped }
+        m.children = children.map(\.forCache)
+        return m
+    }
+}
+
 extension Array where Element == Media {
     /// What a cache file keeps of a page: the first `limit` posts with live links.
-    func cacheable(_ limit: Int) -> [Media] { Array(filter { !$0.linksExpired }.prefix(limit)) }
+    func cacheable(_ limit: Int) -> [Media] { filter { !$0.linksExpired }.prefix(limit).map(\.forCache) }
 }
