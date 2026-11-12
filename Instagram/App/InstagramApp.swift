@@ -16,9 +16,9 @@ struct InstagramApp: App {
             RootView()
                 .environment(app)
                 .tint(Theme.accent)
-                .frame(minWidth: 760, minHeight: 520)
+                .frame(minWidth: 860, minHeight: 560)
         }
-        .windowToolbarStyle(.unified)
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1180, height: 860)
     }
 }

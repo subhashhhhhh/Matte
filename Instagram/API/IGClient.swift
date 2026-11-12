@@ -74,11 +74,23 @@ actor IGClient {
     /// Reads instagram.com's page once for the tokens GraphQL needs (`fb_dtsg`, `lsd`, the
     /// build number) and its script list. Requests wait for it.
     func prepare() async {
-        if bootstrap == nil { bootstrap = Task { await loadAppPage() } }
+        if bootstrap == nil {
+            bootstrapAttempts += 1
+            lastBootstrap = .now
+            bootstrap = Task { await loadAppPage() }
+        }
         await bootstrap?.value
-        // The page didn't load (offline at launch): try again on the next request.
-        if page.dtsg == nil { bootstrap = nil }
+        if page.dtsg != nil {
+            bootstrapAttempts = 0
+        } else if bootstrapAttempts < 2 || Date.now.timeIntervalSince(lastBootstrap) > 60 {
+            // The page didn't load (offline at launch) or had no token: try again on the next
+            // request, then at most once a minute, so requests don't each fetch the page.
+            bootstrap = nil
+        }
     }
+
+    private var bootstrapAttempts = 0
+    private var lastBootstrap = Date.distantPast
 
     /// The page's HTML, kept only while the probe asks for it.
     private(set) var lastPageHTML: String?
@@ -140,7 +152,8 @@ actor IGClient {
 
     /// Reads another page of the site (the inbox, say) for the doc ids its scripts declare.
     /// Once per path per run.
-    func scanPage(_ path: String) async {
+    func scanPage(_ path: String, force: Bool = false) async {
+        if force { scannedPages.remove(path) }
         guard scannedPages.insert(path).inserted,
               let html = try? await fetchText(URL(string: Self.origin + path)!, accept: "text/html") else { return }
         _ = registry.absorb(script: html)
@@ -151,6 +164,14 @@ actor IGClient {
     }
 
     private var scannedPages = Set<String>()
+    /// DM queries whose doc id was already refreshed this run.
+    var healedDocs = Set<String>()
+
+    /// Drops a doc id that Instagram no longer accepts.
+    func forgetDoc(_ name: String) {
+        registry.docIds[name] = nil
+        registry.save()
+    }
 
     // MARK: GraphQL
 

@@ -1,0 +1,200 @@
+import SwiftUI
+
+struct MessagesView: View {
+    @Environment(AppModel.self) private var app
+    let model: InboxModel
+
+    var body: some View {
+        @Bindable var model = model
+        HStack(spacing: 0) {
+            ThreadList(model: model)
+                .frame(width: 320)
+            Rectangle().fill(Theme.hairline).frame(width: 1)
+            Group {
+                if let conversation = model.conversation {
+                    ConversationView(model: conversation)
+                        .id(conversation.thread.id)
+                } else {
+                    EmptyState(symbol: "paperplane", title: "Your messages",
+                               message: "Pick a conversation on the left.")
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .task { await model.loadIfNeeded() }
+    }
+}
+
+// MARK: - Thread list
+
+private struct ThreadList: View {
+    let model: InboxModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Messages").font(.system(size: 20, weight: .bold))
+                Spacer()
+                if model.isLoading { Spinner(size: 14) }
+                ChromeButton("Refresh", symbol: "arrow.clockwise") { Task { await model.refresh() } }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 56)
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(model.threads) { thread in
+                        ThreadRow(thread: thread, selected: model.selectedId == thread.id)
+                            .onTapGesture { model.selectedId = thread.id }
+                            .onAppear {
+                                if thread.id == model.threads.last?.id { Task { await model.loadMore() } }
+                            }
+                    }
+                }
+                .padding(.horizontal, 8)
+            }
+            .scrollIndicators(.never)
+            .overlay {
+                if model.threads.isEmpty, model.loadFailed {
+                    EmptyState(symbol: "wifi.exclamationmark", title: "Couldn't load messages", actionTitle: "Try Again") {
+                        Task { await model.refresh() }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ThreadRow: View {
+    let thread: DMThread
+    let selected: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ThreadAvatar(thread: thread, size: 50)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Text(thread.title)
+                        .font(.system(size: 14, weight: thread.isUnread ? .bold : .medium))
+                        .lineLimit(1)
+                    if thread.users.count == 1, thread.users[0].isVerified { VerifiedBadge(size: 11) }
+                }
+                HStack(spacing: 4) {
+                    Text((thread.lastSenderIsViewer ? "You: " : "") + (thread.snippet ?? ""))
+                        .lineLimit(1)
+                        .foregroundStyle(thread.isUnread ? .primary : .secondary)
+                        .fontWeight(thread.isUnread ? .semibold : .regular)
+                    if let t = thread.lastActivity {
+                        Text("· \(t.shortAge)").foregroundStyle(.secondary).fixedSize()
+                    }
+                }
+                .font(.system(size: 12.5))
+            }
+            Spacer(minLength: 0)
+            if thread.isMuted { Image(systemName: "bell.slash").font(.system(size: 11)).foregroundStyle(.secondary) }
+            if thread.isUnread { Circle().fill(Theme.link).frame(width: 8, height: 8) }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(selected ? Theme.selected : hovering ? Theme.hover : .clear))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+    }
+}
+
+struct ThreadAvatar: View {
+    let thread: DMThread
+    var size: CGFloat
+
+    var body: some View {
+        if thread.isGroup, thread.users.count >= 2, thread.imageURL == nil {
+            ZStack(alignment: .bottomTrailing) {
+                Avatar(url: thread.users[0].avatar, size: size * 0.7)
+                    .frame(width: size, height: size, alignment: .topLeading)
+                Avatar(url: thread.users[1].avatar, size: size * 0.7)
+                    .overlay(Circle().strokeBorder(Theme.background, lineWidth: 2))
+            }
+            .frame(width: size, height: size)
+        } else {
+            Avatar(url: thread.imageURL ?? thread.users.first?.avatar, size: size)
+        }
+    }
+}
+
+// MARK: - Conversation
+
+struct ConversationView: View {
+    let model: ConversationModel
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Rectangle().fill(Theme.hairline).frame(height: 1)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        if model.hasOlder {
+                            Color.clear.frame(height: 1)
+                                .onAppear { Task { await model.loadOlder() } }
+                            if model.loadingOlder { Spinner(size: 14).padding(8) }
+                        }
+                        ForEach(Array(model.messages.enumerated()), id: \.element.id) { i, message in
+                            if showsTime(at: i) {
+                                Text(message.sentAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.vertical, 10)
+                            }
+                            MessageRow(message: message, model: model,
+                                       showAvatar: showsAvatar(at: i))
+                                .id(message.id)
+                        }
+                        Color.clear.frame(height: 8).id("bottom")
+                    }
+                    .padding(.horizontal, 16)
+                }
+                .defaultScrollAnchor(.bottom)
+                .scrollIndicators(.never)
+                .onChange(of: model.newestToken) {
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+            }
+            .overlay { if model.isLoading && model.messages.isEmpty { Spinner(size: 20) } }
+            Composer(model: model)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            ThreadAvatar(thread: model.thread, size: 34)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(model.thread.title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                if !model.thread.isGroup, let u = model.thread.users.first, u.fullName != model.thread.title {
+                    Text(u.username).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if let key = model.thread.threadKey, let url = URL(string: "https://www.instagram.com/direct/t/\(key)/") {
+                ChromeButton("Open on Instagram", symbol: "arrow.up.right") { NSWorkspace.shared.open(url) }
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 56)
+    }
+
+    /// A time label before a message that comes 30+ minutes after the previous one.
+    private func showsTime(at i: Int) -> Bool {
+        guard i > 0 else { return true }
+        return model.messages[i].sentAt.timeIntervalSince(model.messages[i - 1].sentAt) > 1800
+    }
+
+    /// The sender's avatar on the last of a run of their messages.
+    private func showsAvatar(at i: Int) -> Bool {
+        let m = model.messages[i]
+        guard m.senderId != model.viewerId else { return false }
+        guard i + 1 < model.messages.count else { return true }
+        return model.messages[i + 1].senderId != m.senderId || showsTime(at: i + 1)
+    }
+}

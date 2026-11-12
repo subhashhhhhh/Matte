@@ -1,7 +1,37 @@
 import SwiftUI
 import OSLog
 
-/// Central state: the session, the API client and navigation.
+enum Destination: String, CaseIterable, Identifiable {
+    case home, reels, messages
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .home: "Home"
+        case .reels: "Reels"
+        case .messages: "Messages"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .home: "house"
+        case .reels: "play.rectangle.on.rectangle"
+        case .messages: "paperplane"
+        }
+    }
+
+    var shortcut: KeyEquivalent {
+        switch self {
+        case .home: "1"
+        case .reels: "2"
+        case .messages: "3"
+        }
+    }
+}
+
+/// Central state: the session, the API client, navigation and the page models (kept alive
+/// while you switch between them, so each keeps its place).
 @Observable
 final class AppModel {
     enum AuthState: Equatable { case signedOut, signedIn }
@@ -9,21 +39,35 @@ final class AppModel {
     private(set) var authState: AuthState = .signedOut
     private(set) var client: IGClient?
     var showSignIn = false
+    var destination: Destination = .messages
+    /// The story viewer, when open.
+    var stories: StoryViewerModel?
+    /// A post opened from a DM or elsewhere, shown over the current page.
+    var openedMedia: Media?
+    /// Shown as a small banner (errors, "copied").
+    var toast: String?
+
+    private(set) var feed: FeedModel?
+    private(set) var reels: ReelsModel?
+    private(set) var inbox: InboxModel?
 
     @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "App")
 
     init() {
-        if let session = IGSession.restore() {
-            client = IGClient(session: session)
-            authState = .signedIn
-        }
+        if let session = IGSession.restore() { start(IGClient(session: session)) }
+    }
+
+    private func start(_ client: IGClient) {
+        self.client = client
+        authState = .signedIn
+        feed = FeedModel(app: self, client: client)
+        reels = ReelsModel(app: self, client: client)
+        inbox = InboxModel(app: self, client: client)
     }
 
     func completeSignIn(_ cookies: [StoredCookie]) {
         SessionStore.shared.save(cookies)
-        let session = IGSession(cookies: cookies)
-        client = IGClient(session: session)
-        authState = .signedIn
+        start(IGClient(session: IGSession(cookies: cookies)))
         showSignIn = false
         log.info("Signed in")
     }
@@ -32,7 +76,37 @@ final class AppModel {
         let old = client
         Task { await old?.session.end() }
         SessionStore.shared.clear()
+        inbox?.stop()
         client = nil
+        feed = nil
+        reels = nil
+        inbox = nil
+        stories = nil
         authState = .signedOut
+    }
+
+    /// Handles an error from any page: a dead session signs out, the rest become a toast.
+    func report(_ error: Error) {
+        if case IGError.signedOut = error {
+            signOut()
+            showSignIn = true
+            return
+        }
+        if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+        show(error.localizedDescription)
+    }
+
+    func show(_ message: String) {
+        toast = message
+        let shown = message
+        Task {
+            try? await Task.sleep(for: .seconds(4))
+            if toast == shown { toast = nil }
+        }
+    }
+
+    func openStories(_ tray: [StoryReel], at index: Int) {
+        guard let client, tray.indices.contains(index) else { return }
+        stories = StoryViewerModel(app: self, client: client, reels: tray, start: index)
     }
 }

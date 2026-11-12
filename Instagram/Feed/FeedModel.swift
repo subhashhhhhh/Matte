@@ -1,0 +1,74 @@
+import SwiftUI
+
+/// The home feed and the stories tray above it.
+@Observable
+final class FeedModel {
+    private(set) var posts: [Media] = []
+    private(set) var tray: [StoryReel] = []
+    private(set) var isLoading = false
+    private(set) var loadFailed = false
+    private var cursor: String?
+    private var hasMore = true
+    /// Post whose video is playing inline (one at a time).
+    var playing: String?
+
+    @ObservationIgnored private weak var app: AppModel?
+    @ObservationIgnored private let client: IGClient
+    @ObservationIgnored private var loadedOnce = false
+
+    init(app: AppModel, client: IGClient) {
+        self.app = app
+        self.client = client
+    }
+
+    func loadIfNeeded() async {
+        guard !loadedOnce else { return }
+        loadedOnce = true
+        await refresh()
+    }
+
+    func refresh() async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        async let trayTask = try? client.storyTray()
+        do {
+            let page = try await client.homeFeed()
+            // A failed refresh keeps what's shown.
+            posts = page.items
+            cursor = page.cursor
+            hasMore = page.hasMore
+            loadFailed = false
+        } catch {
+            loadFailed = posts.isEmpty
+            app?.report(error)
+        }
+        if let t = await trayTask { tray = t }
+        // The feed's first page is short (ads and suggestions are left out): fill the screen.
+        if posts.count < 8 { await loadMore() }
+    }
+
+    func loadMore() async {
+        guard hasMore, let cursor, !isLoadingMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        do {
+            let page = try await client.homeFeed(after: cursor)
+            let known = Set(posts.map(\.pk))
+            posts += page.items.filter { !known.contains($0.pk) }
+            // A failed "load more" keeps its cursor so it can be retried.
+            self.cursor = page.cursor
+            hasMore = page.hasMore && page.cursor != nil
+        } catch {
+            app?.report(error)
+        }
+    }
+
+    private(set) var isLoadingMore = false
+
+    /// Marks a reel in the tray seen after it was watched.
+    func markSeen(_ reelId: String) {
+        guard let i = tray.firstIndex(where: { $0.id == reelId }) else { return }
+        tray[i].seen = true
+    }
+}

@@ -156,7 +156,16 @@ extension IGClient {
         await prepare()
         if knownOperations()[name] == nil { await scanPage("/direct/inbox/") }
         let doc = knownOperations()[name] ?? Self.fallbackDocIds[name]
-        return try await graphQL(name, variables: variables, docId: doc)
+        do {
+            return try await graphQL(name, variables: variables, docId: doc)
+        } catch IGError.api(let message) where !healedDocs.contains(name) {
+            // A doc id from an older web build: read the inbox page's scripts again, once.
+            healedDocs.insert(name)
+            forgetDoc(name)
+            await scanPage("/direct/inbox/", force: true)
+            guard let fresh = knownOperations()[name], fresh != doc else { throw IGError.api(message) }
+            return try await graphQL(name, variables: variables, docId: fresh)
+        }
     }
 
     /// Last known DM doc ids (from the web app on 2026-11-12, else from mautrix-instagram).
