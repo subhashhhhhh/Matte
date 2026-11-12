@@ -4,3 +4,4 @@ DerivedData/
 build/
 references/
 *.xcuserstate
+*.profraw

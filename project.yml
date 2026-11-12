@@ -37,3 +37,34 @@ targets:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
         Release:
           SWIFT_COMPILATION_MODE: wholemodule
+  # Independent test suite (written separately from the app). Swift Testing, hosted in the app.
+  InstagramTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: InstagramTests
+    dependencies:
+      - target: Instagram
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        PRODUCT_BUNDLE_IDENTIFIER: com.subhash.InstagramTests
+schemes:
+  Instagram:
+    build:
+      targets:
+        Instagram: all
+        InstagramTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [InstagramTests]
+      # Tests read and write Application Support (session.json, operations.json). Point the
+      # home folder somewhere disposable so they can never touch the real signed-in session.
+      environmentVariables:
+        CFFIXED_USER_HOME: $(PROJECT_TEMP_DIR)/TestHome

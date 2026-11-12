@@ -110,6 +110,42 @@ nonisolated enum JSON: Sendable, Equatable {
     }
 }
 
+// MARK: Merging streamed parts
+
+nonisolated extension JSON {
+    /// Places `value` at `path` (object keys and array indices). An object there gets
+    /// `value`'s keys merged in; anything else is replaced.
+    func merging(_ value: JSON, at path: [JSON], label: String? = nil) -> JSON {
+        guard let head = path.first else {
+            if case .object(var mine) = self, case .object(let theirs) = value {
+                for (k, v) in theirs { mine[k] = v }
+                return .object(mine)
+            }
+            return value
+        }
+        let rest = Array(path.dropFirst())
+        switch (self, head) {
+        case (.object(var o), .string(let k)):
+            o[k] = (o[k] ?? .null).merging(value, at: rest)
+            return .object(o)
+        case (.array(var a), .number(let n)):
+            // Only an existing index or the next one: a malformed part (negative, fractional
+            // or huge index) is ignored rather than growing the array without bound.
+            guard n >= 0, n.rounded() == n, n <= Double(a.count) else { return self }
+            let i = Int(n)
+            if i == a.count { a.append(.null) }
+            a[i] = a[i].merging(value, at: rest)
+            return .array(a)
+        case (.null, .string(let k)):
+            return .object([k: JSON.null.merging(value, at: rest)])
+        case (.null, .number):
+            return JSON.array([]).merging(value, at: path)
+        default:
+            return self
+        }
+    }
+}
+
 // MARK: Literals (for building request bodies)
 
 nonisolated extension JSON: ExpressibleByDictionaryLiteral, ExpressibleByArrayLiteral,

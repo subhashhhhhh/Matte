@@ -24,7 +24,7 @@ nonisolated enum IGError: LocalizedError, Sendable, Equatable {
 }
 
 /// Talks to instagram.com's own web API with the signed-in session's cookies: the REST
-/// endpoints under `/api/v1/` and the Relay GraphQL endpoint (`/graphql/query`) the web app
+/// endpoints under `/api/v1/` and the Relay GraphQL endpoint (`/api/graphql`) the web app
 /// uses. GraphQL queries are addressed by `doc_id`s, read from instagram.com's scripts and
 /// refreshed when Instagram ships a new build.
 actor IGClient {
@@ -46,7 +46,7 @@ actor IGClient {
     private var pageReloadedAt: Date?
     /// Sent back as `x-ig-www-claim`; Instagram hands out a new one in `x-ig-set-www-claim`.
     private var wwwClaim = "0"
-    private var requestCounter = 0
+    private var requestCounter = 1
     private let log = Logger(subsystem: "com.subhash.Instagram", category: "API")
 
     init(session: IGSession, configuration: URLSessionConfiguration = .ephemeral) {
@@ -148,14 +148,20 @@ actor IGClient {
             form["server_timestamps"] = "true"
             form["doc_id"] = docId
 
-            var request = URLRequest(url: URL(string: Self.origin + "/graphql/query")!)
+            var request = URLRequest(url: URL(string: Self.origin + (UserDefaults.standard.string(forKey: "IGGQLPath") ?? "/graphql/query"))!)
             request.httpMethod = "POST"
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
             request.httpBody = Self.formBody(form)
+            #if DEBUG
+            if let dir = UserDefaults.standard.string(forKey: "IGRawDir") {
+                let secret: Set = ["fb_dtsg", "lsd", "jazoest", "av", "__hs"]
+                let shown = form.sorted { $0.key < $1.key }.map { "\($0.key)=\(secret.contains($0.key) ? "<\($0.value.count) chars>" : $0.value)" }
+                try? shown.joined(separator: "\n").write(to: URL(fileURLWithPath: dir).appending(path: "form-\(name).txt"), atomically: true, encoding: .utf8)
+            }
+            #endif
             request.setValue(name, forHTTPHeaderField: "x-fb-friendly-name")
             if let lsd = page.lsd { request.setValue(lsd, forHTTPHeaderField: "x-fb-lsd") }
-            request.setValue("RelayModern", forHTTPHeaderField: "x-fb-request-analytics-tags")
-            let json = try await send(request, path: "/graphql/query")
+            let json = try await send(request, path: "/api/graphql")
             dump(name, json)
             if json["data"].isNull, let message = json["errors"][0]["message"].string {
                 // A doc id from an old build answers with an error, not a 404.
@@ -208,6 +214,8 @@ actor IGClient {
         request.setValue(page.asbdId, forHTTPHeaderField: "x-asbd-id")
         request.setValue(wwwClaim, forHTTPHeaderField: "x-ig-www-claim")
         request.setValue("XMLHttpRequest", forHTTPHeaderField: "x-requested-with")
+        if let mid = await session.cookie("mid") { request.setValue(mid, forHTTPHeaderField: "x-mid") }
+        request.setValue("0", forHTTPHeaderField: "X-IG-Max-Touch-Points")
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(Self.origin, forHTTPHeaderField: "Origin")
         request.setValue(Self.origin + "/", forHTTPHeaderField: "Referer")
@@ -224,13 +232,23 @@ actor IGClient {
         // GraphQL answers can start with a `for (;;);` guard.
         var body = data
         if body.starts(with: Data("for (;;);".utf8)) { body = body.dropFirst(9) }
-        let json = (try? JSON(data: body)) ?? .null
+        #if DEBUG
+        if let dir = UserDefaults.standard.string(forKey: "IGRawDir") {
+            try? data.write(to: URL(fileURLWithPath: dir).appending(path: "raw-\(Int(Date.now.timeIntervalSince1970 * 1000)).txt"))
+        }
+        #endif
+        let json = Self.parseBody(body)
         let message = json["message"].string ?? ""
 
         if message == "checkpoint_required" || message == "challenge_required" {
             throw IGError.checkpoint(json["checkpoint_url"].string.flatMap(URL.init(string:)))
         }
         if message == "login_required" || json["require_login"].bool == true { throw IGError.signedOut }
+        // Meta's own error envelope: {"error": 1357054, "errorSummary": …}.
+        if let code = json["error"].int, let summary = json["errorSummary"].string {
+            if code == 1357001 { throw IGError.signedOut }
+            throw IGError.api("\(summary) (\(code))")
+        }
         if json["spam"].bool == true || message.localizedCaseInsensitiveContains("wait a few minutes") { throw IGError.rateLimited }
 
         switch response.statusCode {
@@ -287,6 +305,19 @@ actor IGClient {
         return (data, response)
     }
 
+    /// One JSON document, or several separated by newlines (streamed `@defer`/`@stream`
+    /// parts): those are merged, each later part's `data` placed at its `path`.
+    nonisolated static func parseBody(_ body: Data) -> JSON {
+        if let json = try? JSON(data: body) { return json }
+        let parts = body.split(separator: UInt8(ascii: "\n")).compactMap { try? JSON(data: Data($0)) }
+        guard var root = parts.first else { return .null }
+        for part in parts.dropFirst() where !part["data"].isNull {
+            let path = part["path"].array
+            root = root.merging(part["data"], at: [JSON.string("data")] + path, label: part["label"].string)
+        }
+        return root
+    }
+
     private func nextCounter() -> String {
         requestCounter += 1
         return String(requestCounter, radix: 36)
@@ -334,6 +365,17 @@ nonisolated struct WebPageConfig: Sendable {
     var spinR: String?
     var spinB: String?
     var spinT: String?
+    /// The account's Meta-wide id, which GraphQL forms send as `av`.
+    var actorId: String?
+    /// `CurrentUserInitialData.USER_ID` ("0" for Instagram accounts), sent as `__user`.
+    var user = "0"
+    var jazoest: String?
+    var cometReq = "7"
+    var dpr = "2"
+    /// A random web session id for this run, `xxxxxx:xxxxxx:xxxxxx`.
+    var webSessionId: String = (0..<3).map { _ in
+        String((0..<6).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! })
+    }.joined(separator: ":")
     var scripts: [URL] = []
 
     init() {}
@@ -352,6 +394,11 @@ nonisolated struct WebPageConfig: Sendable {
         spinR = first(#""__spin_r":(\d+)"#)
         spinB = first(#""__spin_b":"([^"]+)""#)
         spinT = first(#""__spin_t":(\d+)"#)
+        actorId = first(#""actorID":"(\d+)""#)
+        if let u = first(#""CurrentUserInitialData",\[\],\{[^}]*?"USER_ID":"(\d+)""#) { user = u }
+        jazoest = first(#"[?&]jazoest=(\d+)"#)
+        if let c = first(#"[?&]__comet_req=(\d+)"#) { cometReq = c }
+        if let pr = first(#""SiteData",\[\],\{[^}]*?"pr":([\d.]+)"#) { dpr = pr }
         let srcs = NSRegularExpression(#"<script[^>]+src="(https://static\.cdninstagram\.com/rsrc\.php/[^"]+)""#).captures(in: html)
             .compactMap { $0[1] }
         let preloads = NSRegularExpression(#"<link[^>]+href="(https://static\.cdninstagram\.com/rsrc\.php/[^"]+\.js[^"]*)""#).captures(in: html)
@@ -362,13 +409,12 @@ nonisolated struct WebPageConfig: Sendable {
     /// The fields every web GraphQL form carries.
     func commonForm(counter: String, userId: String?) -> [String: String] {
         var f: [String: String] = [
-            "av": "17841400000000000", "__d": "www", "__user": "0", "__a": "1", "__req": counter,
-            "__comet_req": "7", "dpr": "2", "__ccg": "EXCELLENT",
+            "av": actorId ?? "0", "__d": "www", "__user": user, "__a": "1", "__req": counter,
+            "__comet_req": cometReq, "dpr": dpr, "__ccg": "EXCELLENT", "__s": webSessionId,
         ]
-        if let userId { f["av"] = userId }
         if let dtsg {
             f["fb_dtsg"] = dtsg
-            f["jazoest"] = "2" + String(dtsg.unicodeScalars.reduce(0) { $0 + Int($1.value) })
+            f["jazoest"] = jazoest ?? "2" + String(dtsg.unicodeScalars.reduce(0) { $0 + Int($1.value) })
         }
         if let lsd { f["lsd"] = lsd }
         if let rev { f["__rev"] = rev }
