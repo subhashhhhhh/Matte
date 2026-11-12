@@ -97,7 +97,7 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
   Reel only; stories are edited on a 9:16 canvas and uploaded flattened. `-IGStoryEditor photo|landscape|video|rotated|empty`
   opens it with generated media; `-IGStorySample YES`, `-IGStoryMode text|draw|stickers|filters`,
   `-IGStoryFilter oslo`, `-IGStorySelect YES`, `-IGStoryTrim '1,6'`, `-IGStoryMute YES`, `-IGStoryZoom 1.4` set it up;
-  `-IGStoryExport <dir>` writes the flattened file (+ `export.json`) and quits; `-IGStoryKeep <dir>` copies what's
+  `-IGStoryClose YES` presses Close; `-IGStoryExport <dir>` writes the flattened file (+ `export.json`) and quits; `-IGStoryKeep <dir>` copies what's
   shared; `-IGStorySelfTest YES` checks edits/undo and quits; `-IGStoryShare YES` only with `-IGDryRunWrites`.
   `-IGShowCreateMenu YES` opens the "+" menu, `-IGDropTest video|photo` acts as a dropped test file.
 

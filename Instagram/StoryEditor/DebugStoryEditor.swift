@@ -66,6 +66,8 @@ enum DebugStoryEditor {
         case "filters": model.setMode(.filters)
         default: break
         }
+        // `-IGStoryClose YES`: presses Close (asks first when there are edits).
+        if d.bool(forKey: "IGStoryClose") { model.requestClose() }
     }
 
     static func addSample(_ model: StoryEditorModel) {
