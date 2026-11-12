@@ -9,6 +9,8 @@ import Foundation
 /// - `-IGProbeGQL <FriendlyName> [-IGProbeVars '{json}'] [-IGProbeDoc <doc_id>]`: run a Relay query.
 /// - `-IGProbePage YES`: writes the page HTML, its config and the known doc ids next to the
 ///   output file, and saves the page's scripts in a `scripts/` folder there.
+/// - `-IGProbeDGW YES [-IGProbeSeconds 30] [-IGProbeDGWRewind N]`: connects the real-time DM
+///   sockets and only listens; writes frame/delta/event counts (no content).
 enum DebugProbe {
     static func runIfAsked() async {
         let d = UserDefaults.standard

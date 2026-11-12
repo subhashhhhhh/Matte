@@ -487,6 +487,24 @@ To send typing: Data frame **without ack** (`SendDataNoAck`, `mqttbypass.go:81`)
 ```
 (`activity_status` 0 to stop.) Compact: `2C 18 <len> <json> 18 10 "/ig_send_message" 00 00`. Incoming frames are `ResponsePayload` and can be ignored (`mqttbypass.go:202-216`). The config comment notes typing costs **2 extra connections per user** (`example-config.yaml` `disable_typing`). Bridge's `client_context` is always empty (Go zero value).
 
+### 5.10 Observed web client (captured 2026-11-12 with `-IGCapture`) — differences from the bridge
+Verified against our implementation with `-IGProbeDGW` (both streams subscribe; replayed deltas decode).
+* Sockets opened by `/direct/inbox/`: `ws/lightspeed`, `ws/streamcontroller`, `ws/realtime`, `ws/rpsignaling`
+  (calls) and the legacy `edge-chat.instagram.com/chat`. Only the first two are needed for DMs.
+* Query order is not sorted: `x-dgw-appid, x-dgw-appversion, x-dgw-authtype, x-dgw-version, x-dgw-uuid,
+  x-dgw-tier, [x-dgw-loggingid,] x-dgw-deviceid[, x-dgw-app-stream-group]`.
+* `x-dgw-uuid` is `PolarisViewer.data.fbid` on **every** gateway socket (also streamcontroller, not `PolarisViewer.id`).
+  The typing subscription's `input_data.user_id` is `PolarisViewer.id`.
+* `x-dgw-deviceid` / init `device_id` = the page's `IGDMqttWebDeviceID.clientId` (it changes per page load;
+  use the same value the inbox query sent as `device_id_for_iris_subscription`).
+* Main stream `EstablishStream` params are `{}` (2 bytes), not empty. Init payload keys as in §5.5, with
+  `prevalidated_graphql_doc_id` = **29464536269817547** (bridge: 27931342966497053).
+* Typing subscription doc id = **28367799366176340**; `x-dgw-app-XRSS-http_referer` = `https://www.instagram.com/direct/inbox/`.
+  The web app opens two more streams on the same streamcontroller socket (`GRAPHQL:useFeatureLimitsOffMsysQuery`,
+  `PresenceUnifiedJSON` presence reporting); this client doesn't (presence reporting would show the user active).
+* Server establish answer: `{"code":200}`; first main data frame: `{"request_id":4,"payload":"<b64 LSResponse>"}`
+  with a `subscribe` op (groupID 223).
+
 ---
 
 ## 6. Parsing deltas (incoming events)
