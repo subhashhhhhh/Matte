@@ -22,6 +22,12 @@ nonisolated struct Rendition: Hashable, Sendable {
     var height: Int
 }
 
+/// One repost of a media (Instagram calls them media notes).
+nonisolated struct RepostNote: Hashable, Sendable {
+    var id: String
+    var userId: String
+}
+
 /// A post, reel, story item or carousel child: Instagram's one media shape.
 nonisolated struct Media: Hashable, Sendable, Identifiable {
     enum Kind: Int, Sendable { case image = 1, video = 2, carousel = 8 }
@@ -52,6 +58,13 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     /// Usernames Instagram names as likers when it has no profile pictures for them.
     var topLikers: [String] = []
     var repostCount: Int?
+    /// Reposts shown with the media (`media_notes.items`): who reposted it, and the repost's
+    /// note id (removing your repost takes it).
+    var repostNotes: [RepostNote] = []
+    /// `organic_tracking_token`: the web app sends it with a like.
+    var trackingToken: String?
+    /// `logging_info_token`: the web app sends it with a save.
+    var loggingToken: String?
     var images: [Rendition] = []
     var videos: [Rendition] = []
     var hasAudio = true
@@ -307,6 +320,7 @@ nonisolated struct Hashtag: Hashable, Sendable, Identifiable {
 extension User: Codable {}
 extension Rendition: Codable {}
 extension Media.Kind: Codable {}
+extension RepostNote: Codable {}
 extension Media: Codable {}
 extension StoryReel: Codable {}
 extension DMThread: Codable {}

@@ -56,6 +56,8 @@ actor IGClient {
     /// Sent back as `x-ig-www-claim`; Instagram hands out a new one in `x-ig-set-www-claim`.
     private var wwwClaim = "0"
     private var requestCounter = 1
+    /// The web app numbers its Relay mutations' `client_mutation_id` "1", "2", … per page load.
+    private var mutationCounter = 0
     private let log = Logger(subsystem: "com.subhash.Instagram", category: "API")
 
     init(session: IGSession, configuration: URLSessionConfiguration = .ephemeral) {
@@ -392,6 +394,20 @@ actor IGClient {
     private func nextCounter() -> String {
         requestCounter += 1
         return String(requestCounter, radix: 36)
+    }
+
+    /// The next `client_mutation_id` (a decimal string, as the web app sends it).
+    func nextMutationId() -> String {
+        mutationCounter += 1
+        return String(mutationCounter)
+    }
+
+    /// `input` of the web app's XIG mutations: your actor id and the mutation counter first
+    /// (both strings), then the action's own fields.
+    func mutationInput(_ fields: [String: JSON]) -> JSON {
+        var input: [String: JSON] = ["actor_id": .string(page.actorId ?? ""), "client_mutation_id": .string(nextMutationId())]
+        input.merge(fields) { $1 }
+        return .object(input)
     }
 
     // MARK: Helpers

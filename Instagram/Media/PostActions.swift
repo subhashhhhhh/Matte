@@ -10,9 +10,13 @@ final class PostActions {
         var liked: Bool
         var likeCount: Int?
         var saved: Bool
+        var reposted = false
+        var repostCount: Int?
     }
 
     private(set) var overrides: [String: State] = [:]
+    /// Your repost's note id per media pk, once known (removing a repost takes it).
+    @ObservationIgnored private var repostNotes: [String: String] = [:]
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let client: IGClient
 
@@ -22,7 +26,13 @@ final class PostActions {
     }
 
     func state(_ m: Media) -> State {
-        overrides[m.pk] ?? State(liked: m.hasLiked, likeCount: m.likeCount, saved: m.hasSaved)
+        overrides[m.pk] ?? State(liked: m.hasLiked, likeCount: m.likeCount, saved: m.hasSaved,
+                                 reposted: myNote(in: m) != nil, repostCount: m.repostCount)
+    }
+
+    private func myNote(in m: Media) -> String? {
+        guard let me = app?.viewerId else { return nil }
+        return m.repostNotes.first { $0.userId == me }?.id
     }
 
     func toggleLike(_ m: Media) {
@@ -32,7 +42,7 @@ final class PostActions {
         new.likeCount = old.likeCount.map { max(0, $0 + (new.liked ? 1 : -1)) }
         overrides[m.pk] = new
         Task {
-            do { try await client.setLiked(new.liked, pk: m.pk) } catch {
+            do { try await client.setLiked(new.liked, media: m) } catch {
                 overrides[m.pk] = old
                 app?.report(error)
             }
@@ -49,13 +59,46 @@ final class PostActions {
         overrides[m.pk] = new
         Task {
             do {
-                try await client.setSaved(new.saved, pk: m.pk)
+                try await client.setSaved(new.saved, media: m)
                 app?.show(new.saved ? "Saved" : "Removed from saved")
             } catch {
                 overrides[m.pk] = old
                 app?.report(error)
             }
         }
+    }
+
+    /// Reposts to your profile, or removes your repost. Shows at once; undone if Instagram
+    /// refuses.
+    func toggleRepost(_ m: Media) {
+        let old = state(m)
+        var new = old
+        new.reposted.toggle()
+        new.repostCount = old.repostCount.map { max(0, $0 + (new.reposted ? 1 : -1)) } ?? (new.reposted ? 1 : nil)
+        overrides[m.pk] = new
+        Task {
+            do {
+                if new.reposted {
+                    repostNotes[m.pk] = try await client.repost(media: m)
+                    app?.show("Reposted")
+                } else {
+                    guard let note = try await repostNote(for: m) else { throw IGError.api("Couldn't find your repost.") }
+                    try await client.deleteRepost(noteId: note)
+                    repostNotes[m.pk] = nil
+                    app?.show("Repost removed")
+                }
+            } catch {
+                overrides[m.pk] = old
+                app?.report(error)
+            }
+        }
+    }
+
+    /// Your repost's note id: from this run's repost, the media's own notes, or else the
+    /// media read again.
+    private func repostNote(for m: Media) async throws -> String? {
+        if let id = repostNotes[m.pk] ?? myNote(in: m) { return id }
+        return myNote(in: try await client.mediaInfo(pk: m.pk))
     }
 
     func copyLink(_ m: Media) {
@@ -131,12 +174,9 @@ struct PostActionBar: View {
                     iconButton(.comment, help: "Comments") { onComment?() }
                     if let n = media.commentCount, n > 0 { count(n) }
                 }
-                if let n = media.repostCount, n > 0 {
-                    HStack(spacing: 5) {
-                        IGGlyph(icon: .repost, size: size)
-                        count(n)
-                    }
-                    .help("Reposts")
+                HStack(spacing: 5) {
+                    RepostButton(reposted: state.reposted, size: size) { actions.toggleRepost(media) }
+                    if let n = state.repostCount, n > 0 { count(n) }
                 }
                 iconButton(.share, help: "Send to…") { actions.send(media) }
                 Spacer(minLength: 0)
@@ -187,6 +227,33 @@ struct LikeButton: View {
     }
 }
 
+/// Instagram's repost arrows: green once you've reposted, with the heart's small pop.
+struct RepostButton: View {
+    let reposted: Bool
+    var size: CGFloat = 22
+    let action: () -> Void
+    @State private var pop = false
+
+    var body: some View {
+        Button {
+            if !reposted { pop = true }
+            action()
+        } label: {
+            IGGlyph(icon: .repost, size: size)
+                .foregroundStyle(reposted ? AnyShapeStyle(Theme.repost) : AnyShapeStyle(.primary))
+                .scaleEffect(pop ? 1.25 : 1)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.pressable)
+        .help(reposted ? "Remove repost" : "Repost")
+        .onChange(of: pop) {
+            guard pop else { return }
+            Task { try? await Task.sleep(for: .milliseconds(160)); pop = false }
+        }
+        .animation(.spring(response: 0.25, dampingFraction: 0.5), value: pop)
+    }
+}
+
 // MARK: - Right-click menu
 
 /// What a right-click on a post or reel offers.
@@ -201,6 +268,7 @@ struct PostMenu: View {
             if let open { Button("Open", action: open) }
             Button(state.liked ? "Unlike" : "Like") { actions.toggleLike(media) }
             Button(state.saved ? "Remove from Saved" : "Save") { actions.toggleSave(media) }
+            Button(state.reposted ? "Remove Repost" : "Repost") { actions.toggleRepost(media) }
             Button("Send to…") { actions.send(media) }
             Divider()
             Button("Copy Link") { actions.copyLink(media) }
