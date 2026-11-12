@@ -60,6 +60,14 @@ final class MediaDetailModel: Identifiable {
         }
         await loadMoreComments()
         if Task.isCancelled, comments.isEmpty { started = false }
+        #if DEBUG
+        // `-IGGifFirst YES`: GIF comments first (to check how they draw).
+        if UserDefaults.standard.bool(forKey: "IGGifFirst") { comments.sort { ($0.gif != nil) && ($1.gif == nil) } }
+        // `-IGOpenReplies YES`: open the first comment's replies (screenshots).
+        if UserDefaults.standard.bool(forKey: "IGOpenReplies"), let c = comments.first(where: { $0.replyCount > 0 }) {
+            await loadReplies(c)
+        }
+        #endif
     }
 
     func loadMoreComments() async {
@@ -79,6 +87,103 @@ final class MediaDetailModel: Identifiable {
     }
 
     var canLoadMoreComments: Bool { hasMore && isRemote }
+
+    // MARK: Replies, likes, posting
+
+    /// Loaded replies by parent comment id (a parent is "open" once it has an entry).
+    private(set) var replies: [String: [IGComment]] = [:]
+    private(set) var loadingReplies: Set<String> = []
+    @ObservationIgnored private var replyCursors: [String: String] = [:]
+    @ObservationIgnored private var replyMore: [String: Bool] = [:]
+    /// The comment being answered in the composer.
+    var replyingTo: IGComment?
+    var draft = ""
+    private(set) var posting = false
+    @ObservationIgnored weak var app: AppModel?
+
+    func hasMoreReplies(_ c: IGComment) -> Bool {
+        guard let loaded = replies[c.id] else { return c.replyCount > 0 }
+        return replyMore[c.id] ?? (loaded.count < c.replyCount)
+    }
+
+    func toggleReplies(_ c: IGComment) {
+        if replies[c.id] != nil, !hasMoreReplies(c) { replies[c.id] = nil; return }
+        Task { await loadReplies(c) }
+    }
+
+    func hideReplies(_ c: IGComment) { replies[c.id] = nil; replyCursors[c.id] = nil; replyMore[c.id] = nil }
+
+    func loadReplies(_ c: IGComment) async {
+        guard let client, !loadingReplies.contains(c.id) else { return }
+        loadingReplies.insert(c.id)
+        defer { loadingReplies.remove(c.id) }
+        do {
+            let page = try await client.replies(media: pk, comment: c.id, cursor: replyCursors[c.id])
+            let known = Set((replies[c.id] ?? []).map(\.id))
+            replies[c.id, default: []] += page.items.filter { !known.contains($0.id) }
+            replyCursors[c.id] = page.cursor
+            replyMore[c.id] = page.hasMore
+        } catch {
+            app?.report(error)
+        }
+    }
+
+    /// Likes or unlikes a comment at once, undone if Instagram refuses.
+    func toggleLike(_ c: IGComment) {
+        guard let client else { return }
+        let liked = !c.liked
+        update(c.id) { $0.liked = liked; $0.likeCount = max(0, $0.likeCount + (liked ? 1 : -1)) }
+        Task {
+            do { try await client.setCommentLiked(liked, comment: c.id) } catch {
+                update(c.id) { $0.liked = !liked; $0.likeCount = max(0, $0.likeCount + (liked ? -1 : 1)) }
+                app?.report(error)
+            }
+        }
+    }
+
+    private func update(_ id: String, _ change: (inout IGComment) -> Void) {
+        if let i = comments.firstIndex(where: { $0.id == id }) { change(&comments[i]); return }
+        for (parent, list) in replies {
+            if let i = list.firstIndex(where: { $0.id == id }) { change(&replies[parent]![i]); return }
+        }
+    }
+
+    /// Posts the draft as a comment, or as a reply to `replyingTo`. It shows at once.
+    func post() async {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let client, !text.isEmpty, !posting else { return }
+        posting = true
+        defer { posting = false }
+        // Replies to a reply go to the top comment, as on Instagram.
+        let parent = replyingTo.map { $0.parentId ?? $0.id }
+        var local = IGComment(id: "local-\(UUID().uuidString)", user: app?.me, text: text, createdAt: .now)
+        local.parentId = parent
+        if let parent { replies[parent, default: []].append(local) } else { comments.insert(local, at: 0) }
+        draft = ""
+        replyingTo = nil
+        do {
+            let made = try await client.postComment(text, media: pk, replyTo: parent)
+            if var made {
+                made.parentId = parent
+                if made.user == nil { made.user = app?.me }
+                replace(local.id, with: made, parent: parent)
+            }
+            if parent != nil, let i = comments.firstIndex(where: { $0.id == parent }) { comments[i].replyCount += 1 }
+        } catch {
+            remove(local.id, parent: parent)
+            draft = text
+            app?.report(error)
+        }
+    }
+
+    private func replace(_ id: String, with c: IGComment, parent: String?) {
+        if let parent, let i = replies[parent]?.firstIndex(where: { $0.id == id }) { replies[parent]![i] = c }
+        else if let i = comments.firstIndex(where: { $0.id == id }) { comments[i] = c }
+    }
+
+    private func remove(_ id: String, parent: String?) {
+        if let parent { replies[parent]?.removeAll { $0.id == id } } else { comments.removeAll { $0.id == id } }
+    }
 }
 
 // MARK: - Stage
@@ -202,8 +307,20 @@ struct ScrubBar: View {
 struct MediaDetailsColumn: View {
     let model: MediaDetailModel
     var showsHeader = true
+    @Environment(AppModel.self) private var app
 
     var body: some View {
+        VStack(spacing: 0) {
+            comments
+            if model.isRemote {
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+                CommentComposer(model: model)
+            }
+        }
+        .task { model.app = app }
+    }
+
+    private var comments: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
                 if let media = model.media {
@@ -223,7 +340,9 @@ struct MediaDetailsColumn: View {
                     if model.comments.isEmpty, !model.loadingComments {
                         Text("No comments").font(.system(size: 12.5)).foregroundStyle(.secondary)
                     }
-                    ForEach(model.comments) { CommentRow(comment: $0) }
+                    ForEach(model.comments) { comment in
+                        CommentThread(comment: comment, model: model)
+                    }
                     if model.loadingComments {
                         Spinner(size: 14).frame(maxWidth: .infinity).padding(8)
                     } else if model.canLoadMoreComments {
@@ -254,34 +373,160 @@ struct MediaDetailsColumn: View {
     }
 }
 
+/// A comment and, once opened, its replies (indented), with "View replies" / "Hide replies".
+struct CommentThread: View {
+    let comment: IGComment
+    let model: MediaDetailModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            CommentRow(comment: comment, model: model)
+            let loaded = model.replies[comment.id]
+            if let loaded {
+                ForEach(loaded) { reply in
+                    CommentRow(comment: reply, model: model, avatarSize: 22).padding(.leading, 38)
+                }
+            }
+            if comment.replyCount > 0 {
+                let open = loaded != nil
+                let more = model.hasMoreReplies(comment)
+                HStack(spacing: 8) {
+                    Rectangle().fill(Color.secondary.opacity(0.5)).frame(width: 22, height: 1)
+                    Button {
+                        if open, !more { model.hideReplies(comment) } else { Task { await model.loadReplies(comment) } }
+                    } label: {
+                        Text(open && !more ? "Hide replies"
+                             : open ? "View more replies"
+                             : "View \(comment.replyCount) \(comment.replyCount == 1 ? "reply" : "replies")")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    if model.loadingReplies.contains(comment.id) { Spinner(size: 10) }
+                }
+                .padding(.leading, 38)
+            }
+        }
+    }
+}
+
 struct CommentRow: View {
     let comment: IGComment
+    let model: MediaDetailModel
+    var avatarSize: CGFloat = 28
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Avatar(url: comment.user?.avatar, size: 28).opensProfile(comment.user)
-            VStack(alignment: .leading, spacing: 3) {
+            Avatar(url: comment.user?.avatar, size: avatarSize).opensProfile(comment.user)
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(comment.user?.username ?? "").font(.system(size: 12.5, weight: .semibold)).opensProfile(comment.user)
                     if let t = comment.createdAt {
                         Text(t.shortAge).font(.system(size: 11.5)).foregroundStyle(.secondary)
                     }
                 }
-                Text(comment.text.isEmpty ? "GIF" : comment.text)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(comment.text.isEmpty ? .secondary : .primary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                if comment.likeCount > 0 || comment.replyCount > 0 {
-                    HStack(spacing: 10) {
-                        if comment.likeCount > 0 { Label(comment.likeCount.compact, systemImage: "heart") }
-                        if comment.replyCount > 0 { Text("\(comment.replyCount) \(comment.replyCount == 1 ? "reply" : "replies")") }
-                    }
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                if !comment.text.isEmpty {
+                    Text(comment.text)
+                        .font(.system(size: 12.5))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                if let gif = comment.gif { GIFView(gif: gif) }
+                HStack(spacing: 12) {
+                    if comment.likeCount > 0 {
+                        Text("\(comment.likeCount.compact) \(comment.likeCount == 1 ? "like" : "likes")")
+                    }
+                    if !comment.id.hasPrefix("local-") {
+                        Button("Reply") { model.replyingTo = comment }
+                            .buttonStyle(.plain)
+                    }
+                }
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
+            if !comment.id.hasPrefix("local-") {
+                Button { model.toggleLike(comment) } label: {
+                    IGGlyph(icon: comment.liked ? .heartFilled : .heart, size: 12)
+                        .foregroundStyle(comment.liked ? AnyShapeStyle(Theme.like) : AnyShapeStyle(.secondary))
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .help(comment.liked ? "Unlike" : "Like")
+            }
+        }
+        .opacity(comment.id.hasPrefix("local-") ? 0.6 : 1)
+    }
+}
+
+/// A GIF comment: plays its small MP4 silently on a loop while on screen.
+struct GIFView: View {
+    let gif: IGComment.GIF
+    @State private var video: LoopingVideo?
+
+    var body: some View {
+        let height: CGFloat = 120
+        let width = height * CGFloat(gif.width) / CGFloat(max(gif.height, 1))
+        ZStack {
+            RemoteImage(url: gif.still, contentMode: .fit)
+            if let video { PlayerLayerView(player: video.player, gravity: .resizeAspect) }
+        }
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onAppear {
+            guard let url = gif.mp4 else { return }
+            let v = LoopingVideo(url: url, muted: true)
+            v.play()
+            video = v
+        }
+        .onDisappear {
+            video?.tearDown()
+            video = nil
+        }
+    }
+}
+
+/// "Add a comment…": Return posts; shows who you're replying to.
+struct CommentComposer: View {
+    @Bindable var model: MediaDetailModel
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let reply = model.replyingTo {
+                HStack(spacing: 6) {
+                    Text("Replying to \(reply.user?.username ?? "comment")")
+                        .font(.system(size: 11.5, weight: .medium)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button { model.replyingTo = nil } label: {
+                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            HStack(spacing: 8) {
+                TextField(model.replyingTo == nil ? "Add a comment…" : "Add a reply…", text: $model.draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .lineLimit(1...4)
+                    .focused($focused)
+                    .onSubmit { Task { await model.post() } }
+                let empty = model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                Button("Post") { Task { await model.post() } }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.link.opacity(empty || model.posting ? 0.4 : 1))
+                    .disabled(empty || model.posting)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .onChange(of: model.replyingTo) {
+            if let user = model.replyingTo?.user, !model.draft.contains("@\(user.username)") {
+                model.draft = "@\(user.username) " + model.draft
+            }
+            if model.replyingTo != nil { focused = true }
         }
     }
 }

@@ -69,6 +69,13 @@ final class ExploreModel {
 
     func loadIfNeeded() async {
         guard browser.items.isEmpty else { return }
+        #if DEBUG
+        // `-IGOpenMediaPk <pk>`: open that post first (screenshots of a specific post).
+        if let pk = UserDefaults.standard.string(forKey: "IGOpenMediaPk"), let m = try? await client.mediaInfo(pk: pk) {
+            browser.append([m])
+            browser.open(at: 0)
+        }
+        #endif
         await loadMore()
     }
 

@@ -214,6 +214,18 @@ nonisolated struct IGComment: Hashable, Sendable, Identifiable {
     var createdAt: Date?
     var likeCount = 0
     var replyCount = 0
+    var liked = false
+    /// A GIF comment (its text is empty).
+    var gif: GIF?
+    /// Set on replies: the comment they answer.
+    var parentId: String?
+
+    nonisolated struct GIF: Hashable, Sendable {
+        var mp4: URL?
+        var still: URL?
+        var width: Int
+        var height: Int
+    }
 }
 
 extension DMShare {
