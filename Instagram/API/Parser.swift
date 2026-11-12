@@ -58,7 +58,8 @@ nonisolated enum Parser {
         }
         m.repostNotes = j["media_notes"]["items"].array.compactMap { n in
             guard let id = idString(n["id"]), let user = idString(n["user_id"]) else { return nil }
-            return RepostNote(id: id, userId: user)
+            return RepostNote(id: id, userId: user, user: Parser.user(n["user"]),
+                              text: n["text"].string.flatMap { $0.isEmpty ? nil : $0 })
         }
         m.trackingToken = j["organic_tracking_token"].string
         m.loggingToken = j["logging_info_token"].string

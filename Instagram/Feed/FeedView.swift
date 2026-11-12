@@ -224,6 +224,7 @@ struct PostLightbox: View {
                     if let media {
                         MediaStage(media: media, cornerRadius: 0, initialImage: flight?.handoff(for: media.pk))
                             .frame(width: stage.width, height: stage.height)
+                            .overlay(alignment: .bottomLeading) { RepostBubbles(media: media) }
                     }
                     MediaDetailsColumn(model: model)
                         .frame(width: layout.panel, height: stage.height)

@@ -26,6 +26,9 @@ nonisolated struct Rendition: Hashable, Sendable {
 nonisolated struct RepostNote: Hashable, Sendable {
     var id: String
     var userId: String
+    /// Who reposted (for the bubbles) and the thought they added, if any.
+    var user: User?
+    var text: String?
 }
 
 /// A post, reel, story item or carousel child: Instagram's one media shape.

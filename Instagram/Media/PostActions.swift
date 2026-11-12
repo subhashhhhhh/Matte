@@ -17,6 +17,10 @@ final class PostActions {
     private(set) var overrides: [String: State] = [:]
     /// Your repost's note id per media pk, once known (removing a repost takes it).
     @ObservationIgnored private var repostNotes: [String: String] = [:]
+    /// Your repost's thought, per media pk (as set in this run).
+    private(set) var thoughts: [String: String] = [:]
+    /// The post whose "Add a thought…" box should open (right after you repost it).
+    var thoughtPrompt: String?
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let client: IGClient
 
@@ -81,6 +85,7 @@ final class PostActions {
                 if new.reposted {
                     repostNotes[m.pk] = try await client.repost(media: m)
                     app?.show("Reposted")
+                    thoughtPrompt = m.pk
                 } else {
                     guard let note = try await repostNote(for: m) else { throw IGError.api("Couldn't find your repost.") }
                     try await client.deleteRepost(noteId: note)
@@ -96,6 +101,21 @@ final class PostActions {
 
     /// Your repost's note id: from this run's repost, the media's own notes, or else the
     /// media read again.
+    /// Adds (or changes) the thought on your repost, as instagram.com's "Add a thought…" does.
+    func setThought(_ text: String, on m: Media) {
+        let old = thoughts[m.pk]
+        thoughts[m.pk] = text
+        Task {
+            do {
+                guard let note = try await repostNote(for: m) else { throw IGError.api("Couldn't find your repost.") }
+                try await client.updateRepost(noteId: note, text: text)
+            } catch {
+                thoughts[m.pk] = old
+                app?.report(error)
+            }
+        }
+    }
+
     private func repostNote(for m: Media) async throws -> String? {
         if let id = repostNotes[m.pk] ?? myNote(in: m) { return id }
         return myNote(in: try await client.mediaInfo(pk: m.pk))
@@ -323,5 +343,105 @@ struct LikedByLine: View {
                 .lineLimit(1)
             }
         }
+    }
+}
+
+
+// MARK: - Repost bubbles
+
+/// Who reposted this, as bubbles over the photo with Instagram's repost badge; yours offers
+/// "Add a thought…" (and opens it right after you repost).
+struct RepostBubbles: View {
+    let media: Media
+    @Environment(AppModel.self) private var app
+    @State private var editing = false
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        if let actions = app.actions {
+            let me = app.viewerId
+            let mine = actions.state(media).reposted
+            let others = media.repostNotes.filter { $0.userId != me }.prefix(mine ? 4 : 5)
+            let myText = actions.thoughts[media.pk] ?? media.repostNotes.first { $0.userId == me }?.text
+            HStack(alignment: .bottom, spacing: 10) {
+                if mine, let user = app.me {
+                    VStack(spacing: 6) {
+                        thoughtBubble(myText)
+                        bubbleAvatar(user.avatar)
+                    }
+                }
+                ForEach(Array(others), id: \.id) { note in
+                    VStack(spacing: 6) {
+                        if let text = note.text { Text(text).font(.system(size: 12)).bubble() }
+                        bubbleAvatar(note.user?.avatar)
+                    }
+                    .opensProfile(note.user)
+                }
+            }
+            .padding(14)
+            .animation(Motion.pop, value: mine)
+            .onChange(of: actions.thoughtPrompt) {
+                if actions.thoughtPrompt == media.pk { editing = true; actions.thoughtPrompt = nil }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func thoughtBubble(_ text: String?) -> some View {
+        if editing {
+            TextField("Add a thought…", text: $draft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .frame(width: 170)
+                .focused($focused)
+                .onSubmit { commit() }
+                .onKeyPress(.escape) { editing = false; return .handled }
+                .bubble()
+                .onAppear { draft = text ?? ""; focused = true }
+                .onChange(of: focused) { if !focused { editing = false } }
+                .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
+        } else {
+            Button { editing = true } label: {
+                Text(text ?? "Add a thought…")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(text == nil ? .secondary : .primary)
+                    .lineLimit(2)
+                    .frame(maxWidth: 170)
+                    .bubble()
+            }
+            .buttonStyle(.pressable)
+            .help(text == nil ? "Add a thought to your repost" : "Edit your thought")
+        }
+    }
+
+    private func commit() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        editing = false
+        guard let actions = app.actions, text != (actions.thoughts[media.pk] ?? "") else { return }
+        actions.setThought(text, on: media)
+    }
+
+    private func bubbleAvatar(_ url: URL?) -> some View {
+        Avatar(url: url, size: 40)
+            .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 2))
+            .overlay(alignment: .bottomTrailing) {
+                IGGlyph(icon: .repost, size: 11)
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(Color(red: 0.55, green: 0.36, blue: 0.96)))
+                    .offset(x: 4, y: 4)
+            }
+    }
+}
+
+private extension View {
+    /// A speech bubble like Instagram's thought bubbles.
+    func bubble() -> some View {
+        self
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.regularMaterial))
+            .environment(\.colorScheme, .dark)
     }
 }
