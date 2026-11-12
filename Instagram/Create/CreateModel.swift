@@ -65,7 +65,7 @@ final class CreateModel {
     @ObservationIgnored private var preparedKey: String?
     @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "Create")
 
-    init(app: AppModel, client: IGClient) {
+    init(app: AppModel?, client: IGClient) {
         self.app = app
         self.client = client
     }
@@ -218,6 +218,12 @@ final class CreateModel {
 
     func cancel() {
         task?.cancel()
+    }
+
+    /// Shares and waits for the outcome (debug dry runs).
+    func shareAndWait() async {
+        share()
+        await task?.value
     }
 
     private func run() async {

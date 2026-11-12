@@ -247,6 +247,54 @@ final class StoryViewerModel {
     /// Your own story: show who saw it instead of a reply box.
     var isOwn: Bool { item != nil && reel.user.id == app?.viewerId }
 
+    // MARK: Deleting (your own stories)
+
+    /// Your current story, still live (not a highlight or an archived one): it can be deleted.
+    var canDelete: Bool {
+        guard isOwn, let item, reel.id == reel.user.id else { return false }
+        return (item.expiresAt ?? .distantPast) > .now
+    }
+
+    /// "Delete story?" is showing (the story waits meanwhile).
+    var confirmingDelete = false {
+        didSet {
+            guard confirmingDelete != oldValue else { return }
+            if confirmingDelete {
+                if !paused { togglePause(); pausedForDelete = true }
+            } else if pausedForDelete {
+                if paused { togglePause() }
+                pausedForDelete = false
+            }
+        }
+    }
+    @ObservationIgnored private var pausedForDelete = false
+    private(set) var deleting = false
+
+    /// Deletes the current story after the confirmation, then plays on (or closes if it was
+    /// the last one).
+    func deleteCurrent() async {
+        guard canDelete, let item, !deleting else { return }
+        deleting = true
+        defer { deleting = false }
+        do {
+            try await client.deleteStory(pk: item.pk)
+            pausedForDelete = false
+            confirmingDelete = false
+            app?.show("Story deleted")
+            Task { await app?.feed?.refreshTray() }
+            reels[reelIndex].items.removeAll { $0.pk == item.pk }
+            if reels[reelIndex].items.isEmpty {
+                close()
+                return
+            }
+            itemIndex = min(itemIndex, reels[reelIndex].items.count - 1)
+            if paused { togglePause() }
+            startItem()
+        } catch {
+            app?.report(error)
+        }
+    }
+
     // MARK: Viewers (your own stories)
 
     private(set) var viewers: [StoryViewerEntry] = []
@@ -528,6 +576,13 @@ struct StoryViewer: View {
             }
         }
         .animation(Motion.pop, value: model.showingViewers)
+        .overlay {
+            if model.confirmingDelete {
+                StoryDeleteConfirm(model: model)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.14), value: model.confirmingDelete)
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
@@ -564,6 +619,14 @@ struct StoryViewer: View {
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.pressable)
+            if model.canDelete {
+                Button { model.confirmingDelete = true } label: {
+                    IGGlyph(icon: .more, size: 18).frame(width: 28, height: 28).contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .help("More")
+                .contextMenu { Button("Delete Story…") { model.confirmingDelete = true } }
+            }
         }
         .foregroundStyle(.white)
     }
@@ -579,6 +642,47 @@ struct StoryViewer: View {
         .buttonStyle(.pressable)
         .opacity(enabled ? 1 : 0)
         .disabled(!enabled)
+    }
+}
+
+/// "Delete story?" over your story: Delete (red) or Cancel, in the app's dialog style.
+private struct StoryDeleteConfirm: View {
+    let model: StoryViewerModel
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.55).onTapGesture { if !model.deleting { model.confirmingDelete = false } }
+            VStack(spacing: 0) {
+                VStack(spacing: 8) {
+                    Text("Delete story?").font(.system(size: 16, weight: .bold))
+                    Text("It's removed for everyone and from your archive.")
+                        .font(.system(size: 12.5)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 20).padding(.vertical, 22)
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+                Button { Task { await model.deleteCurrent() } } label: {
+                    HStack(spacing: 8) {
+                        if model.deleting { Spinner(size: 13) }
+                        Text(model.deleting ? "Deleting…" : "Delete")
+                    }
+                    .font(.system(size: 14, weight: .bold)).foregroundStyle(Theme.like)
+                    .frame(maxWidth: .infinity).frame(height: 46).contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .disabled(model.deleting)
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+                Button { model.confirmingDelete = false } label: {
+                    Text("Cancel").font(.system(size: 14)).frame(maxWidth: .infinity).frame(height: 46).contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .disabled(model.deleting)
+            }
+            .frame(width: 280)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.background))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .environment(\.colorScheme, .dark)
+            .popIn()
+        }
     }
 }
 

@@ -221,6 +221,10 @@ enum DebugProbe {
                 }
                 try? FileManager.default.removeItem(at: tmp)
                 json = .object(results)
+            } else if d.bool(forKey: "IGProbeCreate") {
+                // `-IGProbeCreate YES -IGDryRunWrites <folder>`: every create flow, dry run only.
+                guard d.string(forKey: "IGDryRunWrites") != nil else { fail("-IGProbeCreate needs -IGDryRunWrites <folder>") }
+                json = try await DebugCreate.probe(client)
             } else if d.bool(forKey: "IGProbePage") {
                 await client.reloadAppPage(keepHTML: true)
                 let dir = outURL.deletingLastPathComponent()

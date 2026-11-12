@@ -7,6 +7,7 @@ struct InstagramApp: App {
     init() {
         #if DEBUG
         Task { await DebugProbe.runIfAsked() }
+        Task { await DebugCreate.makeTestMediaIfAsked() }
         Task { @MainActor in DebugCapture.runIfAsked() }
         IconSheet.renderIfAsked()
         #endif

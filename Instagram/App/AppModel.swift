@@ -146,6 +146,7 @@ final class AppModel {
             if UserDefaults.standard.bool(forKey: "IGOpenMyStory"), let me {
                 openStories([StoryReel(id: me.id, user: me, seen: true)], at: 0)
             }
+            DebugCreate.openIfAsked(self)
             #endif
             #if DEBUG
             // `-IGOpenProfileFor <query>`: search and open the first person found (screenshots).
