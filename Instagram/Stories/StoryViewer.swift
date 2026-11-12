@@ -100,6 +100,10 @@ final class StoryViewerModel {
     private func markSeenSoon(_ item: Media, reelId: String) {
         seenTask?.cancel()
         guard !markedSeen.contains(item.pk) else { return }
+        #if DEBUG
+        // Test launches never mark the user's stories as watched (only with `-IGMarkSeen YES`).
+        guard UserDefaults.standard.bool(forKey: "IGMarkSeen") else { return }
+        #endif
         seenTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1))
             guard let self, !Task.isCancelled, self.item?.pk == item.pk else { return }
@@ -176,6 +180,29 @@ final class StoryViewerModel {
     /// Quick reactions, as instagram.com offers them under a story.
     static let quickReactions = ["😂", "😮", "😍", "😢", "👏", "🔥", "🎉", "💯"]
     private(set) var sending = false
+
+    /// Story items liked in this viewer (seeded from Instagram's `has_liked`).
+    private(set) var liked = Set<String>()
+    @ObservationIgnored private var likeOverrides = Set<String>()
+
+    var isLiked: Bool {
+        guard let item else { return false }
+        return likeOverrides.contains(item.pk) ? liked.contains(item.pk) : item.hasLiked
+    }
+
+    /// Likes or unlikes the current story at once; undone if Instagram refuses.
+    func toggleLike() {
+        guard let item, canReply else { return }
+        let now = !isLiked
+        likeOverrides.insert(item.pk)
+        if now { liked.insert(item.pk) } else { liked.remove(item.pk) }
+        Task {
+            do { try await client.setStoryLiked(now, media: item) } catch {
+                if now { liked.remove(item.pk) } else { liked.insert(item.pk) }
+                app?.report(error)
+            }
+        }
+    }
 
     /// Whether you can reply to the current story (not your own).
     var canReply: Bool { item != nil && reel.user.id != app?.viewerId }
@@ -258,6 +285,21 @@ private struct StoryReplyBar: View {
             .padding(.horizontal, 16)
             .frame(height: 42)
             .overlay(Capsule().strokeBorder(.white.opacity(0.6), lineWidth: 1))
+            .overlay(alignment: .trailing) {
+                // Like the story (Instagram's heart beside the reply box).
+                Button { model.toggleLike() } label: {
+                    IGGlyph(icon: model.isLiked ? .heartFilled : .heart, size: 24)
+                        .foregroundStyle(model.isLiked ? AnyShapeStyle(Theme.like) : AnyShapeStyle(.white))
+                        .scaleEffect(model.isLiked ? 1.08 : 1)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .help(model.isLiked ? "Unlike" : "Like")
+                .offset(x: 46)
+                .animation(.spring(response: 0.25, dampingFraction: 0.5), value: model.isLiked)
+            }
+            .padding(.trailing, 46)
         }
         .animation(.smooth(duration: 0.2), value: focused)
         .onChange(of: focused) { _, isFocused in

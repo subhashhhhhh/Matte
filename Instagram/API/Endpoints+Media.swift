@@ -76,6 +76,28 @@ extension IGClient {
         guard !result["xdt_mark_story_reel_seen"].isNull else { throw IGError.badResponse }
     }
 
+    @ObservationIgnored nonisolated(unsafe) private static var storyLikeCounter = 0
+
+    /// Likes or unlikes a story item. The like is exactly what instagram.com sends (recorded
+    /// 2026-11-12): `usePolarisStoriesV4LikeMutationLikeMutation` with your actor id, a client
+    /// counter and the bare media pk. Unlike: `usePolarisStoryLikesUnlikeMutation` (from the scripts).
+    func setStoryLiked(_ liked: Bool, media: Media) async throws {
+        await prepare()
+        if liked {
+            Self.storyLikeCounter += 1
+            let name = "usePolarisStoriesV4LikeMutationLikeMutation"
+            let r = try await graphQL(name, variables: ["input": [
+                "actor_id": .string(page.actorId ?? ""), "client_mutation_id": .string(String(Self.storyLikeCounter)),
+                "media_id": .string(media.pk),
+            ]], docId: knownOperations()[name] ?? "26938887309082050")
+            guard !r["xig_send_story_like"].isNull else { throw IGError.badResponse }
+        } else {
+            let name = "usePolarisStoryLikesUnlikeMutation"
+            _ = try await graphQL(name, variables: ["input": ["media_id": .string(media.pk)]],
+                                  docId: knownOperations()[name] ?? "28216363747963539")
+        }
+    }
+
     func mediaInfo(pk: String) async throws -> Media {
         let json = try await rest(.get, "/api/v1/media/\(pk)/info/")
         guard let media = Parser.media(json["items"][0]) else { throw IGError.badResponse }
