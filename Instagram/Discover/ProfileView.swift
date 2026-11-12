@@ -11,13 +11,13 @@ struct ProfileView: View {
         ScrollView {
             VStack(spacing: 18) {
                 header
-                    .frame(maxWidth: 1000)
+                    .frame(maxWidth: 1200)
                 if !model.highlights.isEmpty, !model.isLocked {
                     HighlightsRow(highlights: model.highlights) { model.openHighlight($0) }
-                        .frame(maxWidth: 1000)
+                        .frame(maxWidth: 1200)
                 }
                 if model.isLocked {
-                    Rectangle().fill(Theme.hairline).frame(height: 1).frame(maxWidth: 1000)
+                    Rectangle().fill(Theme.hairline).frame(height: 1).frame(maxWidth: 1200)
                     EmptyState(symbol: "lock", title: "This account is private",
                                message: model.profile?.requested == true
                                    ? "Your follow request is waiting."
@@ -25,13 +25,14 @@ struct ProfileView: View {
                         .frame(height: 260)
                 } else {
                     ProfileTabBar(tabs: model.tabs, selection: Binding(get: { model.tab }, set: { model.tab = $0 }))
-                        .frame(maxWidth: 1000)
+                        .frame(maxWidth: 1200)
                     if model.tab == .saved, !model.collections.isEmpty {
                         CollectionChips(collections: model.collections, selected: model.collectionId) { model.selectCollection($0) }
-                            .frame(maxWidth: 1000)
+                            .frame(maxWidth: 1200)
                     }
-                    FeedGrid(feed: model.activeFeed, empty: emptyText)
-                        .frame(maxWidth: 1000)
+                    // Always 3 across: accounts design their grids for it (multi-post pictures).
+                    FeedGrid(feed: model.activeFeed, empty: emptyText, columns: 3)
+                        .frame(maxWidth: 1200)
                         .id(model.tab.rawValue + (model.collectionId ?? ""))
                 }
             }
@@ -311,6 +312,7 @@ struct FeedGrid: View {
     let feed: MediaFeed
     var empty: (symbol: String, title: String)
     var minTile: CGFloat = 200
+    var columns: Int? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -324,7 +326,7 @@ struct FeedGrid: View {
                     EmptyState(symbol: empty.symbol, title: empty.title).frame(height: 260)
                 }
             } else {
-                MediaGrid(browser: feed.browser, minTile: minTile)
+                MediaGrid(browser: feed.browser, minTile: minTile, columns: columns)
                 if feed.isLoading { Spinner().padding(20) }
             }
         }

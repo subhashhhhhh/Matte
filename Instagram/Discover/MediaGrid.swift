@@ -17,9 +17,13 @@ struct MediaGrid: View {
         browser.open(at: i)
     }
     var minTile: CGFloat = 200
+    /// A fixed number of columns (profiles: 3, as accounts design their grids for); otherwise as
+    /// many as fit `minTile`.
+    var columns: Int? = nil
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: minTile), spacing: 4)], spacing: 4) {
+        LazyVGrid(columns: columns.map { Array(repeating: GridItem(.flexible(), spacing: 4), count: $0) }
+                  ?? [GridItem(.adaptive(minimum: minTile), spacing: 4)], spacing: 4) {
             ForEach(Array(browser.items.enumerated()), id: \.element.pk) { i, media in
                 GridTile(media: media, isPreviewing: browser.playing == media.pk) { on in
                     if on { browser.playing = media.pk } else if browser.playing == media.pk { browser.playing = nil }
