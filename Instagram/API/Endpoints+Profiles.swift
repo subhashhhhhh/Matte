@@ -65,7 +65,12 @@ extension IGClient {
     /// Your relationship to each of these accounts (read-only; the web app asks the same).
     func friendships(_ userIds: [String]) async throws -> [String: Friendship] {
         guard !userIds.isEmpty else { return [:] }
-        let json = try await rest(.post, "/api/v1/friendships/show_many/", form: ["user_ids": userIds.joined(separator: ",")])
+        await prepare()
+        // The web app's REST POSTs carry the page's form tokens.
+        var form = ["user_ids": userIds.joined(separator: ",")]
+        if let dtsg = page.dtsg { form["fb_dtsg"] = dtsg }
+        if let jazoest = page.jazoest { form["jazoest"] = jazoest }
+        let json = try await rest(.post, "/api/v1/friendships/show_many/", form: form)
         var out: [String: Friendship] = [:]
         for (id, f) in json["friendship_statuses"].object ?? [:] {
             out[id] = Friendship(following: f["following"].bool ?? false, followedBy: f["followed_by"].bool ?? false,

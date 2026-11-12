@@ -356,6 +356,7 @@ final class FollowListModel: Identifiable {
             settled = true
             failed = false
             let ids = fresh.map(\.id).filter { $0 != app?.viewerId }
+            // "Follows you" marks are extra: a failure here never reports (or signs out).
             if !(isMine && followers), !ids.isEmpty, let found = try? await client.friendships(ids) {
                 friendships.merge(found) { $1 }
             }
