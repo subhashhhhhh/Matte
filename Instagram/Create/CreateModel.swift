@@ -56,6 +56,12 @@ final class CreateModel {
     private(set) var canvasImage: CGImage?
     private(set) var loading = false
 
+    /// Stories have their own editor: the sheet offers only Post and Reel. The story editor
+    /// (and the debug dry runs) turn this on to share a story through the same steps.
+    @ObservationIgnored var allowsStory = false
+    /// Called after a successful share in place of closing the create sheet (the story editor).
+    @ObservationIgnored var onShared: (() -> Void)?
+
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let client: IGClient
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -77,12 +83,12 @@ final class CreateModel {
     /// Where these files can go: a single video is a reel or a story; photos are a post (a
     /// carousel when there are several); one photo can also be a story.
     var targets: [Target] {
-        guard let first = items.first else { return [.post, .reel, .story] }
+        guard let first = items.first else { return allowsStory ? [.post, .reel, .story] : [.post, .reel] }
         if first.source.isVideo {
             let seconds = Double(first.source.durationMs ?? 0) / 1000
-            return seconds <= CreateMedia.maxStorySeconds ? [.reel, .story] : [.reel]
+            return allowsStory && seconds <= CreateMedia.maxStorySeconds ? [.reel, .story] : [.reel]
         }
-        return items.count == 1 ? [.post, .story] : [.post]
+        return allowsStory && items.count == 1 ? [.post, .story] : [.post]
     }
 
     var shapes: [CropShape] {
@@ -218,6 +224,23 @@ final class CreateModel {
 
     func cancel() {
         task?.cancel()
+    }
+
+    /// Shares a story that's already finished (the story editor's flattened 1080×1920 file):
+    /// no crop or re-encode, straight to the same upload and `configure_to_story` as before.
+    /// Try Again after a failure is `share()`, which keeps the finished uploads.
+    func shareFinishedStory(_ media: PreparedMedia, isVideo: Bool) {
+        guard !isSharing else { return }
+        allowsStory = true
+        resetWork()
+        let source = CreateSource(url: media.file, isVideo: isVideo, width: media.width, height: media.height, durationMs: media.durationMs)
+        let item = Item(source: source)
+        items = [item]
+        selectedId = item.id
+        target = .story
+        preparedKey = workKey
+        prepared[item.id] = media
+        share()
     }
 
     /// Shares and waits for the outcome (debug dry runs).
@@ -371,6 +394,6 @@ final class CreateModel {
             if let c = p.cover { try? FileManager.default.removeItem(at: c) }
         }
         resetWork()
-        app?.closeCreate()
+        if let onShared { onShared() } else { app?.closeCreate() }
     }
 }

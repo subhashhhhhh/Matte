@@ -102,6 +102,10 @@ nonisolated enum CreateMedia {
         return type.conforms(to: .image) || type.conforms(to: .movie) || type.conforms(to: .video)
     }
 
+    static func isPhoto(_ url: URL) -> Bool {
+        UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
+    }
+
     // MARK: Reading
 
     @concurrent

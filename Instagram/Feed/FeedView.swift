@@ -41,21 +41,22 @@ struct FeedView: View {
     var body: some View {
         GeometryReader { geo in
             // Wide windows: stories as a column on the left, posts in as many columns as fit.
-            let storiesColumn = geo.size.width >= 1000 && !model.tray.isEmpty
+            let storiesColumn = geo.size.width >= 1000 && (!model.tray.isEmpty || app.me != nil)
             let storiesWidth: CGFloat = storiesCollapsed ? 76 : 250
             let gridWidth = geo.size.width - (storiesColumn ? storiesWidth : 0) - 48
             let columns = max(1, min(4, Int((gridWidth + 16) / (300 + 16))))
             let columnWidth = min(420, (gridWidth - CGFloat(columns - 1) * 16) / CGFloat(columns))
             HStack(spacing: 0) {
                 if storiesColumn {
-                    StoriesColumn(reels: model.tray, collapsed: $storiesCollapsed) { app.openStories(model.tray, at: $0) }
+                    StoriesColumn(reels: model.tray, me: app.me, collapsed: $storiesCollapsed,
+                                  add: { app.openStoryEditor() }) { app.openStories(model.tray, at: $0) }
                         .frame(width: storiesWidth)
                     Rectangle().fill(Theme.hairline).frame(width: 1)
                 }
                 ScrollView {
                     VStack(spacing: 16) {
-                        if !storiesColumn, !model.tray.isEmpty {
-                            StoryTray(reels: model.tray) { app.openStories(model.tray, at: $0) }
+                        if !storiesColumn, !model.tray.isEmpty || app.me != nil {
+                            StoryTray(reels: model.tray, me: app.me, add: { app.openStoryEditor() }) { app.openStories(model.tray, at: $0) }
                         }
                         FeedControls(model: model)
                         Masonry(model: model, columns: columns, columnWidth: columnWidth, openPost: openPost)
@@ -288,8 +289,12 @@ struct PostLightbox: View {
 /// Stories as a list down the left of Home: unseen first, with how long ago each was posted.
 private struct StoriesColumn: View {
     let reels: [StoryReel]
+    let me: User?
     @Binding var collapsed: Bool
+    let add: () -> Void
     let open: (Int) -> Void
+
+    private var mine: Int? { me.flatMap { me in reels.firstIndex { $0.user.id == me.id } } }
 
     var body: some View {
         VStack(alignment: collapsed ? .center : .leading, spacing: 0) {
@@ -312,6 +317,20 @@ private struct StoriesColumn: View {
             .frame(height: 52)
             ScrollView {
                 LazyVStack(spacing: collapsed ? 10 : 2) {
+                    if let me {
+                        let reel = mine.map { reels[$0] }
+                        Group {
+                            if collapsed {
+                                YourStoryAvatar(user: me, reel: reel, size: 44, add: add)
+                                    .help(reel == nil ? "Add to your story" : "Your story")
+                            } else {
+                                YourStoryRow(user: me, reel: reel, add: add)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { if let mine { open(mine) } else { add() } }
+                        .contextMenu { Button("Add to Your Story", action: add) }
+                    }
                     ForEach(order, id: \.self) { i in
                         Group {
                             if collapsed {
@@ -333,9 +352,11 @@ private struct StoriesColumn: View {
         }
     }
 
-    /// Indices with unseen reels first, keeping the tray's own order within each group.
+    /// Indices with unseen reels first, keeping the tray's own order within each group (your
+    /// own is shown on its own row first).
     private var order: [Int] {
-        reels.indices.filter { !reels[$0].seen } + reels.indices.filter { reels[$0].seen }
+        let others = reels.indices.filter { $0 != mine }
+        return others.filter { !reels[$0].seen } + others.filter { reels[$0].seen }
     }
 }
 
@@ -365,16 +386,86 @@ private struct StoryRow: View {
     }
 }
 
+/// Your own row: "Your story" with a "+" to add to it (Instagram's first tray entry).
+private struct YourStoryRow: View {
+    let user: User
+    let reel: StoryReel?
+    let add: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            YourStoryAvatar(user: user, reel: reel, size: 38, add: add)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Your story").font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text(reel == nil ? "Add to your story" : reel?.latest?.shortAge ?? "Click to view")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(hovering ? Theme.hover : .clear))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+    }
+}
+
+/// Your avatar, ringed when you have a story, with the blue "+" badge that adds to it.
+struct YourStoryAvatar: View {
+    let user: User
+    let reel: StoryReel?
+    let size: CGFloat
+    let add: () -> Void
+
+    var body: some View {
+        Group {
+            if let reel {
+                StoryRing(seen: reel.seen, lineWidth: size > 50 ? 2.5 : 2) { Avatar(url: user.avatar, size: size) }
+            } else {
+                Avatar(url: user.avatar, size: size).padding(size > 50 ? 4.5 : 4)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            Button(action: add) {
+                Image(systemName: "plus").font(.system(size: size * 0.2, weight: .heavy)).foregroundStyle(.white)
+                    .frame(width: size * 0.38, height: size * 0.38)
+                    .background(Circle().fill(Theme.link))
+                    .overlay(Circle().strokeBorder(Theme.background, lineWidth: 2))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.pressable)
+            .help("Add to your story")
+        }
+    }
+}
+
 // MARK: - Stories tray
 
 struct StoryTray: View {
     let reels: [StoryReel]
+    var me: User?
+    var add: () -> Void = {}
     let open: (Int) -> Void
+
+    private var mine: Int? { me.flatMap { me in reels.firstIndex { $0.user.id == me.id } } }
 
     var body: some View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 14) {
+                if let me {
+                    let reel = mine.map { reels[$0] }
+                    Button { if let mine { open(mine) } else { add() } } label: {
+                        VStack(spacing: 6) {
+                            YourStoryAvatar(user: me, reel: reel, size: 58, add: add)
+                            Text("Your story").font(.system(size: 11)).lineLimit(1).frame(width: 70)
+                        }
+                    }
+                    .buttonStyle(.pressable)
+                    .contextMenu { Button("Add to Your Story", action: add) }
+                }
                 ForEach(Array(reels.enumerated()), id: \.element.id) { index, reel in
+                    if index != mine {
                     Button { open(index) } label: {
                         VStack(spacing: 6) {
                             StoryRing(seen: reel.seen) {
@@ -388,6 +479,7 @@ struct StoryTray: View {
                         }
                     }
                     .buttonStyle(.pressable)
+                    }
                 }
             }
             .padding(.horizontal, 16)

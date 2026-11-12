@@ -55,6 +55,21 @@ struct RootView: View {
                     .transition(.opacity)
                     .zIndex(10)
             }
+            if app.showCreateMenu, app.authState == .signedIn {
+                CreateMenu()
+                    .transition(.opacity)
+                    .zIndex(24)
+            }
+            if let urls = app.droppedFiles {
+                DropChooser(urls: urls)
+                    .transition(.opacity)
+                    .zIndex(26)
+            }
+            if let editor = app.storyEditor {
+                StoryEditorView(model: editor)
+                    .transition(.opacity.combined(with: .scale(scale: Motion.reduced ? 1 : 0.985)))
+                    .zIndex(30)
+            }
         }
         .overlay(alignment: .bottom) {
             if let toast = app.toast {
@@ -71,16 +86,16 @@ struct RootView: View {
         .animation(.easeOut(duration: 0.2), value: app.stories == nil)
         .animation(.easeOut(duration: 0.16), value: app.sharing == nil)
         .animation(.easeOut(duration: 0.16), value: app.creating == nil)
+        .animation(.easeOut(duration: 0.2), value: app.storyEditor == nil)
+        .animation(.easeOut(duration: 0.12), value: app.showCreateMenu)
+        .animation(.easeOut(duration: 0.14), value: app.droppedFiles == nil)
         .animation(.easeOut(duration: 0.14), value: app.editingCaption == nil)
         .animation(.easeOut(duration: 0.14), value: app.confirmingDelete == nil)
-        // Photos or videos dropped anywhere on the window open the create sheet with them
-        // (places that take files themselves, like a chat's composer, get them first).
+        // Photos dropped anywhere on the window open the create sheet with them; a video asks
+        // reel or story (places that take files themselves, like a chat's composer, get them first).
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-            guard app.authState == .signedIn, app.creating == nil else { return false }
-            Task {
-                let urls = await CreateSheet.urls(from: providers).filter(CreateMedia.isMedia)
-                if !urls.isEmpty { app.openCreate(urls) }
-            }
+            guard app.authState == .signedIn, app.creating == nil, app.storyEditor == nil else { return false }
+            Task { app.dropped(await CreateSheet.urls(from: providers)) }
             return true
         }
         .animation(.easeOut(duration: 0.14), value: app.showSwitcher)

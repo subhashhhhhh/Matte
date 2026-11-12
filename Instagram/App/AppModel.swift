@@ -80,6 +80,12 @@ final class AppModel {
     private(set) var actions: PostActions?
     /// The create sheet, when open.
     private(set) var creating: CreateModel?
+    /// The story editor, when open.
+    private(set) var storyEditor: StoryEditorModel?
+    /// The sidebar "+" menu (Post, Reel, Story).
+    var showCreateMenu = false
+    /// Files dropped on the window that could be a reel or a story: asks which.
+    var droppedFiles: [URL]?
     /// Your post whose caption is being edited.
     var editingCaption: Media?
     /// Your post waiting for "Delete?" to be confirmed.
@@ -147,6 +153,7 @@ final class AppModel {
                 openStories([StoryReel(id: me.id, user: me, seen: true)], at: 0)
             }
             DebugCreate.openIfAsked(self)
+            DebugStoryEditor.openIfAsked(self)
             #endif
             #if DEBUG
             // `-IGOpenProfileFor <query>`: search and open the first person found (screenshots).
@@ -195,10 +202,12 @@ final class AppModel {
 
     /// Opens the create sheet (with files dropped on the window or picked, if any). Files
     /// dropped while it's open are added to it.
-    func openCreate(_ urls: [URL] = []) {
-        guard let client else { return }
+    func openCreate(_ urls: [URL] = [], target: CreateModel.Target? = nil) {
+        guard let client, storyEditor == nil else { return }
         stories?.close()
+        showCreateMenu = false
         let model = creating ?? CreateModel(app: self, client: client)
+        if creating == nil, let target, target != .story { model.target = target }
         creating = model
         let media = urls.filter(CreateMedia.isMedia)
         if !media.isEmpty { Task { await model.add(media) } }
@@ -208,6 +217,35 @@ final class AppModel {
         creating?.cancel()
         creating = nil
         MemoryRelief.soon()
+    }
+
+    /// Opens the story editor, with a photo or video if one was dropped or picked.
+    func openStoryEditor(_ url: URL? = nil) {
+        guard let client else { return }
+        stories?.close()
+        showCreateMenu = false
+        if creating?.isSharing != true { creating = nil }
+        let model = storyEditor ?? StoryEditorModel(app: self, client: client)
+        storyEditor = model
+        if let url { Task { await model.load(url) } }
+    }
+
+    func closeStoryEditor() {
+        storyEditor?.tearDown()
+        storyEditor = nil
+        MemoryRelief.soon()
+    }
+
+    /// Files dropped on the window: photos make a post; a single video asks reel or story.
+    func dropped(_ urls: [URL]) {
+        let media = urls.filter(CreateMedia.isMedia)
+        guard !media.isEmpty, storyEditor == nil else { return }
+        if creating != nil { openCreate(media); return }
+        let videos = media.filter { !CreateMedia.isPhoto($0) }
+        if videos.isEmpty { openCreate(media, target: .post); return }
+        if media.count == 1 { droppedFiles = media; return }
+        // Several files with a video among them: the sheet takes what it can and says why.
+        openCreate(media)
     }
 
     /// A post, reel or story of yours went up: your profile (and stories) show it next time,
@@ -267,6 +305,10 @@ final class AppModel {
         sharing = nil
         creating?.cancel()
         creating = nil
+        storyEditor?.tearDown()
+        storyEditor = nil
+        showCreateMenu = false
+        droppedFiles = nil
         editingCaption = nil
         confirmingDelete = nil
         stories = nil

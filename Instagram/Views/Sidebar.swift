@@ -35,11 +35,12 @@ struct Sidebar: View {
                 .keyboardShortcut(d.shortcut)
             }
             Spacer()
-            // Create: instagram.com's "+" (filled while the create sheet is open).
-            Button { app.openCreate() } label: {
-                IGGlyph(icon: app.creating == nil ? .newPost : .newPostFilled, size: 22)
+            // Create: instagram.com's "+", which opens Post, Reel, Story (filled while open).
+            let creating = app.creating != nil || app.showCreateMenu
+            Button { if app.storyEditor == nil { app.showCreateMenu.toggle() } } label: {
+                IGGlyph(icon: creating ? .newPostFilled : .newPost, size: 22)
                     .frame(width: 48, height: 44)
-                    .foregroundStyle(app.creating == nil ? .secondary : .primary)
+                    .foregroundStyle(creating ? .primary : .secondary)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)

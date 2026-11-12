@@ -131,7 +131,10 @@ enum DebugCreate {
         guard let model = app.creating else { return }
         Task {
             await model.add(urls)
-            if let t = d.string(forKey: "IGCreateTarget").flatMap(CreateModel.Target.init(rawValue:)) { model.target = t }
+            if let t = d.string(forKey: "IGCreateTarget").flatMap(CreateModel.Target.init(rawValue:)) {
+                model.allowsStory = t == .story
+                model.target = t
+            }
             if let s = d.string(forKey: "IGCreateShape").flatMap(CropShape.init(rawValue:)), model.shapes.contains(s) { model.shape = s }
             if let c = d.string(forKey: "IGCreateCaption") { model.caption = c }
             // Only ever pressed for a dry run: a launch flag must never post for real.
@@ -155,6 +158,7 @@ enum DebugCreate {
         func flow(_ label: String, _ files: [URL], _ target: CreateModel.Target, caption: String = "test caption",
                   hide: Bool = false, commentsOff: Bool = false) async {
             let model = CreateModel(app: nil, client: client)
+            model.allowsStory = target == .story
             await model.add(files)
             model.target = target
             model.caption = caption

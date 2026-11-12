@@ -59,7 +59,7 @@ struct CreateSheet: View {
     }
 
     private var title: String {
-        if model.items.isEmpty { return "Create new post" }
+        if model.items.isEmpty { return model.target == .reel ? "Create new reel" : "Create new post" }
         return switch model.target {
         case .post: model.items.count > 1 ? "New carousel" : "New post"
         case .reel: "New reel"
@@ -117,9 +117,11 @@ struct CreateSheet: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Share as").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
-                    SegmentedTabs(tabs: model.targets.map { ($0, $0.title) },
-                                  selection: Binding(get: { model.target }, set: { model.target = $0 }))
+                    if model.targets.count > 1 {
+                        Text("Share as").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                        SegmentedTabs(tabs: model.targets.map { ($0, $0.title) },
+                                      selection: Binding(get: { model.target }, set: { model.target = $0 }))
+                    }
                     Text(targetNote).font(.system(size: 12)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -195,10 +197,11 @@ struct CreateSheet: View {
 
     private func pick() {
         let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.image, .movie]
-        panel.message = "Choose photos or a video"
+        let reel = model.items.isEmpty && model.target == .reel
+        panel.allowsMultipleSelection = !reel
+        panel.allowedContentTypes = reel ? [.movie] : [.image, .movie]
+        panel.message = reel ? "Choose a video" : "Choose photos or a video"
         guard panel.runModal() == .OK else { return }
         let urls = panel.urls
         Task { await model.add(urls) }
