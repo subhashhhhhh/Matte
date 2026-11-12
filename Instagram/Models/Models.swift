@@ -115,6 +115,15 @@ nonisolated struct DMThread: Hashable, Sendable, Identifiable {
     var avatarUsers: [User] { Array(users.prefix(2)) }
 }
 
+/// Someone's activity status, as the web app shows it ("Active now" / "Active 12m ago").
+/// Keyed everywhere by messaging id (`User.messagingId`, `interop_messaging_user_fbid`).
+nonisolated struct Presence: Hashable, Sendable {
+    /// Online right now.
+    var isActive: Bool
+    /// When they were last active (nil if Instagram doesn't say).
+    var lastActive: Date?
+}
+
 nonisolated struct DMReaction: Hashable, Sendable {
     var emoji: String
     var senderId: String

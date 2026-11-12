@@ -299,36 +299,72 @@ actor DMRealtime {
         let socket = DGWSocket(url: p.url("streamcontroller", streamGroup: true), headers: p.headers, label: "typing")
         let frames = await socket.open()
         count("typing.connects")
-        let params: JSON = [
+        func params(_ extra: [String: JSON]) -> Data {
+            var o: [String: JSON] = [
+                "x-dgw-app-xrs-body": "true",
+                "x-dgw-app-XRS-Accept-Ack": "RSAck",
+                "x-dgw-app-XRSS-http_referer": "https://www.instagram.com/direct/inbox/",
+            ]
+            o.merge(extra) { $1 }
+            return (try? JSON.object(o).data()) ?? Data()
+        }
+        // Stream 0: typing; stream 1: presence (others' activity status), as the web app opens them.
+        var opening: [DGWFrame] = [.establish(stream: Self.typingStream, parameters: params([
             "x-dgw-app-XRSS-method": "FBGQLS:XDT_DIRECT_REALTIME_EVENT",
             "x-dgw-app-XRSS-doc_id": .string(p.typingDocId),
             "x-dgw-app-XRSS-routing_hint": "IGDTypingIndicatorClientSubscription",
-            "x-dgw-app-xrs-body": "true",
-            "x-dgw-app-XRS-Accept-Ack": "RSAck",
-            "x-dgw-app-XRSS-http_referer": "https://www.instagram.com/direct/inbox/",
-        ]
-        try? await socket.send([.establish(stream: 0, parameters: (try? params.data()) ?? Data())])
+        ]))]
+        if presenceEnabled {
+            opening.append(.establish(stream: Self.presenceStream, parameters: params(["x-dgw-app-XRSS-method": "PresenceUnifiedJSON"])))
+        }
+        try? await socket.send(opening)
         let watchdog = Task { [weak socket] in
             try? await Task.sleep(for: .seconds(15))
             guard !Task.isCancelled else { return }
             await socket?.close(.protocolError("typing stream didn't start within 15 s"))
         }
-        defer { watchdog.cancel() }
+        streamController = socket
+        presenceStarted = false
+        nextAmendment = 1
+        defer {
+            watchdog.cancel()
+            if streamController === socket { streamController = nil; presenceStarted = false }
+            presenceRefresh?.cancel(); presenceRefresh = nil
+        }
         var started = false
         for await frame in frames {
             count("typing.frame.\(frame.name)")
             switch frame {
-            case .establish(_, let raw):
+            case .establish(let stream, let raw):
                 guard DGWFrame.establishCode(raw) == 200 else {
+                    if stream == Self.presenceStream { note("presence: stream refused"); continue }
                     await socket.close(.protocolError("typing stream refused"))
                     break
                 }
-                let body: JSON = [
-                    "input_data": ["user_id": .string(p.viewerId)],
-                    "%options": ["useOSSResponseFormat": true, "client_has_ods_usecase_counters": true],
-                ]
+                let body: JSON
+                if stream == Self.presenceStream {
+                    body = presenceRequest()
+                } else {
+                    body = [
+                        "input_data": ["user_id": .string(p.viewerId)],
+                        "%options": ["useOSSResponseFormat": true, "client_has_ods_usecase_counters": true],
+                    ]
+                }
                 let payload = Thrift.requestStreamBody((try? body.data()) ?? Data())
-                try? await socket.send([.data(stream: 0, ackId: 0, requiresAck: true, payload: payload)])
+                try? await socket.send([.data(stream: stream, ackId: 0, requiresAck: true, payload: payload)])
+            case .data(let stream, let ackId, let requiresAck, let payload) where stream == Self.presenceStream:
+                let (didStart, events) = Self.presenceEvents(payload)
+                if didStart && !presenceStarted {
+                    presenceStarted = true
+                    note("presence: stream started")
+                    schedulePresenceRequest(after: .zero)
+                }
+                for e in events {
+                    if case .presence(let updates, _) = e { count("presence.updates", updates.count) }
+                    count("event.\(e.name)")
+                    continuation.yield(e)
+                }
+                if requiresAck { try? await socket.send([.ack(stream: stream, ackId: ackId)]) }
             case .data(let stream, let ackId, let requiresAck, let payload):
                 let (didStart, events) = Self.typingEvents(payload)
                 if didStart && !started {
@@ -344,6 +380,9 @@ actor DMRealtime {
                     continuation.yield(e)
                 }
                 if requiresAck { try? await socket.send([.ack(stream: stream, ackId: ackId)]) }
+            case .endOfData(let stream, _) where stream == Self.presenceStream:
+                note("presence: stream ended")
+                presenceStarted = false
             case .endOfData:
                 await socket.close(.protocolError("typing stream closed"))
             default:
@@ -353,6 +392,86 @@ actor DMRealtime {
         let close = await socket.closed
         note("typing: ended (\(close.map(\.description) ?? "-")), started \(started)")
         return (started, close)
+    }
+
+    // MARK: Presence (stream controller, stream 1)
+
+    static let typingStream: UInt16 = 0
+    static let presenceStream: UInt16 = 1
+    /// How often the web app asks again for its additional contacts' presence (2.5 min).
+    static let presencePollInterval: Duration = .seconds(150)
+
+    /// Whether the stream controller also opens the presence stream.
+    private var presenceEnabled = true
+    /// Report our own availability in the request as the web app does (`IDLE`, never
+    /// "active"). Off by default: we only listen.
+    private var reportsOwnPresence = false
+    private var streamController: DGWSocket?
+    private var presenceStarted = false
+    private var nextAmendment: Int64 = 1
+    /// Messaging ids whose presence we ask for besides the server's own buddy list.
+    private var presenceContacts = Set<String>()
+    private var presenceRefresh: Task<Void, Never>?
+
+    /// Call before `start`.
+    func configurePresence(enabled: Bool = true, reportOwn: Bool = false) {
+        presenceEnabled = enabled
+        reportsOwnPresence = reportOwn
+    }
+
+    /// Asks for these people's activity status (messaging ids), like the web app's
+    /// `addAdditionalContacts`. Asked again every 2.5 min while the stream is up.
+    func watchPresence(_ messagingIds: [String]) {
+        let before = presenceContacts.count
+        presenceContacts.formUnion(messagingIds.filter { !$0.isEmpty })
+        if presenceContacts.count != before, presenceStarted { schedulePresenceRequest(after: .seconds(1)) }
+    }
+
+    /// The presence stream's request (`PresenceUnifiedClient.startStream`): app family 3
+    /// (Instagram), buddy-list polling, JSON publishes.
+    private func presenceRequest() -> JSON {
+        var o: [String: JSON] = ["appFamily": 3, "pollingMode": 1, "appId": "936619743392459", "publishEncoding": 2]
+        if reportsOwnPresence {
+            // Capabilities VoiceIp|Webrtc|ReceivePublishWithEIMUID; availability 2 = IDLE.
+            o["presenceReportingRequest"] = ["capabilities": "268435466", "mutationId": .string(UUID().uuidString.lowercased()),
+                                             "availability": 2]
+        }
+        return .object(o)
+    }
+
+    /// Sends the additional-contacts amendment after `delay` (coalescing), then every 2.5 min.
+    private func schedulePresenceRequest(after delay: Duration) {
+        presenceRefresh?.cancel()
+        presenceRefresh = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            while !Task.isCancelled {
+                await self?.sendPresenceContacts()
+                try? await Task.sleep(for: Self.presencePollInterval)
+            }
+        }
+    }
+
+    private func sendPresenceContacts() async {
+        guard presenceStarted, let socket = streamController, !presenceContacts.isEmpty else { return }
+        let body: JSON = ["payload": ["additionalContacts": ["additionalContacts": .array(presenceContacts.sorted().map(JSON.string))]]]
+        let id = nextAmendment
+        nextAmendment += 1
+        count("presence.amendments")
+        try? await socket.send([.data(stream: Self.presenceStream, ackId: UInt16(id & 0x7FFF), requiresAck: true,
+                                      payload: Thrift.amendStream(id: id, (try? body.data()) ?? Data()))])
+    }
+
+    /// A presence-stream frame: flow status 2 = started; data is JSON
+    /// `{"publishType":1|2,"presenceUpdates":[{"userId","presenceStatus","lastActiveTimeSeconds",…}]}`.
+    static func presenceEvents(_ payload: Data) -> (started: Bool, events: [DMRealtimeEvent]) {
+        guard let root = Thrift.decodeStruct(payload), let response = root[5] else { return (false, []) }
+        var started = false
+        var events: [DMRealtimeEvent] = []
+        for delta in response[2]?.list ?? [] {
+            if delta[1]?.int == 2 { started = true }
+            if let bytes = delta[4]?[1]?.binary, let e = DMDeltaParser.presence(bytes) { events.append(e) }
+        }
+        return (started, events)
     }
 
     /// A stream-controller data frame: Thrift `Payload`; field 5 is a `StreamResponse` whose

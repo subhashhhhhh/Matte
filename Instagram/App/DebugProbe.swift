@@ -82,6 +82,10 @@ enum DebugProbe {
                 let rewind = Int64(d.integer(forKey: "IGProbeDGWRewind"))
                 let rt = DMRealtime(client: client, seqId: max(0, seq - rewind),
                                     snapshotAt: rewind > 0 ? .now.addingTimeInterval(-86_400) : .now)
+                // `-IGProbePresenceReport YES`: also report our own availability (IDLE) as the web app does.
+                await rt.configurePresence(enabled: true, reportOwn: d.bool(forKey: "IGProbePresenceReport"))
+                let participants = Set(inbox.threads.flatMap { t in t.users.compactMap(\.messagingId).filter { $0 != t.viewerMessagingId } })
+                if !d.bool(forKey: "IGProbePresenceNoContacts") { await rt.watchPresence(Array(participants)) }
                 await rt.start(typing: true)
                 let started = Date.now
                 var events: [String: Int] = [:]
@@ -90,8 +94,22 @@ enum DebugProbe {
                 let collector = Task {
                     var local: [String: Int] = [:]
                     var connectedAt: Double?
+                    var seen: [String: Presence] = [:]
+                    local["presence.asked"] = participants.count
+                    local["inbox.threads"] = inbox.threads.count
+                    local["inbox.usersWithoutMessagingId"] = inbox.threads.flatMap(\.users).filter { $0.messagingId == nil }.count
                     for await e in rt.events {
                         local[e.name, default: 0] += 1
+                        if case .presence(let u, let full) = e {
+                            local[full ? "presence.full" : "presence.incremental", default: 0] += 1
+                            seen.merge(u) { $1 }
+                            // Counts only: how many people, active, with a time, in our threads.
+                            local["presence.people"] = seen.count
+                            local["presence.active"] = seen.values.filter(\.isActive).count
+                            local["presence.withLastActive"] = seen.values.filter { $0.lastActive != nil }.count
+                            local["presence.threadParticipants"] = seen.keys.filter(participants.contains).count
+                            local["presence.lastActiveWithinDay"] = seen.values.filter { ($0.lastActive ?? .distantPast) > .now.addingTimeInterval(-86_400) }.count
+                        }
                         // Do event thread ids name inbox threads (the first page's)?
                         if let t = e.threadId { local[known.contains(t) ? "threadId.inInbox" : "threadId.notOnFirstPage", default: 0] += 1 }
                         if e == .connected, connectedAt == nil { connectedAt = Date.now.timeIntervalSince(started) }
