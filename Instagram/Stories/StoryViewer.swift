@@ -134,12 +134,111 @@ final class StoryViewerModel {
         if paused { video?.pause() } else { video?.play() }
     }
 
+    // MARK: Replies
+
+    /// Quick reactions, as instagram.com offers them under a story.
+    static let quickReactions = ["😂", "😮", "😍", "😢", "👏", "🔥", "🎉", "💯"]
+    private(set) var sending = false
+
+    /// Whether you can reply to the current story (not your own).
+    var canReply: Bool { item != nil && reel.user.id != app?.viewerId }
+
+    /// Replies to the current story (a DM to its owner): with text, or a quick reaction.
+    func reply(text: String? = nil, emoji: String? = nil) async -> Bool {
+        guard let item, canReply, !sending else { return false }
+        let text = text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (text?.isEmpty == false) || emoji != nil else { return false }
+        sending = true
+        defer { sending = false }
+        do {
+            try await client.replyToStory(mediaId: item.pk, reelId: reel.id, ownerId: reel.user.id,
+                                          text: emoji == nil ? text : nil, emoji: emoji)
+            app?.show(emoji == nil ? "Sent" : "Sent \(emoji!)")
+            return true
+        } catch {
+            app?.report(error)
+            return false
+        }
+    }
+
     func close() {
         ticker?.cancel()
         video?.tearDown()
         video = nil
         app?.stories = nil
         MemoryRelief.soon()
+    }
+}
+
+/// "Reply to …" under a story, with quick reactions above it while you're replying. The story
+/// pauses while the box has focus.
+private struct StoryReplyBar: View {
+    let model: StoryViewerModel
+    @State private var text = ""
+    @FocusState private var focused: Bool
+    @State private var pausedByUs = false
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if focused {
+                HStack(spacing: 2) {
+                    ForEach(StoryViewerModel.quickReactions, id: \.self) { e in
+                        Button { send(emoji: e) } label: {
+                            Text(e).font(.system(size: 24)).frame(width: 38, height: 38)
+                        }
+                        .buttonStyle(.pressable)
+                        .help("React with \(e)")
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(.black.opacity(0.55)))
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            HStack(spacing: 10) {
+                TextField("Reply to \(model.reel.user.username)…", text: $text)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white)
+                    .focused($focused)
+                    .onSubmit { send() }
+                    .disabled(model.sending)
+                if model.sending {
+                    Spinner(size: 14)
+                } else if !text.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Button("Send") { send() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                } else {
+                    Button { focused = true } label: {
+                        Image(systemName: "face.smiling").font(.system(size: 19)).foregroundStyle(.white).frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(.pressable)
+                    .help("Quick reactions")
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 42)
+            .overlay(Capsule().strokeBorder(.white.opacity(0.6), lineWidth: 1))
+        }
+        .animation(.smooth(duration: 0.2), value: focused)
+        .onChange(of: focused) { _, isFocused in
+            // Hold the story still while typing; carry on when you leave the box.
+            if isFocused, !model.paused { model.togglePause(); pausedByUs = true }
+            if !isFocused, pausedByUs { if model.paused { model.togglePause() }; pausedByUs = false }
+        }
+        .onChange(of: model.item?.pk) { text = "" }
+    }
+
+    private func send(emoji: String? = nil) {
+        let reply = text
+        Task {
+            if await model.reply(text: reply, emoji: emoji) {
+                if emoji == nil { text = "" }
+                focused = false
+            }
+        }
     }
 }
 
@@ -223,10 +322,17 @@ struct StoryViewer: View {
                 progressBars
                 header
                 Spacer()
+                if model.canReply { StoryReplyBar(model: model) }
             }
             .padding(12)
             .background(alignment: .top) {
                 LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom).frame(height: 110)
+            }
+            .background(alignment: .bottom) {
+                if model.canReply {
+                    LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .top, endPoint: .bottom).frame(height: 120)
+                        .allowsHitTesting(false)
+                }
             }
         }
         .frame(width: width, height: height)
