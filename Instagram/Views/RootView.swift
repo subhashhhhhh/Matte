@@ -2,7 +2,6 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
-    @Namespace private var heroNS
 
     var body: some View {
         @Bindable var app = app
@@ -54,7 +53,6 @@ struct RootView: View {
         .animation(.easeOut(duration: 0.2), value: app.stories == nil)
         .animation(.easeOut(duration: 0.16), value: app.sharing == nil)
         .animation(.easeOut(duration: 0.14), value: app.showSwitcher)
-        .environment(\.heroNamespace, heroNS)
         .background(Theme.background)
         .ignoresSafeArea()
         .sheet(isPresented: $app.showSignIn) {

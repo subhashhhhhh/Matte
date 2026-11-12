@@ -81,6 +81,9 @@ final class FeedModel {
         }
     }
 
+    /// Debug only: asks the view to open this post (with its animation).
+    var debugOpenRequest: Int?
+
     /// Post whose video is previewing in the grid (one at a time).
     var playing: String?
     /// The post opened large over the grid, and where it sits in `posts`.
@@ -132,7 +135,7 @@ final class FeedModel {
         switch UserDefaults.standard.string(forKey: "IGOpen") {
         case "post":
             try? await Task.sleep(for: .seconds(3))
-            withAnimation(Motion.hero) { open(at: 0) }
+            debugOpenRequest = 0
         case "story": app?.openStories(tray, at: min(3, max(0, tray.count - 1)))
         default: break
         }

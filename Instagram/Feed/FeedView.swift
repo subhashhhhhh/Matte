@@ -3,6 +3,15 @@ import SwiftUI
 struct FeedView: View {
     @Environment(AppModel.self) private var app
     let model: FeedModel
+    @State private var flight = PhotoFlight()
+
+    /// Opens a post with the photo flying out of its tile (Lumen's animation).
+    private func openPost(_ i: Int) {
+        let posts = model.visible
+        guard posts.indices.contains(i), !flight.isFlying else { return }
+        flight.open(posts[i], to: PostLightbox.stageRect(in: flight.hostSize, media: posts[i])) {}
+        model.open(at: i)
+    }
     /// The stories column folded to a strip of avatars (remembered).
     @AppStorage("storiesCollapsed") private var storiesCollapsed = false
 
@@ -26,7 +35,7 @@ struct FeedView: View {
                             StoryTray(reels: model.tray) { app.openStories(model.tray, at: $0) }
                         }
                         FeedControls(model: model)
-                        Masonry(model: model, columns: columns, columnWidth: columnWidth)
+                        Masonry(model: model, columns: columns, columnWidth: columnWidth, openPost: openPost)
                         if model.isLoadingMore { Spinner().padding(20) }
                     }
                     .padding(.horizontal, 24)
@@ -49,15 +58,16 @@ struct FeedView: View {
             }
         }
         .overlay {
-            if let opened = model.opened {
+            // Hidden while its photo is still flying in; the flight hands over when it lands.
+            if let opened = model.opened, !flight.isFlying(opened.pk) {
                 PostLightbox(model: opened,
                              canPrevious: (model.openedIndex ?? 0) > 0,
                              canNext: (model.openedIndex ?? 0) < model.visible.count - 1,
-                             step: { model.step($0) }, close: { withAnimation(Motion.hero) { model.closeOpened() } })
-                    .transition(.opacity)
+                             step: { model.step($0) }, close: { model.closeOpened() })
             }
         }
-        .environment(\.heroOpened, model.opened?.pk)
+        .photoFlightHost(flight)
+        .onChange(of: model.debugOpenRequest) { if let i = model.debugOpenRequest { openPost(i) } }
         .task { await model.loadIfNeeded() }
     }
 }
@@ -102,6 +112,7 @@ private struct Masonry: View {
     let model: FeedModel
     let columns: Int
     let columnWidth: CGFloat
+    let openPost: (Int) -> Void
 
     var body: some View {
         let posts = model.visible
@@ -115,7 +126,7 @@ private struct Masonry: View {
                                  setPreviewing: { on in
                                      if on { model.playing = post.pk } else if model.playing == post.pk { model.playing = nil }
                                  },
-                                 open: { withAnimation(Motion.hero) { model.open(at: i) } })
+                                 open: { openPost(i) })
                             .onAppear {
                                 if i >= posts.count - 4 { Task { await model.loadMore() } }
                             }
@@ -141,46 +152,70 @@ private struct Masonry: View {
 /// A post opened over the grid: the media as large as the window allows, the caption and
 /// comments beside it. ←/→ step through the feed, Esc closes.
 struct PostLightbox: View {
-    @Environment(\.heroNamespace) private var heroNS
+    @Environment(\.photoFlight) private var flight
     let model: MediaDetailModel
     let canPrevious: Bool
     let canNext: Bool
     let step: (Int) -> Void
     let close: () -> Void
     @FocusState private var focused: Bool
+    /// The caption and comments ease in once the photo has landed.
+    @State private var panelShown = false
+
+    /// Where the viewer puts the photo in a host of `size`: what the photo flight flies to.
+    static func layout(in size: CGSize, media: Media?) -> (stage: CGRect, panel: CGFloat) {
+        let panel: CGFloat = size.width >= 1100 ? 400 : 340
+        let maxStageW = size.width - panel - 140
+        let maxStageH = size.height - 64
+        let aspect = media.map { max(0.5, min(1.91, $0.aspect)) } ?? 1
+        let stageH = max(1, min(maxStageH, maxStageW / aspect))
+        let stageW = stageH * aspect
+        let x = (size.width - stageW - panel) / 2
+        let y = (size.height - stageH) / 2
+        return (CGRect(x: x, y: y, width: stageW, height: stageH), panel)
+    }
+
+    static func stageRect(in size: CGSize, media: Media?) -> CGRect { layout(in: size, media: media).stage }
+
+    /// Closes with the photo flying back into its tile.
+    private func dismiss(in size: CGSize) {
+        if let flight, let media = model.media {
+            flight.close(media, from: Self.stageRect(in: size, media: media))
+        }
+        close()
+    }
 
     var body: some View {
         GeometryReader { geo in
-            let panel: CGFloat = geo.size.width >= 1100 ? 400 : 340
-            let maxStageW = geo.size.width - panel - 140
-            let maxStageH = geo.size.height - 64
             let media = model.media
-            let aspect = media.map { max(0.5, min(1.91, $0.aspect)) } ?? 1
-            let stageH = min(maxStageH, maxStageW / aspect)
+            let layout = Self.layout(in: geo.size, media: media)
+            let stage = layout.stage
             ZStack {
-                Color.black.opacity(0.82).onTapGesture { close() }
+                Color.black.opacity(0.82).onTapGesture { dismiss(in: geo.size) }
                 HStack(spacing: 0) {
                     if let media {
-                        MediaStage(media: media, cornerRadius: 0)
-                            .frame(width: stageH * aspect, height: stageH)
-                            .hero(model.pk, in: heroNS)
+                        MediaStage(media: media, cornerRadius: 0, initialImage: flight?.handoff(for: media.pk))
+                            .frame(width: stage.width, height: stage.height)
                     }
                     MediaDetailsColumn(model: model)
-                        .frame(width: panel, height: stageH)
+                        .frame(width: layout.panel, height: stage.height)
                         .background(Theme.background)
+                        .opacity(panelShown ? 1 : 0)
+                        .offset(x: panelShown || Motion.reduced ? 0 : -12)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .shadow(color: .black.opacity(0.35), radius: 30)
+                .shadow(color: .black.opacity(panelShown ? 0.35 : 0), radius: 30)
                 HStack {
                     arrow("chevron.left", enabled: canPrevious) { step(-1) }
                     Spacer()
                     arrow("chevron.right", enabled: canNext) { step(1) }
                 }
                 .padding(.horizontal, 20)
+                .opacity(panelShown ? 1 : 0)
                 VStack {
                     HStack {
                         Spacer()
-                        Button { close() } label: {
+                        Button { dismiss(in: geo.size) } label: {
                             Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                                 .frame(width: 34, height: 34)
                         }
@@ -196,7 +231,10 @@ struct PostLightbox: View {
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
-        .onAppear { focused = true }
+        .onAppear {
+            focused = true
+            withAnimation(.easeOut(duration: 0.22)) { panelShown = true }
+        }
         .onKeyPress(.leftArrow) { if canPrevious { step(-1) }; return .handled }
         .onKeyPress(.rightArrow) { if canNext { step(1) }; return .handled }
         .task { await model.start() }

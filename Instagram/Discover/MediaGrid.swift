@@ -4,6 +4,18 @@ import SwiftUI
 /// the counts and previews a video silently; clicking opens the post large over the page.
 struct MediaGrid: View {
     let browser: MediaBrowser
+    @Environment(\.photoFlight) private var flight
+
+    /// Opens a post with the photo flying out of its tile (Lumen's animation).
+    private func openPost(_ i: Int) {
+        guard browser.items.indices.contains(i) else { return }
+        if let flight {
+            guard !flight.isFlying else { return }
+            let m = browser.items[i]
+            flight.open(m, to: PostLightbox.stageRect(in: flight.hostSize, media: m)) {}
+        }
+        browser.open(at: i)
+    }
     var minTile: CGFloat = 200
 
     var body: some View {
@@ -12,12 +24,12 @@ struct MediaGrid: View {
                 GridTile(media: media, isPreviewing: browser.playing == media.pk) { on in
                     if on { browser.playing = media.pk } else if browser.playing == media.pk { browser.playing = nil }
                 }
-                .onTapGesture { withAnimation(Motion.hero) { browser.open(at: i) } }
-                .contextMenu { PostMenu(media: media) { withAnimation(Motion.hero) { browser.open(at: i) } } }
+                .onTapGesture { openPost(i) }
+                .contextMenu { PostMenu(media: media) { openPost(i) } }
                 .onAppear { browser.appeared(i) }
             }
         }
-        .environment(\.heroOpened, browser.opened?.pk)
+
     }
 }
 
@@ -25,8 +37,6 @@ struct GridTile: View {
     let media: Media
     var isPreviewing: Bool
     var setPreviewing: (Bool) -> Void
-    @Environment(\.heroNamespace) private var heroNS
-    @Environment(\.heroOpened) private var heroOpened
     @State private var hovering = false
     @State private var hoverTask: Task<Void, Never>?
 
@@ -45,8 +55,7 @@ struct GridTile: View {
             }
             .clipped()
             .animation(.easeOut(duration: 0.35), value: hovering)
-            .hero(media.pk, in: heroNS, isSource: heroOpened != media.pk)
-            .opacity(heroOpened == media.pk ? 0 : 1)
+            .photoFlightTile(media.pk)
             .overlay(alignment: .topTrailing) {
                 Group {
                     if media.children.count > 1 {
@@ -99,13 +108,14 @@ struct GridTile: View {
 /// The opened post over a grid page, stepping through the grid.
 struct BrowserLightbox: View {
     let browser: MediaBrowser
+    @Environment(\.photoFlight) private var flight
 
     var body: some View {
-        if let opened = browser.opened {
+        if let opened = browser.opened, flight?.isFlying(opened.pk) != true {
             PostLightbox(model: opened,
                          canPrevious: (browser.openedIndex ?? 0) > 0,
                          canNext: (browser.openedIndex ?? 0) < browser.items.count - 1,
-                         step: { browser.step($0) }, close: { withAnimation(Motion.hero) { browser.closeOpened() } })
+                         step: { browser.step($0) }, close: { browser.closeOpened() })
                 .transition(.opacity)
         }
     }

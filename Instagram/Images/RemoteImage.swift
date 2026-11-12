@@ -6,6 +6,8 @@ struct RemoteImage: View {
     /// Shown if `url` fails to load.
     var fallback: URL? = nil
     var contentMode: ContentMode = .fill
+    /// An already-decoded image to show until `url` loads (a photo handed over by the flight).
+    var initial: CGImage? = nil
 
     @Environment(\.displayScale) private var displayScale
     @State private var image: CGImage?
@@ -15,7 +17,7 @@ struct RemoteImage: View {
         GeometryReader { geo in
             ZStack {
                 Rectangle().fill(Theme.placeholder)
-                if let image {
+                if let image = image ?? initial {
                     Image(decorative: image, scale: displayScale)
                         .resizable()
                         .aspectRatio(contentMode: contentMode)

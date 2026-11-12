@@ -54,25 +54,6 @@ extension View {
     }
 }
 
-extension EnvironmentValues {
-    /// Shared by grids and the post viewer so a post grows out of its tile.
-    @Entry var heroNamespace: Namespace.ID? = nil
-    /// The post currently opened from a grid (its tile hides while the post is large).
-    @Entry var heroOpened: String? = nil
-}
-
-extension View {
-    /// Ties a tile and the opened post together for the open/close animation.
-    @ViewBuilder
-    func hero(_ id: String, in ns: Namespace.ID?, isSource: Bool = true) -> some View {
-        if let ns, !Motion.reduced {
-            matchedGeometryEffect(id: "hero-\(id)", in: ns, isSource: isSource)
-        } else {
-            self
-        }
-    }
-}
-
 /// A card that pops into place when it appears (its backdrop fades separately).
 private struct PopIn: ViewModifier {
     var from: CGFloat

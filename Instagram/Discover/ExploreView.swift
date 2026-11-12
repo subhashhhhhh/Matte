@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ExploreView: View {
+    @State private var flight = PhotoFlight()
     let model: ExploreModel
 
     var body: some View {
@@ -23,6 +24,7 @@ struct ExploreView: View {
             }
         }
         .overlay { BrowserLightbox(browser: model.browser) }
+        .photoFlightHost(flight)
         .task { await model.loadIfNeeded() }
     }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 /// Someone's page: a wide header (avatar, counts, bio), their highlights, and tabs of grids
 /// (Posts, Reels, Tagged, and Saved on your own page).
 struct ProfileView: View {
+    @State private var flight = PhotoFlight()
     let model: ProfileModel
     @Environment(AppModel.self) private var app
 
@@ -40,6 +41,7 @@ struct ProfileView: View {
         }
         .scrollIndicators(.never)
         .overlay { BrowserLightbox(browser: model.activeFeed.browser) }
+        .photoFlightHost(flight)
         .overlay {
             if let list = model.followList {
                 FollowListPanel(model: list) { model.followList = nil }

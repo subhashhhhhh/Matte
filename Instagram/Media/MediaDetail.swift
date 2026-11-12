@@ -193,6 +193,8 @@ final class MediaDetailModel: Identifiable {
 struct MediaStage: View {
     let media: Media
     var cornerRadius: CGFloat = 12
+    /// The first photo, already decoded (handed over by the photo flight), so it shows at once.
+    var initialImage: CGImage? = nil
     @State private var page = 0
 
     private var items: [Media] { media.children.isEmpty ? [media] : media.children }
@@ -202,9 +204,11 @@ struct MediaStage: View {
         ZStack {
             Color.black
             if current.isVideo, let url = current.video(minWidth: 720) {
-                StageVideo(url: url, cover: current.image(minWidth: 720)).id(current.pk + url.absoluteString)
+                StageVideo(url: url, cover: current.image(minWidth: 720), initialCover: page == 0 ? initialImage : nil)
+                    .id(current.pk + url.absoluteString)
             } else {
-                RemoteImage(url: current.image(minWidth: 1080), contentMode: .fit).id(current.pk)
+                RemoteImage(url: current.image(minWidth: 1080), contentMode: .fit, initial: page == 0 ? initialImage : nil)
+                    .id(current.pk)
             }
             if items.count > 1 {
                 HStack {
@@ -245,12 +249,13 @@ struct MediaStage: View {
 struct StageVideo: View {
     let url: URL
     var cover: URL?
+    var initialCover: CGImage? = nil
     @State private var video: LoopingVideo?
     @State private var sound = SoundSetting.shared
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            RemoteImage(url: cover, contentMode: .fit)
+            RemoteImage(url: cover, contentMode: .fit, initial: initialCover)
             if let video {
                 PlayerLayerView(player: video.player, gravity: .resizeAspect)
                     .contentShape(Rectangle())

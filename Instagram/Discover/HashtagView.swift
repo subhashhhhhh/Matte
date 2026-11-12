@@ -2,6 +2,7 @@ import SwiftUI
 
 /// A hashtag's page: a header with its post count over a grid of its top posts.
 struct HashtagView: View {
+    @State private var flight = PhotoFlight()
     let model: HashtagModel
 
     var body: some View {
@@ -22,6 +23,7 @@ struct HashtagView: View {
         }
         .scrollIndicators(.never)
         .overlay { BrowserLightbox(browser: model.feed.browser) }
+        .photoFlightHost(flight)
         .task { await model.start() }
     }
 
