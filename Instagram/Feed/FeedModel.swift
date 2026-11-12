@@ -207,7 +207,11 @@ final class FeedModel {
         case "post":
             try? await Task.sleep(for: .seconds(3))
             debugOpenRequest = 0
-        case "story": app?.openStories(tray, at: min(3, max(0, tray.count - 1)))
+        case "story":
+            // `-IGOpenStoryOf <username>`: that account's stories.
+            let who = UserDefaults.standard.string(forKey: "IGOpenStoryOf")
+            let at = who.flatMap { name in tray.firstIndex { $0.user.username == name } } ?? min(3, max(0, tray.count - 1))
+            app?.openStories(tray, at: at)
         default: break
         }
         #endif
@@ -259,5 +263,12 @@ final class FeedModel {
     func markSeen(_ reelId: String) {
         guard let i = tray.firstIndex(where: { $0.id == reelId }) else { return }
         tray[i].seen = true
+    }
+
+    /// Moves a tray entry's seen marker as you watch; the ring greys only once the newest is seen.
+    func advanceSeen(_ reelId: String, upTo date: Date?) {
+        guard let i = tray.firstIndex(where: { $0.id == reelId }), let date else { return }
+        if (tray[i].seenUpTo ?? .distantPast) < date { tray[i].seenUpTo = date }
+        if let latest = tray[i].latest, date >= latest { tray[i].seen = true }
     }
 }

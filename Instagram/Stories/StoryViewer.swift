@@ -39,8 +39,13 @@ final class StoryViewerModel {
     var item: Media? { reel.items.indices.contains(itemIndex) ? reel.items[itemIndex] : nil }
 
     /// Loads the current reel (and the next two) if needed, then starts the item.
-    private func prepare() async {
+    private func prepare(fromUnseen: Bool = true) async {
         await fetch(around: reelIndex)
+        // Like Instagram: open an account at the first story you haven't seen.
+        if fromUnseen, itemIndex == 0, let marker = reel.seenUpTo,
+           let first = reel.items.firstIndex(where: { ($0.takenAt ?? .distantFuture) > marker }) {
+            itemIndex = first
+        }
         startItem()
     }
 
@@ -89,7 +94,9 @@ final class StoryViewerModel {
                 }
             }
         }
-        app?.feed?.markSeen(reel.id)
+        // Advance the seen marker to this story (the ring greys once the newest is watched).
+        if let at = item.takenAt, (reels[reelIndex].seenUpTo ?? .distantPast) < at { reels[reelIndex].seenUpTo = at }
+        app?.feed?.advanceSeen(reel.id, upTo: item.takenAt)
         markSeenSoon(item, reelId: reel.id)
         preloadAhead()
         Task { await fetch(around: reelIndex) }
@@ -146,7 +153,7 @@ final class StoryViewerModel {
         } else if reelIndex > 0 {
             reelIndex -= 1
             itemIndex = 0
-            Task { await prepare() }
+            Task { await prepare(fromUnseen: false) }
         } else {
             startItem()
         }
@@ -170,7 +177,7 @@ final class StoryViewerModel {
         guard reelIndex > 0 else { return }
         reelIndex -= 1
         itemIndex = 0
-        Task { await prepare() }
+        Task { await prepare(fromUnseen: false) }
     }
 
     func togglePause() {

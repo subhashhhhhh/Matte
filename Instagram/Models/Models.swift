@@ -108,6 +108,8 @@ nonisolated struct StoryReel: Hashable, Sendable, Identifiable {
     var user: User
     var seen: Bool
     var latest: Date?
+    /// Instagram's seen marker: stories posted after it are the unseen ones.
+    var seenUpTo: Date?
     /// Filled when the reel is opened.
     var items: [Media] = []
 }

@@ -116,8 +116,10 @@ nonisolated enum Parser {
             let id = r["id"].string ?? r["id"].int.map(String.init) ?? u.id
             let latest = r["latest_reel_media"].int ?? 0
             let seenAt = r["seen"].int ?? 0
-            return StoryReel(id: id, user: u, seen: latest > 0 && seenAt >= latest,
-                             latest: latest > 0 ? Date(timeIntervalSince1970: TimeInterval(latest)) : nil)
+            var reel = StoryReel(id: id, user: u, seen: latest > 0 && seenAt >= latest,
+                                 latest: latest > 0 ? Date(timeIntervalSince1970: TimeInterval(latest)) : nil)
+            reel.seenUpTo = seenAt > 0 ? Date(timeIntervalSince1970: TimeInterval(seenAt)) : nil
+            return reel
         }
     }
 
