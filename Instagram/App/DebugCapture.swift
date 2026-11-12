@@ -44,6 +44,11 @@ enum DebugCapture {
             }
             config.userContentController.add(self, name: "cap")
             config.userContentController.addUserScript(WKUserScript(source: Self.hook, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            // Phone mode: the page must also see a portrait phone screen (story posting asks you to
+            // "rotate" when the screen reads as landscape, which a Mac's always does).
+            if UserDefaults.standard.bool(forKey: "IGCaptureMobile") {
+                config.userContentController.addUserScript(WKUserScript(source: Self.portrait, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+            }
             let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 900), configuration: config)
             // `-IGCaptureMobile YES`: present as an iPhone browser (instagram.com only offers
             // posting a story there), in a phone-shaped window.
@@ -105,6 +110,26 @@ enum DebugCapture {
             let name = (body["name"] as? String).map { $0.isEmpty ? "req" : $0 } ?? "req"
             try? data.write(to: dir.appending(path: String(format: "%03d-%@.json", count, name)))
         }
+
+        /// Makes the page see an iPhone held upright: screen size, orientation, touch.
+        static let portrait = #"""
+        (function(){
+          const def = (o, k, v) => { try { Object.defineProperty(o, k, { get: () => v, configurable: true }); } catch(e) {} };
+          def(screen, 'width', 430); def(screen, 'height', 932);
+          def(screen, 'availWidth', 430); def(screen, 'availHeight', 932);
+          def(window, 'orientation', 0);
+          def(navigator, 'maxTouchPoints', 5);
+          try { def(screen, 'orientation', { type: 'portrait-primary', angle: 0, addEventListener(){}, removeEventListener(){}, lock(){ return Promise.resolve(); }, unlock(){} }); } catch(e) {}
+          const omm = window.matchMedia.bind(window);
+          window.matchMedia = (q) => {
+            const r = omm(q);
+            if (/orientation\s*:\s*portrait/.test(q)) return Object.assign(Object.create(r), { matches: true, media: q });
+            if (/orientation\s*:\s*landscape/.test(q)) return Object.assign(Object.create(r), { matches: false, media: q });
+            if (/pointer\s*:\s*coarse|hover\s*:\s*none/.test(q)) return Object.assign(Object.create(r), { matches: true, media: q });
+            return r;
+          };
+        })();
+        """#
 
         /// Wraps fetch, XMLHttpRequest and WebSocket to report API traffic.
         static let hook = #"""
