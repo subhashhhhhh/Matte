@@ -3,18 +3,21 @@ import SwiftUI
 struct FeedView: View {
     @Environment(AppModel.self) private var app
     let model: FeedModel
+    /// The stories column folded to a strip of avatars (remembered).
+    @AppStorage("storiesCollapsed") private var storiesCollapsed = false
 
     var body: some View {
         GeometryReader { geo in
             // Wide windows: stories as a column on the left, posts in as many columns as fit.
             let storiesColumn = geo.size.width >= 1000 && !model.tray.isEmpty
-            let gridWidth = geo.size.width - (storiesColumn ? 250 : 0) - 48
+            let storiesWidth: CGFloat = storiesCollapsed ? 76 : 250
+            let gridWidth = geo.size.width - (storiesColumn ? storiesWidth : 0) - 48
             let columns = max(1, min(4, Int((gridWidth + 16) / (300 + 16))))
             let columnWidth = min(420, (gridWidth - CGFloat(columns - 1) * 16) / CGFloat(columns))
             HStack(spacing: 0) {
                 if storiesColumn {
-                    StoriesColumn(reels: model.tray) { app.openStories(model.tray, at: $0) }
-                        .frame(width: 250)
+                    StoriesColumn(reels: model.tray, collapsed: $storiesCollapsed) { app.openStories(model.tray, at: $0) }
+                        .frame(width: storiesWidth)
                     Rectangle().fill(Theme.hairline).frame(width: 1)
                 }
                 ScrollView {
@@ -59,7 +62,7 @@ struct FeedView: View {
     }
 }
 
-/// Which feed (For you / Following / Favorites) and filter chips, above the grid.
+/// Which feed (For you / Following / Favorites), above the grid.
 private struct FeedControls: View {
     @Bindable var model: FeedModel
 
@@ -82,24 +85,7 @@ private struct FeedControls: View {
             }
             .padding(3)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
-            Rectangle().fill(Theme.hairline).frame(width: 1, height: 20).padding(.horizontal, 6)
-            ForEach(FeedFilter.allCases) { f in
-                let on = model.filter == f
-                Button { model.filter = f } label: {
-                    Text(f.title)
-                        .font(.system(size: 12.5, weight: on ? .semibold : .medium))
-                        .padding(.horizontal, 12)
-                        .frame(height: 28)
-                        .background(Capsule().fill(on ? Color.primary : Theme.panel))
-                        .foregroundStyle(on ? Theme.background : .primary)
-                }
-                .buttonStyle(.pressable)
-            }
             Spacer()
-            if model.filter != .all {
-                Text("\(model.visible.count) of \(model.posts.count) loaded")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-            }
         }
     }
 }
@@ -227,27 +213,45 @@ struct PostLightbox: View {
 /// Stories as a list down the left of Home: unseen first, with how long ago each was posted.
 private struct StoriesColumn: View {
     let reels: [StoryReel]
+    @Binding var collapsed: Bool
     let open: (Int) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: collapsed ? .center : .leading, spacing: 0) {
             HStack {
-                Text("Stories").font(.system(size: 15, weight: .bold))
-                Spacer()
-                let unseen = reels.filter { !$0.seen }.count
-                if unseen > 0 {
-                    Text("\(unseen) new").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 52)
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(order, id: \.self) { i in
-                        StoryRow(reel: reels[i]).onTapGesture { open(i) }
+                if !collapsed {
+                    Text("Stories").font(.system(size: 15, weight: .bold))
+                    Spacer()
+                    let unseen = reels.filter { !$0.seen }.count
+                    if unseen > 0 {
+                        Text("\(unseen) new").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
                     }
                 }
-                .padding(.horizontal, 8)
+                ChromeButton(collapsed ? "Show stories" : "Hide stories",
+                             symbol: collapsed ? "sidebar.left" : "chevron.left.2") {
+                    withAnimation(.smooth(duration: 0.25)) { collapsed.toggle() }
+                }
+            }
+            .padding(.horizontal, collapsed ? 0 : 16)
+            .frame(maxWidth: .infinity, alignment: collapsed ? .center : .leading)
+            .frame(height: 52)
+            ScrollView {
+                LazyVStack(spacing: collapsed ? 10 : 2) {
+                    ForEach(order, id: \.self) { i in
+                        Group {
+                            if collapsed {
+                                StoryRing(seen: reels[i].seen, lineWidth: 2) { Avatar(url: reels[i].user.avatar, size: 44) }
+                                    .help(reels[i].user.username)
+                            } else {
+                                StoryRow(reel: reels[i])
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { open(i) }
+                    }
+                }
+                .padding(.horizontal, collapsed ? 0 : 8)
+                .padding(.vertical, collapsed ? 4 : 0)
                 .padding(.bottom, 12)
             }
             .scrollIndicators(.never)
