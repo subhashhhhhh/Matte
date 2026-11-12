@@ -1,24 +1,37 @@
 import SwiftUI
 
-/// Someone's page: a wide header (avatar, counts, bio) over a grid of their posts.
+/// Someone's page: a wide header (avatar, counts, bio), their highlights, and tabs of grids
+/// (Posts, Reels, Tagged, and Saved on your own page).
 struct ProfileView: View {
     let model: ProfileModel
     @Environment(AppModel.self) private var app
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: 18) {
                 header
                     .frame(maxWidth: 1000)
-                Rectangle().fill(Theme.hairline).frame(height: 1).frame(maxWidth: 1000)
-                if model.profile?.isPrivate == true, model.profile?.following != true, user.id != app.viewerId {
+                if !model.highlights.isEmpty, !model.isLocked {
+                    HighlightsRow(highlights: model.highlights) { model.openHighlight($0) }
+                        .frame(maxWidth: 1000)
+                }
+                if model.isLocked {
+                    Rectangle().fill(Theme.hairline).frame(height: 1).frame(maxWidth: 1000)
                     EmptyState(symbol: "lock", title: "This account is private",
-                               message: "Follow them on Instagram to see their posts.")
+                               message: model.profile?.requested == true
+                                   ? "Your follow request is waiting."
+                                   : "Follow them to see their posts.")
                         .frame(height: 260)
                 } else {
-                    MediaGrid(browser: model.browser, minTile: 200)
+                    ProfileTabBar(tabs: model.tabs, selection: Binding(get: { model.tab }, set: { model.tab = $0 }))
                         .frame(maxWidth: 1000)
-                    if model.isLoading { Spinner().padding(20) }
+                    if model.tab == .saved, !model.collections.isEmpty {
+                        CollectionChips(collections: model.collections, selected: model.collectionId) { model.selectCollection($0) }
+                            .frame(maxWidth: 1000)
+                    }
+                    FeedGrid(feed: model.activeFeed, empty: emptyText)
+                        .frame(maxWidth: 1000)
+                        .id(model.tab.rawValue + (model.collectionId ?? ""))
                 }
             }
             .padding(.horizontal, 24)
@@ -26,12 +39,28 @@ struct ProfileView: View {
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.never)
-        .overlay { BrowserLightbox(browser: model.browser) }
-        .animation(.easeOut(duration: 0.16), value: model.browser.opened == nil)
+        .overlay { BrowserLightbox(browser: model.activeFeed.browser) }
+        .animation(.easeOut(duration: 0.16), value: model.activeFeed.browser.opened == nil)
+        .overlay {
+            if let list = model.followList {
+                FollowListPanel(model: list) { model.followList = nil }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.16), value: model.followList == nil)
         .task { await model.start() }
     }
 
     private var user: User { model.profile?.user ?? model.user }
+
+    private var emptyText: (symbol: String, title: String) {
+        switch model.tab {
+        case .posts: ("camera", "No posts yet")
+        case .reels: ("play.rectangle", "No reels yet")
+        case .tagged: ("person.crop.square", "No photos of \(user.username)")
+        case .saved: ("bookmark", "Nothing saved yet")
+        }
+    }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 40) {
@@ -45,9 +74,11 @@ struct ProfileView: View {
                 }
                 if let p = model.profile {
                     HStack(spacing: 28) {
-                        stat(p.postCount, "posts")
-                        stat(p.followerCount, "followers")
-                        stat(p.followingCount, "following")
+                        stat(p.postCount, "posts", action: nil)
+                        stat(p.followerCount, p.followerCount == 1 ? "follower" : "followers",
+                             action: model.isLocked ? nil : { model.openFollowList(followers: true) })
+                        stat(p.followingCount, "following",
+                             action: model.isLocked ? nil : { model.openFollowList(followers: false) })
                     }
                 } else if !model.failed {
                     Spinner(size: 14)
@@ -102,33 +133,210 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var actions: some View {
-        if let p = model.profile, user.id != app.viewerId {
-            Text(p.following ? "Following" : "Not following")
-                .font(.system(size: 13, weight: .semibold))
-                .padding(.horizontal, 14).frame(height: 32)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.panel))
-                .foregroundStyle(p.following ? .primary : .secondary)
+        if let p = model.profile, !model.isMe {
+            FollowButton(profile: p, confirming: model.confirmingUnfollow, busy: model.followBusy) { model.followTapped() }
         }
         if let thread = app.inbox?.threads.first(where: { !$0.isGroup && $0.users.first?.id == user.id }) {
-            Button {
-                app.openChat(thread.id)
-            } label: {
-                Text("Message").font(.system(size: 13, weight: .semibold))
-                    .padding(.horizontal, 14).frame(height: 32)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.selected))
-            }
-            .buttonStyle(.pressable)
+            Button("Message") { app.openChat(thread.id) }
+                .buttonStyle(.secondaryPill)
         }
         if let url = URL(string: "https://www.instagram.com/\(user.username)/") {
             ChromeButton("Open on Instagram", symbol: "arrow.up.right") { NSWorkspace.shared.open(url) }
         }
     }
 
-    private func stat(_ n: Int?, _ label: String) -> some View {
-        HStack(spacing: 4) {
+    @ViewBuilder
+    private func stat(_ n: Int?, _ label: String, action: (() -> Void)?) -> some View {
+        let text = HStack(spacing: 4) {
             Text(n.map { $0 >= 10_000 ? $0.compact : $0.formatted() } ?? "–").font(.system(size: 15, weight: .semibold))
             Text(label).font(.system(size: 15)).foregroundStyle(.secondary)
         }
+        if let action {
+            Button(action: action) { text }
+                .buttonStyle(.pressable)
+                .pointingHand()
+        } else {
+            text
+        }
+    }
+}
+
+/// Follow / Following / Requested, asking once more before unfollowing.
+private struct FollowButton: View {
+    let profile: Profile
+    let confirming: Bool
+    let busy: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Group {
+            if profile.following || profile.requested {
+                Button(action: action) {
+                    Text(confirming ? (profile.requested ? "Cancel request" : "Unfollow")
+                                    : profile.requested ? "Requested" : "Following")
+                        .foregroundStyle(confirming ? Theme.like : .primary)
+                        .contentTransition(.opacity)
+                }
+                .buttonStyle(.secondaryPill)
+                .help(confirming ? "Click again to confirm" : profile.requested ? "Cancel your follow request" : "Unfollow")
+            } else {
+                Button(profile.followedBy ? "Follow back" : "Follow", action: action)
+                    .buttonStyle(.prominentCompact)
+            }
+        }
+        .disabled(busy)
+        .animation(.easeOut(duration: 0.12), value: confirming)
+    }
+}
+
+// MARK: - Highlights
+
+/// Story highlights: round covers with titles, scrolling sideways.
+struct HighlightsRow: View {
+    let highlights: [Highlight]
+    let open: (Highlight) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: 22) {
+                ForEach(highlights) { h in
+                    Button { open(h) } label: {
+                        VStack(spacing: 7) {
+                            RemoteImage(url: h.cover, contentMode: .fill)
+                                .frame(width: 74, height: 74)
+                                .clipShape(Circle())
+                                .padding(4)
+                                .overlay(Circle().strokeBorder(.primary.opacity(0.16), lineWidth: 1))
+                            Text(h.title)
+                                .font(.system(size: 12, weight: .semibold))
+                                .lineLimit(1)
+                                .frame(maxWidth: 86)
+                        }
+                    }
+                    .buttonStyle(.pressable)
+                    .pointingHand()
+                    .help(h.title)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+        }
+        .scrollIndicators(.never)
+    }
+}
+
+// MARK: - Tabs
+
+/// Instagram's profile tabs: icon and small caps label, a line over the selected one.
+struct ProfileTabBar: View {
+    let tabs: [ProfileTab]
+    @Binding var selection: ProfileTab
+    @Namespace private var line
+
+    var body: some View {
+        HStack(spacing: 56) {
+            ForEach(tabs) { tab in
+                let selected = tab == selection
+                Button { selection = tab } label: {
+                    HStack(spacing: 6) {
+                        icon(tab, selected: selected)
+                        Text(tab.title.uppercased())
+                            .font(.system(size: 12, weight: .semibold))
+                            .tracking(1)
+                    }
+                    .foregroundStyle(selected ? .primary : .secondary)
+                    .frame(height: 46)
+                    .overlay(alignment: .top) {
+                        if selected {
+                            Rectangle().fill(.primary).frame(height: 1)
+                                .matchedGeometryEffect(id: "line", in: line)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .pointingHand()
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .top) { Rectangle().fill(Theme.hairline).frame(height: 1) }
+        .animation(.smooth(duration: 0.22), value: selection)
+    }
+
+    @ViewBuilder
+    private func icon(_ tab: ProfileTab, selected: Bool) -> some View {
+        switch tab {
+        case .posts: Image(systemName: "square.grid.3x3").font(.system(size: 12, weight: .semibold))
+        case .reels: IGGlyph(icon: selected ? .reelsFilled : .reels, size: 13)
+        case .tagged: Image(systemName: "person.crop.square").font(.system(size: 12, weight: .semibold))
+        case .saved: IGGlyph(icon: selected ? .saveFilled : .save, size: 13)
+        }
+    }
+}
+
+/// Saved-post collections as pills ("All posts" first).
+private struct CollectionChips: View {
+    let collections: [SavedCollection]
+    let selected: String?
+    let select: (String?) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                chip("All posts", id: nil)
+                ForEach(collections) { c in chip(c.name, id: c.id) }
+            }
+        }
+        .scrollIndicators(.never)
+    }
+
+    private func chip(_ title: String, id: String?) -> some View {
+        let on = selected == id
+        return Button { select(id) } label: {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 14)
+                .frame(height: 30)
+                .foregroundStyle(on ? Theme.background : .primary)
+                .background(Capsule().fill(on ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.primary.opacity(0.07))))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.pressable)
+    }
+}
+
+/// A paged grid with its loading, empty and failed states.
+struct FeedGrid: View {
+    let feed: MediaFeed
+    var empty: (symbol: String, title: String)
+    var minTile: CGFloat = 200
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if feed.isEmpty {
+                if feed.failed {
+                    EmptyState(symbol: "wifi.exclamationmark", title: "Couldn't load this", actionTitle: "Try Again") {
+                        Task { await feed.retry() }
+                    }
+                    .frame(height: 260)
+                } else {
+                    EmptyState(symbol: empty.symbol, title: empty.title).frame(height: 260)
+                }
+            } else {
+                MediaGrid(browser: feed.browser, minTile: minTile)
+                if feed.isLoading { Spinner().padding(20) }
+            }
+        }
+        .task { await feed.loadIfNeeded() }
+    }
+}
+
+// MARK: - Small helpers
+
+extension View {
+    /// The pointing-hand cursor while hovering.
+    func pointingHand() -> some View {
+        onHover { inside in if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
     }
 }
 

@@ -57,8 +57,8 @@ final class AppModel {
             profiles = []
         }
     }
-    /// Profiles opened on top of the current page, newest last (Back pops one).
-    private(set) var profiles: [ProfileModel] = []
+    /// Profiles and hashtags opened on top of the current page, newest last (Back pops one).
+    private(set) var profiles: [StackPage] = []
     /// The signed-in account (filled in after sign-in).
     private(set) var me: User?
     private(set) var viewerId: String?
@@ -133,6 +133,7 @@ final class AppModel {
                let user = try? await client.search(q, sessionId: UUID().uuidString.lowercased()).users.first {
                 openProfile(user)
             }
+            if let tag = UserDefaults.standard.string(forKey: "IGOpenHashtag") { openHashtag(tag) }
             #endif
         }
     }
@@ -144,8 +145,17 @@ final class AppModel {
         activity?.isOpen = false
         activity?.opened = nil
         stories?.close()
-        if profiles.last?.user.id == user.id { return }
-        profiles.append(ProfileModel(user: user, app: self, client: client))
+        if profiles.last?.id == "user:" + user.id { return }
+        profiles.append(.profile(ProfileModel(user: user, app: self, client: client)))
+    }
+
+    /// A hashtag's page ("travel" or "#travel").
+    func openHashtag(_ name: String) {
+        guard let client else { return }
+        stories?.close()
+        let page = StackPage.hashtag(HashtagModel(name: name, app: self, client: client))
+        if profiles.last?.id == page.id { return }
+        profiles.append(page)
     }
 
     func closeProfile() {

@@ -277,6 +277,8 @@ nonisolated struct Profile: Hashable, Sendable {
     var isPrivate = false
     var following = false
     var followedBy = false
+    /// A follow request to this (private) account is waiting.
+    var requested = false
     var hdAvatar: URL?
 }
 

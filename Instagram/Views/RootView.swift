@@ -81,9 +81,9 @@ struct RootView: View {
                     .allowsHitTesting(app.destination == .messages)
             }
             // A profile opened from anywhere covers the page until you go back.
-            if let profile = app.profiles.last {
-                ProfileView(model: profile)
-                    .id(profile.id)
+            if let page = app.profiles.last {
+                StackPageView(page: page)
+                    .id(page.id)
                     .background(Theme.background)
                     .transition(.opacity)
             }

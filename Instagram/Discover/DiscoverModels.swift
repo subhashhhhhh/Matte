@@ -28,7 +28,10 @@ final class MediaBrowser {
         guard items.indices.contains(index) else { return }
         playing = nil
         openedIndex = index
-        opened = MediaDetailModel(pk: items[index].pk, media: items[index], client: client)
+        // Grids like a profile's Reels tab list videos by cover only: fetch the full post.
+        let item = items[index]
+        let complete = !(item.kind == .video && item.videos.isEmpty)
+        opened = MediaDetailModel(pk: item.pk, media: complete ? item : nil, client: client)
         if items.count - index < 4 { nearEnd?() }
     }
 
@@ -101,69 +104,6 @@ final class ExploreModel {
         } catch {
             loadFailed = browser.items.isEmpty
             app?.report(error)
-        }
-    }
-}
-
-/// One account's page: header and posts.
-@Observable
-final class ProfileModel: Identifiable {
-    let user: User
-    private(set) var profile: Profile?
-    let browser: MediaBrowser
-    private(set) var isLoading = false
-    private(set) var failed = false
-    @ObservationIgnored private var cursor: String?
-    @ObservationIgnored private var hasMore = true
-    @ObservationIgnored private weak var app: AppModel?
-    @ObservationIgnored private let client: IGClient
-    @ObservationIgnored private var started = false
-
-    var id: String { user.id }
-
-    init(user: User, app: AppModel, client: IGClient) {
-        self.user = user
-        self.app = app
-        self.client = client
-        browser = MediaBrowser(client: client)
-        browser.nearEnd = { [weak self] in Task { await self?.loadMorePosts() } }
-    }
-
-    func start() async {
-        guard !started else { return }
-        started = true
-        async let header: Void = loadHeader()
-        async let posts: Void = loadMorePosts()
-        _ = await (header, posts)
-    }
-
-    private func loadHeader() async {
-        do { profile = try await client.profile(id: user.id) } catch {
-            failed = true
-            app?.report(error)
-        }
-    }
-
-    func loadMorePosts() async {
-        guard hasMore, !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            let page = try await client.profilePosts(username: user.username, after: cursor)
-            browser.append(page.items)
-            #if DEBUG
-            if cursor == nil, UserDefaults.standard.string(forKey: "IGOpen") == "post" {
-                // `-IGOpenIndex N`: the Nth post, or the first collab post with `-IGOpenIndex collab`.
-                let raw = UserDefaults.standard.string(forKey: "IGOpenIndex")
-                let index = raw == "collab" ? browser.items.firstIndex { !$0.coauthors.isEmpty } : Int(raw ?? "0")
-                browser.open(at: index ?? 0)
-            }
-            #endif
-            cursor = page.cursor
-            hasMore = page.hasMore && page.cursor != nil
-        } catch {
-            hasMore = false
-            if browser.items.isEmpty, profile?.isPrivate != true { app?.report(error) }
         }
     }
 }

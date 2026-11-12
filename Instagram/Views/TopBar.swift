@@ -173,9 +173,7 @@ private struct SearchField: View {
     }
 
     private func open(_ tag: Hashtag) {
-        if let url = URL(string: "https://www.instagram.com/explore/tags/\(tag.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? tag.name)/") {
-            NSWorkspace.shared.open(url)
-        }
+        app.openHashtag(tag.name)
         model.clear()
         focused = false
     }
