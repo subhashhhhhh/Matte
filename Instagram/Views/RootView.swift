@@ -20,6 +20,8 @@ struct RootView: View {
                         content
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    // A new account's pages are new views: each runs its first load again.
+                    .id(app.generation)
                 }
             }
             if app.showSwitcher, app.authState == .signedIn {

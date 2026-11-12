@@ -108,6 +108,9 @@ final class AppModel {
     }
     /// The Settings page, when open.
     var showSettings = false
+    /// Bumped each time a session starts (sign-in, switch): the pages take it as their identity,
+    /// so views built for the last account (and their one-time loads) start over.
+    private(set) var generation = 0
     /// The current account's id (`ds_user_id`).
     var accountId: String? { client?.session.accountId }
 
@@ -136,11 +139,19 @@ final class AppModel {
         showSwitcher = UserDefaults.standard.bool(forKey: "IGShowSwitcher")
         // `-IGOpenSettings YES`: open Settings at launch.
         showSettings = UserDefaults.standard.bool(forKey: "IGOpenSettings")
+        // `-IGSwitchAccount YES`: switch to the next signed-in account 5 s after launch.
+        if UserDefaults.standard.bool(forKey: "IGSwitchAccount") {
+            Task {
+                try? await Task.sleep(for: .seconds(5))
+                if let next = accounts.first(where: { $0.id != accountId }) { switchAccount(to: next.id) }
+            }
+        }
         #endif
     }
 
     private func start(_ client: IGClient) {
         self.client = client
+        generation += 1
         cache = ResponseCache(account: client.session.accountId)
         authState = .signedIn
         feed = FeedModel(app: self, client: client)
