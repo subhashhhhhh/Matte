@@ -89,6 +89,7 @@ final class InboxModel {
             if $0.isPinned != $1.isPinned { return $0.isPinned }
             return ($0.lastActivity ?? .distantPast) > ($1.lastActivity ?? .distantPast)
         }
+        if fresh.count > 1 { watchPresence() }
     }
 
     /// The open thread's newest state (after sending, or a poll).
@@ -110,6 +111,7 @@ final class InboxModel {
         guard realtime == nil, Date.now >= realtimeRetryAt, let seq = seqId.flatMap(Int64.init) else { return }
         let rt = DMRealtime(client: client, seqId: seq)
         realtime = rt
+        watchPresence()
         realtimeTask = Task { [weak self] in
             await rt.start()
             for await event in rt.events {
@@ -161,7 +163,9 @@ final class InboxModel {
             conversation(id)?.refreshSoon()
         case .readReceipt(let id, let who, let at):
             conversation(id)?.applyReadReceipt(who, at: at)
-            if let i = threads.firstIndex(where: { $0.id == id }) { threads[i].readUpTo[who] = at }
+            if let i = threads.firstIndex(where: { $0.id == id }), (threads[i].readUpTo[who] ?? .distantPast) < at {
+                threads[i].readUpTo[who] = at
+            }
         case .markedRead(let id):
             if let i = threads.firstIndex(where: { $0.id == id }) { threads[i].isUnread = false }
         case .typing(let longId, _, let typing):
@@ -169,7 +173,34 @@ final class InboxModel {
         case .threadChanged(let id):
             conversation(id)?.refreshSoon()
             refreshInboxSoon()
+        case .presence(let updates, let full):
+            // Like the web app: a full publish replaces the list, an incremental one patches it.
+            if full { presence = updates } else { presence.merge(updates) { $1 } }
         }
+    }
+
+    // MARK: Presence
+
+    /// People's activity status by messaging id (`User.messagingId`), live from the presence
+    /// stream. Covers the server's own list plus everyone in the loaded threads, which are
+    /// asked for (like the web app does) as threads load.
+    private(set) var presence: [String: Presence] = [:]
+
+    /// A thread's status as the web app words it: active if anyone else in it is active;
+    /// otherwise, for a one-to-one chat, when the other person was last active.
+    func presence(for thread: DMThread) -> Presence? {
+        let others = thread.users.compactMap(\.messagingId).filter { $0 != thread.viewerMessagingId }
+        let known = others.compactMap { presence[$0] }
+        if let active = known.first(where: \.isActive) { return active }
+        guard !thread.isGroup, let first = others.first else { return nil }
+        return presence[first]
+    }
+
+    /// Asks the presence stream for everyone in the loaded threads.
+    private func watchPresence() {
+        guard let realtime else { return }
+        let ids = threads.flatMap { t in t.users.compactMap(\.messagingId).filter { $0 != t.viewerMessagingId } }
+        Task { await realtime.watchPresence(ids) }
     }
 
     private func conversation(_ threadId: String) -> ConversationModel? {
@@ -346,6 +377,9 @@ final class ConversationModel {
     func remove(_ messageId: String) {
         messages.removeAll { $0.id == messageId }
     }
+
+    /// The other side's activity status ("Active now" / "Active 12m ago"): see `InboxModel.presence(for:)`.
+    var presence: Presence? { inbox?.presence(for: thread) }
 
     func applyReadReceipt(_ participant: String, at: Date) {
         if (thread.readUpTo[participant] ?? .distantPast) < at { thread.readUpTo[participant] = at }

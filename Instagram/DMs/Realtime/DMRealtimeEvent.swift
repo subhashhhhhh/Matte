@@ -27,6 +27,9 @@ nonisolated enum DMRealtimeEvent: Equatable, Sendable {
     case typing(longThreadId: String, userId: String, isTyping: Bool)
     /// Something else changed in the thread (renamed, muted, members, unread…): refetch it.
     case threadChanged(thread: String)
+    /// Activity status of people, keyed by messaging id. `full` = this is the server's whole
+    /// list (entries not in it are no longer known), else only changes.
+    case presence([String: Presence], full: Bool)
 
     /// A short name for logs and the probe (no content).
     var name: String {
@@ -43,6 +46,7 @@ nonisolated enum DMRealtimeEvent: Equatable, Sendable {
         case .markedRead: "markedRead"
         case .typing: "typing"
         case .threadChanged: "threadChanged"
+        case .presence: "presence"
         }
     }
 
@@ -131,6 +135,24 @@ nonisolated enum DMDeltaParser {
             let sender = value["sender_id"].string ?? value["sender_id"].int.map(String.init) ?? ""
             return .typing(longThreadId: thread, userId: sender, isTyping: (value["activity_status"].int ?? 0) == 1)
         }
+    }
+
+    /// A presence publish (`PresenceUnifiedJSON` stream):
+    /// `{"publishType":1 (full) | 2 (incremental),"presenceUpdates":[{"userId":"<messaging id>",
+    /// "presenceStatus":2 (active) | 0,"lastActiveTimeSeconds":…}]}`. `userId` "0" entries are skipped.
+    static func presence(_ data: Data) -> DMRealtimeEvent? {
+        guard let json = try? JSON(data: data), case .array(let updates) = json["presenceUpdates"] else { return nil }
+        var out: [String: Presence] = [:]
+        for u in updates {
+            let id = u["userId"].string ?? u["userId"].int.map(String.init) ?? ""
+            guard !id.isEmpty, id != "0" else { continue }
+            let seconds = u["lastActiveTimeSeconds"].double ?? 0
+            out[id] = Presence(isActive: u["presenceStatus"].int == 2,
+                               lastActive: seconds > 0 ? Date(timeIntervalSince1970: seconds) : nil)
+        }
+        let full = json["publishType"].int == 1
+        if out.isEmpty && !full { return nil }
+        return .presence(out, full: full)
     }
 
     /// The long thread id in `/direct_v2/threads/<id>/activity_indicator_id/<x>`.

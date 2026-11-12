@@ -60,13 +60,17 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
   first 40 WebSocket frames each way (hex) as `ws-send-*`/`ws-recv-*`.
 - `-IGProbeDGW YES [-IGProbeSeconds 30] [-IGProbeDGWRewind N]` (+ `-IGProbeOut`) — connects the
   real-time DM sockets, only listens, writes frame/delta/event counts. Rewind replays the last N deltas.
+  Presence: counts only; `-IGProbePresenceReport YES` also reports IDLE like the web app,
+  `-IGProbePresenceNoContacts YES` skips asking for thread participants.
 
 ## Real-time DMs
 
 `Instagram/DMs/Realtime/`: `DGWFrames` (DGW framing, protobuf `LSResponse`, Thrift compact),
 `DGWSocket` (one WebSocket, keepalive), `DMRealtime` (main + typing streams, reconnect,
 `AsyncStream<DMRealtimeEvent>`). `InboxModel` applies events; it polls (60 s) only while the
-socket is down. What the web app actually sends: docs/dm-protocol.md §5.10.
+socket is down. What the web app actually sends: docs/dm-protocol.md §5.10. Activity status comes
+from a presence stream on the typing socket (§5.11), listen-only; `InboxModel.presence` is keyed by
+messaging id.
 
 ## Rules
 

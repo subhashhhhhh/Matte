@@ -316,6 +316,16 @@ nonisolated enum Thrift {
         return d
     }
 
+    /// `requeststream.Payload{ 3: AmendStream{ 1: amendment_id, 2: amendment } }`: changes an
+    /// open stream's request (the presence stream's contact list).
+    static func amendStream(id: Int64, _ json: Data) -> Data {
+        var d = Data([0x3C, 0x16])
+        d.append(varint(UInt64(bitPattern: (id << 1) ^ (id >> 63))))
+        d.append(binaryField(0x18, json))
+        d.append(contentsOf: [0x00, 0x00])
+        return d
+    }
+
     /// `mqttbypass.RequestPayload{ 1: ConnectRequest{…web values…} }`.
     static func mqttConnect(deviceId: String) -> Data {
         var d = Data([0x1C, 0x16, 0x00, 0x16, 0x00, 0x18, 0x00])
