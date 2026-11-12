@@ -55,9 +55,15 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     /// Width over height, clamped to what a layout can show sensibly.
     var aspect: CGFloat { CGFloat(width) / CGFloat(max(height, 1)) }
 
-    /// The smallest image at least `pixels` wide (or the largest there is).
+    /// The smallest image at least `pixels` wide (or the largest there is), in the post's own
+    /// shape: Instagram also lists square crops (for grids), which would cut a 4:5 or 9:16
+    /// photo top and bottom.
     func image(minWidth pixels: CGFloat) -> URL? {
-        let sorted = images.sorted { $0.width < $1.width }
+        let shaped = images.filter { r in
+            guard r.width > 0, r.height > 0, width > 1, height > 1 else { return false }
+            return abs(CGFloat(r.width) / CGFloat(r.height) - aspect) <= aspect * 0.03
+        }
+        let sorted = (shaped.isEmpty ? images : shaped).sorted { $0.width < $1.width }
         return (sorted.first { CGFloat($0.width) >= pixels } ?? sorted.last)?.url
     }
 
