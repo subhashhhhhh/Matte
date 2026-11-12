@@ -16,6 +16,9 @@ final class ReelsModel {
         didSet { isVisible ? current?.play() : current?.pause() }
     }
 
+    /// The current reel's caption and comments, for the side panel (loaded only if it's shown).
+    private(set) var detail: MediaDetailModel?
+
     @ObservationIgnored private var cursor: String?
     @ObservationIgnored private var hasMore = true
     @ObservationIgnored private weak var app: AppModel?
@@ -59,8 +62,11 @@ final class ReelsModel {
         if items.count - index < 4 { Task { await loadMore() } }
     }
 
+    func jump(to target: Int) { move(target - index) }
+
     private func startCurrent() {
         guard let reel else { return }
+        if detail?.pk != reel.pk { detail = MediaDetailModel(pk: reel.pk, media: reel, client: client) }
         current?.tearDown()
         if let up = upcoming, up.pk == reel.pk {
             current = up.video
@@ -84,6 +90,7 @@ final class ReelsModel {
         current = nil
         upcoming?.video.tearDown()
         upcoming = nil
+        detail = nil
     }
 }
 
@@ -94,11 +101,25 @@ struct ReelsView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let height = geo.size.height - 32
-            let width = min(geo.size.width - 140, height * 9 / 16)
-            HStack(alignment: .bottom, spacing: 16) {
-                player(width: width, height: height)
-                sideActions
+            let height = geo.size.height - 40
+            let playerWidth = max(200, min(geo.size.width - 140, height * 9 / 16))
+            // Use the room beside the 9:16 player: comments on the right, the queue on the left.
+            let room = geo.size.width - playerWidth - 76 - 40
+            let showsPanel = room >= 320
+            let showsQueue = room >= 320 + 116 + 60
+            let panelWidth = min(440, room - (showsQueue ? 116 : 0))
+            HStack(alignment: .center, spacing: 20) {
+                if showsQueue {
+                    ReelQueue(model: model).frame(width: 96, height: height)
+                }
+                HStack(alignment: .bottom, spacing: 16) {
+                    player(width: playerWidth, height: height, captionInPanel: showsPanel)
+                    sideActions
+                }
+                if showsPanel, let detail = model.detail {
+                    ReelPanel(model: detail)
+                        .frame(width: panelWidth, height: height)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -121,6 +142,8 @@ struct ReelsView: View {
         .onKeyPress(.upArrow) { model.move(-1); return .handled }
         .onKeyPress(.space) { model.current?.toggle(); return .handled }
         .onKeyPress("m") { sound.muted.toggle(); return .handled }
+        .onKeyPress(.rightArrow) { model.current?.seek(fraction: min(1, (model.current?.progress ?? 0) + 0.1)); return .handled }
+        .onKeyPress(.leftArrow) { model.current?.seek(fraction: max(0, (model.current?.progress ?? 0) - 0.1)); return .handled }
         .onChange(of: sound.muted) { model.current?.isMuted = sound.muted }
         .task { await model.loadIfNeeded() }
         .onAppear { model.isVisible = true; focused = true }
@@ -128,7 +151,7 @@ struct ReelsView: View {
     }
 
     @ViewBuilder
-    private func player(width: CGFloat, height: CGFloat) -> some View {
+    private func player(width: CGFloat, height: CGFloat, captionInPanel: Bool) -> some View {
         ZStack(alignment: .bottomLeading) {
             Color.black
             if let reel = model.reel {
@@ -142,8 +165,8 @@ struct ReelsView: View {
                             .allowsHitTesting(false)
                     }
                 }
-                info(reel)
-                if let v = model.current { ProgressLine(video: v) }
+                info(reel, caption: !captionInPanel)
+                if let v = model.current { ScrubBar(video: v) }
             }
         }
         .frame(width: max(width, 200), height: max(height, 300))
@@ -151,14 +174,14 @@ struct ReelsView: View {
         .overlay(alignment: .topTrailing) { MuteButton().padding(12) }
     }
 
-    private func info(_ reel: Media) -> some View {
+    private func info(_ reel: Media, caption showsCaption: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Avatar(url: reel.user?.avatar, size: 30)
                 Text(reel.user?.username ?? "").font(.system(size: 13, weight: .semibold))
                 if reel.user?.isVerified == true { VerifiedBadge(size: 11) }
             }
-            if let caption = reel.caption, !caption.isEmpty {
+            if showsCaption, let caption = reel.caption, !caption.isEmpty {
                 Text(caption).font(.system(size: 12.5)).lineLimit(2)
             }
         }
@@ -197,14 +220,56 @@ struct ReelsView: View {
     }
 }
 
-private struct ProgressLine: View {
-    let video: LoopingVideo
+/// Thumbnails of the reels around the current one; click one to jump to it.
+private struct ReelQueue: View {
+    let model: ReelsModel
+
     var body: some View {
-        GeometryReader { g in
-            Rectangle().fill(.white.opacity(0.85)).frame(width: g.size.width * video.progress, height: 2)
-                .frame(maxHeight: .infinity, alignment: .bottom)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(Array(model.items.enumerated()), id: \.element.pk) { i, reel in
+                        let current = i == model.index
+                        RemoteImage(url: reel.image(minWidth: 200), contentMode: .fill)
+                            .frame(width: 84, height: 84 * 16 / 9)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(current ? Color.primary : .clear, lineWidth: 2)
+                            }
+                            .opacity(i < model.index ? 0.45 : 1)
+                            .contentShape(Rectangle())
+                            .onTapGesture { model.jump(to: i) }
+                            .id(reel.pk)
+                    }
+                }
+                .padding(.vertical, 6)
+            }
+            .scrollIndicators(.never)
+            .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08),
+                                         .init(color: .black, location: 0.92), .init(color: .clear, location: 1)],
+                                 startPoint: .top, endPoint: .bottom))
+            .onChange(of: model.index, initial: true) {
+                guard let pk = model.reel?.pk else { return }
+                withAnimation(.smooth(duration: 0.3)) { proxy.scrollTo(pk, anchor: .center) }
+            }
         }
-        .allowsHitTesting(false)
+    }
+}
+
+/// The current reel's author, full caption and comments, beside the player.
+private struct ReelPanel: View {
+    let model: MediaDetailModel
+
+    var body: some View {
+        MediaDetailsColumn(model: model)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.panelStroke))
+            .task(id: model.pk) {
+                // Skimming through reels shouldn't fetch comments for each one.
+                try? await Task.sleep(for: .milliseconds(700))
+                if !Task.isCancelled { await model.start() }
+            }
     }
 }
 

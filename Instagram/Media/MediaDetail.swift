@@ -59,6 +59,7 @@ final class MediaDetailModel: Identifiable {
             loadingMedia = false
         }
         await loadMoreComments()
+        if Task.isCancelled, comments.isEmpty { started = false }
     }
 
     func loadMoreComments() async {
@@ -72,7 +73,8 @@ final class MediaDetailModel: Identifiable {
             cursor = page.cursor
             hasMore = page.hasMore
         } catch {
-            hasMore = false
+            let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
+            if !cancelled { hasMore = false }
         }
     }
 
