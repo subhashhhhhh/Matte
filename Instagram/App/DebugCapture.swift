@@ -98,7 +98,29 @@ enum DebugCapture {
           const OW = window.WebSocket;
           window.WebSocket = function(url, protocols) {
             post({kind:'websocket', name:'websocket', url:String(url), protocols: protocols ? String(protocols) : ''});
-            return protocols ? new OW(url, protocols) : new OW(url);
+            const ws = protocols ? new OW(url, protocols) : new OW(url);
+            // DGW frames, as hex (the first few in each direction), to compare with ours.
+            const tag = String(url).split('?')[0].split('/').pop();
+            const hex = (buf) => Array.from(new Uint8Array(buf).slice(0, 4096)).map(b => b.toString(16).padStart(2, '0')).join('');
+            let sent = 0, recv = 0;
+            const osend = ws.send.bind(ws);
+            ws.send = function(d) {
+              if (sent++ < 40) {
+                if (d instanceof ArrayBuffer) post({kind:'ws-send', name:'ws-send-' + tag, hex: hex(d), length: d.byteLength});
+                else if (ArrayBuffer.isView(d)) post({kind:'ws-send', name:'ws-send-' + tag, hex: hex(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength)), length: d.byteLength});
+                else post({kind:'ws-send', name:'ws-send-' + tag, text: String(d).slice(0, 4096)});
+              }
+              return osend(d);
+            };
+            ws.addEventListener('message', (e) => {
+              if (recv++ >= 40) return;
+              const d = e.data;
+              if (d instanceof ArrayBuffer) post({kind:'ws-recv', name:'ws-recv-' + tag, hex: hex(d), length: d.byteLength});
+              else if (d instanceof Blob) d.arrayBuffer().then(b => post({kind:'ws-recv', name:'ws-recv-' + tag, hex: hex(b), length: b.byteLength}));
+              else post({kind:'ws-recv', name:'ws-recv-' + tag, text: String(d).slice(0, 4096)});
+            });
+            ws.addEventListener('close', (e) => post({kind:'ws-close', name:'ws-close-' + tag, code: e.code, reason: e.reason}));
+            return ws;
           };
           window.WebSocket.prototype = OW.prototype;
           Object.assign(window.WebSocket, OW);
