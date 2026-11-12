@@ -6,6 +6,14 @@ extension IGClient {
         "PolarisAPITopsearchQuery": "40560838120170065",
         "PolarisProfilePageContentQuery": "40158838120366999",
         "PolarisProfilePostsQuery": "29114630661562380",
+        // Lazy chunks (profile tabs, highlights, saved, hashtags, follow), read 2026-11-12.
+        "PolarisProfileStoryHighlightsTrayContentQuery": "26970053832668570",
+        "PolarisProfileReelsTabContentQuery": "28280418711631396",
+        "PolarisProfileTaggedTabContentQuery": "28196060226733657",
+        "PolarisProfileSavedTabContentQuery": "27584326974521636",
+        "PolarisKeywordSearchExplorePageRelayQuery": "37324993597144881",
+        "usePolarisFollowMutation": "26508036048874888",
+        "usePolarisUnfollowMutation": "27789106940691111",
     ]
 
     private func discoverQuery(_ name: String, variables: JSON) async throws -> JSON {
@@ -53,6 +61,7 @@ extension IGClient {
         p.isPrivate = u["is_private"].bool ?? false
         p.following = u["friendship_status"]["following"].bool ?? false
         p.followedBy = u["friendship_status"]["followed_by"].bool ?? false
+        p.requested = u["friendship_status"]["outgoing_request"].bool ?? false
         p.hdAvatar = u["hd_profile_pic_url_info"]["url"].string.flatMap(URL.init(string:))
         return p
     }
