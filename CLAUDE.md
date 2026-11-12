@@ -32,7 +32,12 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
   streamed multi-part responses), `RegexHelpers`.
 - `Instagram/Auth/` — `IGSession` (cookies, `csrftoken`, `ds_user_id`), `SignInView`.
 - `Instagram/Images/` — `ImagePipeline` (downsampled decode, cost-limited cache), `RemoteImage`.
-- `Instagram/App/` — `AppModel`, `MemoryRelief`, debug tools.
+- `Instagram/App/` — `AppModel`, `MemoryRelief`, `ResponseCache`, debug tools.
+- `ResponseCache`: last good first pages (feed per source, tray, reels, Explore, inbox, 20 recent
+  profiles) as Codable models in `~/Library/Caches/com.subhash.Instagram/data/<ds_user_id>/`.
+  Models show them as `stale` (no cursor: paging refetches page 1 first), refresh replaces them
+  unless the user scrolled or opened a post. Off in tests; sign-out wipes it. A model field added
+  without a default-tolerant decoder makes old files a miss (once), never a failure.
 - `docs/dm-protocol.md` — DM protocol spec written from mautrix-instagram
   (`references/meta`, not tracked; `git clone https://github.com/mautrix/meta references/meta`).
 - On disk: `~/Library/Application Support/com.subhash.Instagram/` — `session.json` (0600),
