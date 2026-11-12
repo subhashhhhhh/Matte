@@ -362,6 +362,8 @@ struct RepostBubbles: View {
         if let actions = app.actions {
             let me = app.viewerId
             let mine = actions.state(media).reposted
+            // Your own note counts as yours even if this post's state hasn't caught up (reposted elsewhere).
+            let mine = mine || media.repostNotes.contains { $0.userId == me }
             let others = media.repostNotes.filter { $0.userId != me }.prefix(mine ? 4 : 5)
             let myText = actions.thoughts[media.pk] ?? media.repostNotes.first { $0.userId == me }?.text
             HStack(alignment: .bottom, spacing: 10) {
@@ -376,7 +378,7 @@ struct RepostBubbles: View {
                         if let text = note.text { Text(text).font(.system(size: 12)).bubble() }
                         bubbleAvatar(note.user?.avatar)
                     }
-                    .opensProfile(note.user)
+                    .opensProfile(note.user?.username.isEmpty == false ? note.user : nil)
                 }
             }
             .padding(14)

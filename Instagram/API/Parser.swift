@@ -58,7 +58,11 @@ nonisolated enum Parser {
         }
         m.repostNotes = j["media_notes"]["items"].array.compactMap { n in
             guard let id = idString(n["id"]), let user = idString(n["user_id"]) else { return nil }
-            return RepostNote(id: id, userId: user, user: Parser.user(n["user"]),
+            // Some responses give the reposter without a username: keep the picture anyway.
+            let u = n["user"]
+            let who = Parser.user(u) ?? User(id: user, username: u["username"].string ?? "", fullName: u["full_name"].string ?? "",
+                                             avatar: u["profile_pic_url"].string.flatMap(URL.init(string:)))
+            return RepostNote(id: id, userId: user, user: who,
                               text: n["text"].string.flatMap { $0.isEmpty ? nil : $0 })
         }
         m.trackingToken = j["organic_tracking_token"].string
