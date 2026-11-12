@@ -45,12 +45,18 @@ enum DebugCapture {
             config.userContentController.add(self, name: "cap")
             config.userContentController.addUserScript(WKUserScript(source: Self.hook, injectionTime: .atDocumentStart, forMainFrameOnly: true))
             let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 900), configuration: config)
-            web.customUserAgent = IGClient.userAgent
+            // `-IGCaptureMobile YES`: present as an iPhone browser (instagram.com only offers
+            // posting a story there), in a phone-shaped window.
+            let mobile = UserDefaults.standard.bool(forKey: "IGCaptureMobile")
+            web.customUserAgent = mobile
+                ? "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1"
+                : IGClient.userAgent
             // `-IGCaptureInteractive YES`: a normal window you use yourself (watch a story, like
             // something…); everything the site sends is recorded until you close it.
             let interactive = UserDefaults.standard.bool(forKey: "IGCaptureInteractive")
             let window = interactive
-                ? NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 900), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+                ? NSWindow(contentRect: mobile ? NSRect(x: 0, y: 0, width: 430, height: 880) : NSRect(x: 0, y: 0, width: 1280, height: 900),
+                           styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
                 : NSWindow(contentRect: NSRect(x: -3000, y: -3000, width: 1280, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
             window.contentView = web
             self.web = web
@@ -92,15 +98,16 @@ enum DebugCapture {
         static let hook = #"""
         (function(){
           const post = (o) => { try { window.webkit.messageHandlers.cap.postMessage(o); } catch(e) {} };
-          const interesting = (u) => /\/(graphql|api\/v1|api\/graphql|ajax)\b/.test(u);
+          const interesting = (u) => /\/(graphql|api\/v1|api\/graphql|ajax)\b/.test(u) || /rupload/.test(u);
           const nameOf = (body) => { try { const p = new URLSearchParams(body); return p.get('fb_api_req_friendly_name') || ''; } catch(e) { return ''; } };
           const parse = (body) => { const o = {}; try { new URLSearchParams(body).forEach((v,k)=>{ o[k]=v; }); } catch(e) {} return o; };
           const of = window.fetch;
           window.fetch = async function(input, init) {
             const url = typeof input === 'string' ? input : input.url;
             const body = init && typeof init.body === 'string' ? init.body : '';
+            const bodySize = init && init.body ? (init.body.size || init.body.byteLength || (typeof init.body === 'string' ? init.body.length : -1)) : 0;
             const r = await of.apply(this, arguments);
-            if (interesting(url)) { r.clone().text().then(t => post({kind:'fetch', t: Date.now(), url, headers: (init && init.headers) ? JSON.parse(JSON.stringify(init.headers)) : {}, name: nameOf(body) || url.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(body), response: t.slice(0, 400000)})); }
+            if (interesting(url)) { r.clone().text().then(t => post({kind:'fetch', t: Date.now(), method: (init && init.method) || 'GET', bodySize, url, headers: (init && init.headers) ? JSON.parse(JSON.stringify(init.headers)) : {}, name: nameOf(body) || url.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(body), response: t.slice(0, 400000)})); }
             return r;
           };
           const oo = XMLHttpRequest.prototype.open, os = XMLHttpRequest.prototype.send;
@@ -111,7 +118,8 @@ enum DebugCapture {
             const u = String(this.__u || '');
             if (interesting(u)) {
               const b = typeof body === 'string' ? body : '';
-              this.addEventListener('load', () => post({kind:'xhr', t: Date.now(), method:this.__m, url:u, headers:this.__h, cookies: document.cookie.split('; ').map(c => c.split('=')[0]), name: nameOf(b) || u.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(b), response: String(this.responseText || '').slice(0, 400000)}));
+              const bodySize = body ? (body.size || body.byteLength || (typeof body === 'string' ? body.length : -1)) : 0;
+              this.addEventListener('load', () => post({kind:'xhr', t: Date.now(), method:this.__m, bodySize, url:u, headers:this.__h, cookies: document.cookie.split('; ').map(c => c.split('=')[0]), name: nameOf(b) || u.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(b), response: String(this.responseText || '').slice(0, 400000)}));
             }
             return os.apply(this, arguments);
           };
