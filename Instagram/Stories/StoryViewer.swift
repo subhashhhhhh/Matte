@@ -30,6 +30,9 @@ final class StoryViewerModel {
         self.reels = reels
         self.reelIndex = start
         Task { await self.prepare() }
+        #if DEBUG
+        debugLikeSoon()
+        #endif
     }
 
     var reel: StoryReel { reels[reelIndex] }
@@ -183,7 +186,10 @@ final class StoryViewerModel {
 
     /// Story items liked in this viewer (seeded from Instagram's `has_liked`).
     private(set) var liked = Set<String>()
-    @ObservationIgnored private var likeOverrides = Set<String>()
+    /// Observed (not ignored): the heart reads it, so a like must redraw the heart at once.
+    private var likeOverrides = Set<String>()
+    /// Bumped on each like: the big heart bursts over the story.
+    private(set) var likeBurst = 0
 
     var isLiked: Bool {
         guard let item else { return false }
@@ -191,10 +197,26 @@ final class StoryViewerModel {
     }
 
     /// Likes or unlikes the current story at once; undone if Instagram refuses.
+    #if DEBUG
+    /// `-IGStoryLikeTest YES` with `-IGDryRunWrites <dir>`: likes the open story after 3 s (nothing is
+    /// sent: the dry run records it and fails), to watch the animation.
+    func debugLikeSoon() {
+        guard UserDefaults.standard.bool(forKey: "IGStoryLikeTest"),
+              UserDefaults.standard.string(forKey: "IGDryRunWrites") != nil else { return }
+        Task {
+            while item == nil || !canReply { try? await Task.sleep(for: .milliseconds(200)) }
+            try? await Task.sleep(for: .seconds(1.5))
+            FileHandle.standardError.write(Data("STORYLIKE \(Date.now.timeIntervalSince1970)\n".utf8))
+            toggleLike()
+        }
+    }
+    #endif
+
     func toggleLike() {
         guard let item, canReply else { return }
         let now = !isLiked
         likeOverrides.insert(item.pk)
+        if now { likeBurst += 1 }
         if now { liked.insert(item.pk) } else { liked.remove(item.pk) }
         Task {
             do { try await client.setStoryLiked(now, media: item) } catch {
@@ -340,14 +362,20 @@ private struct StoryReplyBar: View {
                 Button { model.toggleLike() } label: {
                     IGGlyph(icon: model.isLiked ? .heartFilled : .heart, size: 24)
                         .foregroundStyle(model.isLiked ? AnyShapeStyle(Theme.like) : AnyShapeStyle(.white))
-                        .scaleEffect(model.isLiked ? 1.08 : 1)
+                        .keyframeAnimator(initialValue: 1.0, trigger: model.likeBurst) { view, scale in
+                            view.scaleEffect(scale)
+                        } keyframes: { _ in
+                            // Instagram's heart: a quick swell, a slight overshoot back, settle.
+                            SpringKeyframe(1.45, duration: 0.14, spring: .snappy)
+                            SpringKeyframe(0.9, duration: 0.12, spring: .snappy)
+                            SpringKeyframe(1.0, duration: 0.2, spring: .bouncy)
+                        }
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.pressable)
                 .help(model.isLiked ? "Unlike" : "Like")
                 .offset(x: 46)
-                .animation(.spring(response: 0.25, dampingFraction: 0.5), value: model.isLiked)
             }
             .overlay(alignment: .trailing) {
                 // Send the story to a chat (Instagram's paper plane beside the heart).
@@ -484,6 +512,7 @@ struct StoryViewer: View {
                 }
             }
         }
+        .overlay { HeartBurst(trigger: model.likeBurst) }
         .overlay(alignment: .bottom) {
             if model.showingViewers {
                 StoryViewersSheet(model: model)
@@ -670,5 +699,44 @@ private struct StoryViewersSheet: View {
         }
         .background(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16, style: .continuous).fill(Theme.background))
         .environment(\.colorScheme, .dark)
+    }
+}
+
+
+/// A big heart that pops over the story and fades when you like it, so the like is unmistakable.
+private struct HeartBurst: View {
+    let trigger: Int
+    @State private var shown = false
+
+    var body: some View {
+        IGGlyph(icon: .heartFilled, size: 110)
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.35), radius: 18)
+            .keyframeAnimator(initialValue: BurstFrame(), trigger: trigger) { view, f in
+                view.scaleEffect(f.scale).opacity(f.opacity).rotationEffect(.degrees(f.tilt))
+            } keyframes: { _ in
+                KeyframeTrack(\.scale) {
+                    SpringKeyframe(1.15, duration: 0.22, spring: .bouncy)
+                    SpringKeyframe(1.0, duration: 0.18)
+                    CubicKeyframe(1.0, duration: 0.25)
+                    CubicKeyframe(1.3, duration: 0.25)
+                }
+                KeyframeTrack(\.opacity) {
+                    LinearKeyframe(1, duration: 0.08)
+                    LinearKeyframe(1, duration: 0.57)
+                    CubicKeyframe(0, duration: 0.25)
+                }
+                KeyframeTrack(\.tilt) {
+                    SpringKeyframe(-8, duration: 0.2)
+                    SpringKeyframe(0, duration: 0.3)
+                }
+            }
+            .allowsHitTesting(false)
+    }
+
+    struct BurstFrame {
+        var scale: CGFloat = 0.2
+        var opacity: Double = 0
+        var tilt: Double = 0
     }
 }
