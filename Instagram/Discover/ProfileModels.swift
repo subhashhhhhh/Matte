@@ -69,7 +69,11 @@ final class MediaFeed {
     /// The grid shows cached posts: page 1 must load before paging on.
     @ObservationIgnored private(set) var stale = false
     /// The first page as it last arrived from Instagram (what gets cached).
-    @ObservationIgnored private(set) var firstPage: [Media]?
+    @ObservationIgnored private(set) var firstPage: [Media]? {
+        didSet { if firstPage != nil { onFreshFirstPage?() } }
+    }
+    /// Runs when a fresh first page arrives (the profile cache saves then).
+    @ObservationIgnored var onFreshFirstPage: (() -> Void)?
     @ObservationIgnored private let fetch: (String?) async throws -> Page<Media>
     @ObservationIgnored private let onError: (Error) -> Void
     /// Runs once after the first page arrives (debug launch flags).
@@ -105,7 +109,8 @@ final class MediaFeed {
             let wasStale = stale
             let page = try await fetch(wasStale ? nil : cursor)
             let first = !settled || wasStale
-            if wasStale { browser.replaceCached(with: page.items) } else { browser.append(page.items) }
+            // `stale` again: cached posts may have been seeded while page 1 was on its way.
+            if stale { browser.replaceCached(with: page.items) } else { browser.append(page.items) }
             if wasStale || cursor == nil { firstPage = page.items }
             stale = false
             cursor = page.cursor
@@ -225,6 +230,8 @@ final class ProfileModel: Identifiable {
             highlights = snap.highlights
             posts.seed(snap.posts.cacheable(12))
         }
+        // The grid may load page 1 itself (its own task): save once header and page are both in.
+        posts.onFreshFirstPage = { [weak self] in self?.saveSnapshot() }
         #if DEBUG
         // `-IGProfileTab reels|tagged|saved` and `-IGProfileList followers|following` (screenshots).
         let d = UserDefaults.standard
@@ -247,14 +254,17 @@ final class ProfileModel: Identifiable {
         saveSnapshot()
     }
 
+    @ObservationIgnored private var snapshotSaved = false
+
     @ObservationIgnored private var headerFresh = false
     @ObservationIgnored private var highlightsFresh = false
 
     /// Keeps the header and first posts for next time (the 20 most recently opened profiles).
     private func saveSnapshot() {
-        guard let cache = app?.cache, headerFresh, let profile else { return }
+        guard !snapshotSaved, let cache = app?.cache, headerFresh, let profile else { return }
         let first = posts.firstPage ?? (isLocked ? [] : nil)
         guard let first else { return }
+        snapshotSaved = true
         cache.save(Snapshot(profile: profile, highlights: highlightsFresh ? highlights : [], posts: first.cacheable(12)), cacheKey)
         cache.trim(prefix: "profile-", keep: Self.cachedProfiles)
     }
@@ -264,6 +274,7 @@ final class ProfileModel: Identifiable {
             profile = try await client.profile(id: user.id)
             headerFresh = true
             failed = false
+            saveSnapshot()
         } catch {
             failed = profile == nil
             app?.report(error)
