@@ -53,6 +53,8 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `-IGProbeRest <path> [-IGProbeQuery 'a=1']`, `-IGProbeGQL <Name> [-IGProbeVars '{…}'] [-IGProbeDoc id]`,
   `-IGProbePage YES` — with `-IGProbeOut <file>`; read-only, then quit.
 - `-IGRawDir <dir>` — raw responses and the (redacted) GraphQL form for each request.
+- `-IGStartPage home|reels|messages`, `-IGOpen post|story` — open on a page / open the first
+  post or a story at launch (for screenshots; capture a window with `screencapture -l <id>`).
 - `-IGCapture <dir> [-IGCapturePages '/,/reels/'] [-IGCaptureSeconds 12]` — loads the site in an
   off-screen web view with the session and records the web app's own API requests.
 

@@ -115,6 +115,13 @@ final class StoryViewerModel {
         Task { await prepare() }
     }
 
+    func jump(toReel i: Int) {
+        guard reels.indices.contains(i), i != reelIndex else { return }
+        reelIndex = i
+        itemIndex = 0
+        Task { await prepare() }
+    }
+
     func previousReel() {
         guard reelIndex > 0 else { return }
         reelIndex -= 1
@@ -144,10 +151,24 @@ struct StoryViewer: View {
         ZStack {
             Color.black.opacity(0.94).ignoresSafeArea()
                 .onTapGesture { model.close() }
-            HStack(spacing: 18) {
-                sideButton("chevron.left", enabled: model.reelIndex > 0 || model.itemIndex > 0) { model.previous() }
-                card
-                sideButton("chevron.right", enabled: true) { model.next() }
+            GeometryReader { geo in
+                let height = geo.size.height - 48
+                let width = min(geo.size.width - 120, height * 9 / 16)
+                let small = CGSize(width: width * 0.42, height: width * 0.42 * 16 / 9)
+                // Room beside the card: the accounts before and after it, smaller, as on the web.
+                let fits = max(0, min(2, Int((geo.size.width - width - 120) / 2 / (small.width + 16))))
+                HStack(spacing: 16) {
+                    ForEach(neighbors(before: true, count: fits), id: \.self) { i in
+                        NeighborCard(reel: model.reels[i], size: small).onTapGesture { model.jump(toReel: i) }
+                    }
+                    sideButton("chevron.left", enabled: model.reelIndex > 0 || model.itemIndex > 0) { model.previous() }
+                    card(width: width, height: height)
+                    sideButton("chevron.right", enabled: true) { model.next() }
+                    ForEach(neighbors(before: false, count: fits), id: \.self) { i in
+                        NeighborCard(reel: model.reels[i], size: small).onTapGesture { model.jump(toReel: i) }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             VStack {
                 HStack {
@@ -174,42 +195,42 @@ struct StoryViewer: View {
         .onKeyPress(.upArrow) { model.previousReel(); return .handled }
     }
 
-    private var card: some View {
-        GeometryReader { geo in
-            let height = geo.size.height
-            let width = min(geo.size.width, height * 9 / 16)
-            ZStack {
-                Color(white: 0.08)
-                if let item = model.item {
-                    RemoteImage(url: item.image(minWidth: 720), contentMode: .fit)
-                        .id(item.pk)
-                    if let video = model.video {
-                        PlayerLayerView(player: video.player, gravity: .resizeAspect)
-                    }
-                } else {
-                    Spinner(size: 22)
+    /// Reel indices shown beside the card: `count` before it (nearest last) or after it.
+    private func neighbors(before: Bool, count: Int) -> [Int] {
+        guard count > 0 else { return [] }
+        let r = model.reelIndex
+        return before ? Array(max(0, r - count)..<r) : Array((r + 1)..<min(model.reels.count, r + 1 + count))
+    }
+
+    private func card(width: CGFloat, height: CGFloat) -> some View {
+        ZStack {
+            Color(white: 0.08)
+            if let item = model.item {
+                RemoteImage(url: item.image(minWidth: 720), contentMode: .fit)
+                    .id(item.pk)
+                if let video = model.video {
+                    PlayerLayerView(player: video.player, gravity: .resizeAspect)
                 }
-                // Tap halves: back and forward, as on the phone.
-                HStack(spacing: 0) {
-                    Color.clear.contentShape(Rectangle()).onTapGesture { model.previous() }
-                    Color.clear.contentShape(Rectangle()).onTapGesture { model.next() }
-                }
-                VStack(spacing: 10) {
-                    progressBars
-                    header
-                    Spacer()
-                }
-                .padding(12)
-                .background(alignment: .top) {
-                    LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom).frame(height: 110)
-                }
+            } else {
+                Spinner(size: 22)
             }
-            .frame(width: width, height: height)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Tap halves: back and forward, as on the phone.
+            HStack(spacing: 0) {
+                Color.clear.contentShape(Rectangle()).onTapGesture { model.previous() }
+                Color.clear.contentShape(Rectangle()).onTapGesture { model.next() }
+            }
+            VStack(spacing: 10) {
+                progressBars
+                header
+                Spacer()
+            }
+            .padding(12)
+            .background(alignment: .top) {
+                LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom).frame(height: 110)
+            }
         }
-        .padding(.vertical, 24)
-        .frame(maxWidth: 560)
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var progressBars: some View {
@@ -256,5 +277,34 @@ struct StoryViewer: View {
         .buttonStyle(.pressable)
         .opacity(enabled ? 1 : 0)
         .disabled(!enabled)
+    }
+}
+
+/// Another account's stories beside the open one: its first story if loaded, else its avatar.
+private struct NeighborCard: View {
+    let reel: StoryReel
+    let size: CGSize
+    @State private var hovering = false
+
+    var body: some View {
+        ZStack {
+            Color(white: 0.12)
+            if let first = reel.items.first {
+                RemoteImage(url: first.image(minWidth: size.width * 2), contentMode: .fill)
+            }
+            Color.black.opacity(hovering ? 0.25 : 0.45)
+            VStack(spacing: 8) {
+                StoryRing(seen: reel.seen) { Avatar(url: reel.user.avatar, size: 46) }
+                Text(reel.user.username).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                if let t = reel.latest {
+                    Text(t.shortAge).font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            .padding(8)
+        }
+        .frame(width: size.width, height: size.height)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
     }
 }
