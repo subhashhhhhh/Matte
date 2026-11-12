@@ -100,7 +100,7 @@ enum DebugCapture {
             const url = typeof input === 'string' ? input : input.url;
             const body = init && typeof init.body === 'string' ? init.body : '';
             const r = await of.apply(this, arguments);
-            if (interesting(url)) { r.clone().text().then(t => post({kind:'fetch', url, headers: (init && init.headers) ? JSON.parse(JSON.stringify(init.headers)) : {}, name: nameOf(body) || url.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(body), response: t.slice(0, 400000)})); }
+            if (interesting(url)) { r.clone().text().then(t => post({kind:'fetch', t: Date.now(), url, headers: (init && init.headers) ? JSON.parse(JSON.stringify(init.headers)) : {}, name: nameOf(body) || url.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(body), response: t.slice(0, 400000)})); }
             return r;
           };
           const oo = XMLHttpRequest.prototype.open, os = XMLHttpRequest.prototype.send;
@@ -111,7 +111,7 @@ enum DebugCapture {
             const u = String(this.__u || '');
             if (interesting(u)) {
               const b = typeof body === 'string' ? body : '';
-              this.addEventListener('load', () => post({kind:'xhr', method:this.__m, url:u, headers:this.__h, cookies: document.cookie.split('; ').map(c => c.split('=')[0]), name: nameOf(b) || u.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(b), response: String(this.responseText || '').slice(0, 400000)}));
+              this.addEventListener('load', () => post({kind:'xhr', t: Date.now(), method:this.__m, url:u, headers:this.__h, cookies: document.cookie.split('; ').map(c => c.split('=')[0]), name: nameOf(b) || u.split('?')[0].split('/').filter(Boolean).slice(-2).join('_'), form: parse(b), response: String(this.responseText || '').slice(0, 400000)}));
             }
             return os.apply(this, arguments);
           };
@@ -119,23 +119,23 @@ enum DebugCapture {
           window.WebSocket = function(url, protocols) {
             post({kind:'websocket', name:'websocket', url:String(url), protocols: protocols ? String(protocols) : ''});
             const ws = protocols ? new OW(url, protocols) : new OW(url);
-            // DGW frames, as hex (the first few in each direction), to compare with ours.
+            // DGW frames, as hex (all of them, timestamped), to compare with ours.
             const tag = String(url).split('?')[0].split('/').pop();
-            const hex = (buf) => Array.from(new Uint8Array(buf).slice(0, 4096)).map(b => b.toString(16).padStart(2, '0')).join('');
+            const hex = (buf) => Array.from(new Uint8Array(buf).slice(0, 65536)).map(b => b.toString(16).padStart(2, '0')).join('');
             let sent = 0, recv = 0;
             const osend = ws.send.bind(ws);
             ws.send = function(d) {
-              if (sent++ < 40) {
-                if (d instanceof ArrayBuffer) post({kind:'ws-send', name:'ws-send-' + tag, hex: hex(d), length: d.byteLength});
-                else if (ArrayBuffer.isView(d)) post({kind:'ws-send', name:'ws-send-' + tag, hex: hex(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength)), length: d.byteLength});
+              if (sent++ < 5000) {
+                if (d instanceof ArrayBuffer) post({kind:'ws-send', name:'ws-send-' + tag, t: Date.now(), hex: hex(d), length: d.byteLength});
+                else if (ArrayBuffer.isView(d)) post({kind:'ws-send', name:'ws-send-' + tag, t: Date.now(), hex: hex(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength)), length: d.byteLength});
                 else post({kind:'ws-send', name:'ws-send-' + tag, text: String(d).slice(0, 4096)});
               }
               return osend(d);
             };
             ws.addEventListener('message', (e) => {
-              if (recv++ >= 40) return;
+              if (recv++ >= 3000) return;
               const d = e.data;
-              if (d instanceof ArrayBuffer) post({kind:'ws-recv', name:'ws-recv-' + tag, hex: hex(d), length: d.byteLength});
+              if (d instanceof ArrayBuffer) post({kind:'ws-recv', name:'ws-recv-' + tag, t: Date.now(), hex: hex(d), length: d.byteLength});
               else if (d instanceof Blob) d.arrayBuffer().then(b => post({kind:'ws-recv', name:'ws-recv-' + tag, hex: hex(b), length: b.byteLength}));
               else post({kind:'ws-recv', name:'ws-recv-' + tag, text: String(d).slice(0, 4096)});
             });
