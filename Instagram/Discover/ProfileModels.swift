@@ -261,6 +261,16 @@ final class ProfileModel: Identifiable {
                 feed.browser.open(at: index ?? 0)
             }
         }
+        // `-IGOwnPostDialog caption|delete` (with `-IGOpenMe YES`): shows that dialog for your
+        // first post (screenshots; nothing is sent unless its button is clicked).
+        if let which = d.string(forKey: "IGOwnPostDialog"), isMe {
+            let feed = posts, earlier = feed.onFirstPage
+            feed.onFirstPage = { [weak app] in
+                earlier?()
+                guard let m = feed.browser.items.first else { return }
+                if which == "delete" { app?.confirmingDelete = m } else { app?.editingCaption = m }
+            }
+        }
         #endif
         async let header: Void = loadHeader()
         async let grid: Void = activeFeed.loadIfNeeded()

@@ -118,7 +118,7 @@ struct CaptionEditSheet: View {
                 .padding(.horizontal, 16)
                 .frame(height: 60)
                 Rectangle().fill(Theme.hairline).frame(height: 1)
-                CaptionField(text: $text, focused: $focused, minHeight: 150)
+                CaptionField(text: $text, focused: $focused, height: 150)
                     .padding(14)
                 HStack {
                     CaptionCounter(count: text.count)
@@ -155,7 +155,7 @@ struct CaptionEditSheet: View {
 struct CaptionField: View {
     @Binding var text: String
     var focused: FocusState<Bool>.Binding
-    var minHeight: CGFloat = 120
+    var height: CGFloat = 120
     var placeholder = "Write a caption…"
 
     var body: some View {
@@ -173,7 +173,7 @@ struct CaptionField: View {
                 .padding(.vertical, 8)
         }
         .padding(.horizontal, 8)
-        .frame(minHeight: minHeight)
+        .frame(height: height)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
 }

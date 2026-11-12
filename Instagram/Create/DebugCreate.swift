@@ -134,7 +134,8 @@ enum DebugCreate {
             if let t = d.string(forKey: "IGCreateTarget").flatMap(CreateModel.Target.init(rawValue:)) { model.target = t }
             if let s = d.string(forKey: "IGCreateShape").flatMap(CropShape.init(rawValue:)), model.shapes.contains(s) { model.shape = s }
             if let c = d.string(forKey: "IGCreateCaption") { model.caption = c }
-            if d.bool(forKey: "IGCreateShare") { model.share() }
+            // Only ever pressed for a dry run: a launch flag must never post for real.
+            if d.bool(forKey: "IGCreateShare"), d.string(forKey: "IGDryRunWrites") != nil { model.share() }
         }
     }
 

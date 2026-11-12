@@ -110,7 +110,7 @@ struct CreateSheet: View {
                 if model.target != .story {
                     VStack(alignment: .trailing, spacing: 6) {
                         CaptionField(text: Binding(get: { model.caption }, set: { model.caption = $0 }),
-                                     focused: $captionFocused, minHeight: 170)
+                                     focused: $captionFocused, height: 170)
                         CaptionCounter(count: model.caption.count)
                     }
                 }
