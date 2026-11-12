@@ -21,6 +21,11 @@ struct RootView: View {
                     }
                 }
             }
+            if app.showSwitcher, app.authState == .signedIn {
+                QuickSwitcher()
+                    .transition(.opacity)
+                    .zIndex(25)
+            }
             if let media = app.sharing {
                 ShareSheet(media: media)
                     .id(media.pk)
@@ -47,6 +52,7 @@ struct RootView: View {
         .animation(.smooth(duration: 0.25), value: app.toast)
         .animation(.easeOut(duration: 0.18), value: app.stories == nil)
         .animation(.easeOut(duration: 0.15), value: app.sharing == nil)
+        .animation(.easeOut(duration: 0.12), value: app.showSwitcher)
         .background(Theme.background)
         .ignoresSafeArea()
         .sheet(isPresented: $app.showSignIn) {

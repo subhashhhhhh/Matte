@@ -70,6 +70,8 @@ final class AppModel {
     var openedMedia: Media?
     /// Shown as a small banner (errors, "copied").
     var toast: String?
+    /// The ⌘K quick switcher.
+    var showSwitcher = false
     /// The post being sent to chats (the "Send to…" sheet), when open.
     var sharing: Media?
     /// Like/save/send/copy/download for posts and reels everywhere.
@@ -91,6 +93,8 @@ final class AppModel {
         if let raw = UserDefaults.standard.string(forKey: "IGStartPage"), let d = Destination(rawValue: raw) {
             destination = d
         }
+        // `-IGShowSwitcher YES`: open the ⌘K switcher at launch.
+        showSwitcher = UserDefaults.standard.bool(forKey: "IGShowSwitcher")
         #endif
     }
 

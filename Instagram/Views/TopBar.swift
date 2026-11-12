@@ -94,10 +94,10 @@ private struct SearchField: View {
             }
         }
         .background {
-            // ⌘F and ⌘K jump to search from anywhere.
+            // ⌘F jumps to search; ⌘K opens the quick switcher.
             Group {
                 Button("") { focused = true }.keyboardShortcut("f")
-                Button("") { focused = true }.keyboardShortcut("k")
+                Button("") { app.showSwitcher = true }.keyboardShortcut("k")
             }
             .opacity(0)
             .allowsHitTesting(false)
