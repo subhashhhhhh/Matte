@@ -48,7 +48,7 @@ actor IGClient {
     }
 
     let session: IGSession
-    private let http: URLSession
+    let http: URLSession
     private(set) var page = WebPageConfig()
     private var registry = DocRegistry.load()
     private var bootstrap: Task<Void, Never>?

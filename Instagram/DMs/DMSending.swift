@@ -19,7 +19,8 @@ extension IGClient {
     private func dmCall(_ name: String, variables: JSON) async throws -> JSON {
         await prepare()
         if knownOperations()[name] == nil { await scanPage("/direct/inbox/") }
-        return try await graphQL(name, variables: variables, docId: knownOperations()[name] ?? Self.dmWriteDocIds[name])
+        let doc = knownOperations()[name] ?? Self.dmWriteDocIds[name] ?? Self.fallbackDocIds[name]
+        return try await graphQL(name, variables: variables, docId: doc)
     }
 
     // MARK: Photos and videos
@@ -79,7 +80,12 @@ extension IGClient {
         r.setValue(viewer, forHTTPHeaderField: "ig-u-ds-user-id")
         r.setValue("FILE_ATTACHMENT", forHTTPHeaderField: isVideo ? "video_type" : "image_type")
         r.setValue(mimeType, forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.upload(for: r, fromFile: file)
+        let (data, response) = try await http.upload(for: r, fromFile: file)
+        // Instagram may rotate the csrftoken (or other cookies) on this response too.
+        if let reply = response as? HTTPURLResponse, let url = reply.url {
+            let fields = reply.allHeaderFields as? [String: String] ?? [:]
+            await session.absorb(responseHeaders: fields, url: url)
+        }
         let json = Self.parseBody(data)
         guard let http = response as? HTTPURLResponse, http.statusCode < 300 else {
             throw IGError.http((response as? HTTPURLResponse)?.statusCode ?? 0, String(decoding: data.prefix(300), as: UTF8.self))
@@ -108,7 +114,12 @@ extension IGClient {
         try input.close()
         out.write(Data("\r\n--\(boundary)--\r\n".utf8))
         try out.close()
-        let (data, response) = try await URLSession.shared.upload(for: r, fromFile: body)
+        let (data, response) = try await http.upload(for: r, fromFile: body)
+        // Instagram may rotate the csrftoken (or other cookies) on this response too.
+        if let reply = response as? HTTPURLResponse, let url = reply.url {
+            let fields = reply.allHeaderFields as? [String: String] ?? [:]
+            await session.absorb(responseHeaders: fields, url: url)
+        }
         let json = Self.parseBody(data.starts(with: Data("for (;;);".utf8)) ? data.dropFirst(9) : data)
         if let code = json["error"].int, code != 0 { throw IGError.api(json["errorSummary"].string ?? "Upload failed (\(code))") }
         guard (response as? HTTPURLResponse)?.statusCode ?? 0 < 300 else { throw IGError.http((response as? HTTPURLResponse)?.statusCode ?? 0, "") }
