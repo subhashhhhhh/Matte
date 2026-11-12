@@ -80,6 +80,7 @@ final class AppModel {
     private(set) var inbox: InboxModel?
     private(set) var explore: ExploreModel?
     private(set) var search: SearchModel?
+    private(set) var activity: ActivityModel?
 
     @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "App")
 
@@ -102,6 +103,22 @@ final class AppModel {
         actions = PostActions(app: self, client: client)
         explore = ExploreModel(app: self, client: client)
         search = SearchModel(client: client)
+        let activity = ActivityModel(app: self, client: client)
+        self.activity = activity
+        #if DEBUG
+        // `-IGOpenActivity YES`: open the notifications panel (never marks them seen).
+        if UserDefaults.standard.bool(forKey: "IGOpenActivity") {
+            ActivityModel.debugNeverMarkSeen = true
+            activity.isOpen = true
+        }
+        #endif
+        // The heart's dot: check now and every few minutes.
+        Task { [weak activity] in
+            while let activity, !Task.isCancelled {
+                await activity.refresh()
+                try? await Task.sleep(for: .seconds(300))
+            }
+        }
         Task {
             guard let id = await client.session.userId else { return }
             viewerId = id
@@ -120,6 +137,8 @@ final class AppModel {
 
     func openProfile(_ user: User) {
         guard let client else { return }
+        activity?.isOpen = false
+        activity?.opened = nil
         stories?.close()
         if profiles.last?.user.id == user.id { return }
         profiles.append(ProfileModel(user: user, app: self, client: client))
@@ -154,6 +173,7 @@ final class AppModel {
         inbox = nil
         explore = nil
         search = nil
+        activity = nil
         profiles = []
         me = nil
         viewerId = nil

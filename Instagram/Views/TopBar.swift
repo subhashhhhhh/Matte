@@ -22,6 +22,21 @@ struct TopBar: View {
                     .frame(maxWidth: 420)
             }
             Spacer(minLength: 20)
+            if let activity = app.activity {
+                @Bindable var activity = activity
+                Button { activity.isOpen.toggle() } label: {
+                    IGGlyph(icon: activity.isOpen ? .heartFilled : .heart, size: 22)
+                        .frame(width: 32, height: 32)
+                        .overlay(alignment: .topTrailing) {
+                            if activity.unseen > 0 {
+                                Circle().fill(Theme.like).frame(width: 8, height: 8).offset(x: -3, y: 4)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .help("Notifications")
+            }
             if let me = app.me {
                 Button { app.openProfile(me) } label: {
                     Avatar(url: me.avatar, size: 28)

@@ -82,6 +82,20 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
+        .overlay(alignment: .trailing) {
+            if let activity = app.activity, activity.isOpen {
+                ActivityPanel(model: activity)
+                    .transition(.move(edge: .trailing))
+            }
+        }
+        .overlay {
+            if let activity = app.activity, let opened = activity.opened {
+                PostLightbox(model: opened, canPrevious: false, canNext: false, step: { _ in },
+                             close: { activity.opened = nil })
+                    .transition(.opacity)
+            }
+        }
+        .animation(.smooth(duration: 0.25), value: app.activity?.isOpen)
         .animation(.easeOut(duration: 0.15), value: app.profiles.count)
     }
 }
