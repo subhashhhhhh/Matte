@@ -46,7 +46,7 @@ extension IGClient {
 
     /// Tells Instagram the activity was seen (clears the heart's dot), as the website does on open.
     func markActivitySeen() async throws {
-        _ = try await rest(.post, "/api/v1/news/inbox_seen/", form: [:])
+        _ = try await rest(.post, "/api/v1/news/inbox_seen/", form: formTokens())
     }
 }
 

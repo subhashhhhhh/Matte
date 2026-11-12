@@ -312,12 +312,7 @@ actor IGClient {
         }
         var request = URLRequest(url: comps.url!)
         request.httpMethod = method.rawValue
-        if var form {
-            // The web app's REST posts carry the page's form token (recorded: news/inbox_seen,
-            // accounts/edit).
-            let common = page.commonForm(counter: "0", userId: nil)
-            if form["fb_dtsg"] == nil, let dtsg = common["fb_dtsg"] { form["fb_dtsg"] = dtsg }
-            if form["jazoest"] == nil, let jazoest = common["jazoest"] { form["jazoest"] = jazoest }
+        if let form {
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
             request.httpBody = Self.formBody(form)
             #if DEBUG
@@ -327,6 +322,12 @@ actor IGClient {
         let json = try await send(request, path: comps.path)
         dump(comps.path.replacingOccurrences(of: "/", with: "_"), json)
         return json
+    }
+
+    /// The page's form token fields, which the web app's REST posts carry (recorded:
+    /// news/inbox_seen, accounts/edit).
+    func formTokens() -> [String: String] {
+        page.commonForm(counter: "0", userId: nil).filter { $0.key == "fb_dtsg" || $0.key == "jazoest" }
     }
 
     // MARK: Transport
