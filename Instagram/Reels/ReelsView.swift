@@ -178,12 +178,7 @@ struct ReelsView: View {
 
     private func info(_ reel: Media, caption showsCaption: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Avatar(url: reel.user?.avatar, size: 30)
-                Text(reel.user?.username ?? "").font(.system(size: 13, weight: .semibold))
-                if reel.user?.isVerified == true { VerifiedBadge(size: 11) }
-            }
-            .opensProfile(reel.user)
+            AuthorLine(media: reel, avatarSize: 30, fontSize: 13)
             if showsCaption, let caption = reel.caption, !caption.isEmpty {
                 Text(caption).font(.system(size: 12.5)).lineLimit(2)
             }

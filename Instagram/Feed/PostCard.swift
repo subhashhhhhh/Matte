@@ -54,12 +54,7 @@ struct PostTile: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Avatar(url: post.user?.avatar, size: 24)
-                Text(post.user?.username ?? "").font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
-                if post.user?.isVerified == true { VerifiedBadge(size: 10) }
-            }
-            .opensProfile(post.user)
+            AuthorLine(media: post, avatarSize: 24, fontSize: 12.5)
             Spacer(minLength: 0)
             if let t = post.takenAt {
                 Text(t.shortAge).font(.system(size: 11.5)).foregroundStyle(.secondary)

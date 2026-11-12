@@ -144,6 +144,14 @@ final class ProfileModel: Identifiable {
         do {
             let page = try await client.profilePosts(username: user.username, after: cursor)
             browser.append(page.items)
+            #if DEBUG
+            if cursor == nil, UserDefaults.standard.string(forKey: "IGOpen") == "post" {
+                // `-IGOpenIndex N`: the Nth post, or the first collab post with `-IGOpenIndex collab`.
+                let raw = UserDefaults.standard.string(forKey: "IGOpenIndex")
+                let index = raw == "collab" ? browser.items.firstIndex { !$0.coauthors.isEmpty } : Int(raw ?? "0")
+                browser.open(at: index ?? 0)
+            }
+            #endif
             cursor = page.cursor
             hasMore = page.hasMore && page.cursor != nil
         } catch {

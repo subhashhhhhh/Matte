@@ -33,6 +33,8 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     var code: String?
     var kind: Kind
     var user: User?
+    /// Collab posts: the other authors (Instagram shows "owner and 2 others").
+    var coauthors: [User] = []
     var caption: String?
     var takenAt: Date?
     /// Stories: when it disappears.

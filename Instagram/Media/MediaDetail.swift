@@ -238,19 +238,7 @@ struct MediaDetailsColumn: View {
 
     private func author(_ media: Media) -> some View {
         HStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Avatar(url: media.user?.avatar, size: 34)
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 4) {
-                        Text(media.user?.username ?? "").font(.system(size: 13.5, weight: .semibold))
-                        if media.user?.isVerified == true { VerifiedBadge(size: 11) }
-                    }
-                    if let t = media.takenAt {
-                        Text(t.shortAge).font(.system(size: 11.5)).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .opensProfile(media.user)
+            AuthorLine(media: media, avatarSize: 34, fontSize: 13.5, subtitle: media.takenAt?.shortAge)
             Spacer()
         }
     }

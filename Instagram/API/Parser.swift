@@ -26,6 +26,7 @@ nonisolated enum Parser {
         var m = Media(id: j["id"].string ?? pk, pk: pk, code: j["code"].string,
                       kind: Media.Kind(rawValue: type) ?? .image)
         m.user = user(j["user"]) ?? user(j["owner"])
+        m.coauthors = j["coauthor_producers"].array.compactMap(user).filter { $0.id != m.user?.id }
         m.caption = j["caption"]["text"].string
         m.takenAt = j["taken_at"].double.map { Date(timeIntervalSince1970: $0) }
         m.expiresAt = j["expiring_at"].double.map { Date(timeIntervalSince1970: $0) }
