@@ -291,9 +291,9 @@ struct MediaStage: View {
         ZStack {
             Color.black
             if items.count > 1 {
-                CarouselPager(count: items.count, page: pageBinding) { i in item(i) }
+                CarouselPager(count: items.count, page: pageBinding) { i in item(i).overlay { tags(i) } }
             } else {
-                item(0)
+                item(0).overlay { tags(0) }
             }
             if items.count > 1, chrome {
                 HStack {
@@ -351,6 +351,12 @@ struct MediaStage: View {
 
     /// One photo or video of the post. Only the one showing plays: the photos beside it (kept
     /// by the swipe) show their cover.
+    /// Who's tagged in this photo (not in the mini player).
+    @ViewBuilder
+    private func tags(_ i: Int) -> some View {
+        if chrome { UserTagsLayer(media: items[i], bottomInset: items[i].isVideo ? 26 : 0) }
+    }
+
     private var doubleTap: (() -> Void)? {
         guard chrome, media.expiresAt == nil else { return nil }
         return { likeFromDoubleTap() }

@@ -243,7 +243,9 @@ struct PostLightbox: View {
                         MediaStage(media: media, cornerRadius: 0, initialImage: flight?.handoff(for: media.pk))
                             .frame(width: stage.width, height: stage.height)
                             .contextMenu { PostMenu(media: media) }
-                            .overlay(alignment: .bottomLeading) { RepostBubbles(media: media) }
+                            .overlay(alignment: .bottomLeading) {
+                                RepostBubbles(media: media).padding(.leading, media.shownItem.userTags == nil ? 0 : 42)
+                            }
                     }
                     MediaDetailsColumn(model: model)
                         .frame(width: layout.panel, height: stage.height)

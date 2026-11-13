@@ -72,6 +72,13 @@ nonisolated struct RepostNote: Hashable, Sendable {
     var text: String?
 }
 
+/// Someone tagged in a photo: the spot is a fraction of the photo's width and height.
+nonisolated struct UserTag: Hashable, Sendable {
+    var user: User
+    var x: Double
+    var y: Double
+}
+
 /// A post, reel, story item or carousel child: Instagram's one media shape.
 nonisolated struct Media: Hashable, Sendable, Identifiable {
     enum Kind: Int, Sendable { case image = 1, video = 2, carousel = 8 }
@@ -131,6 +138,9 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     /// `explore_story` unit; the website marks it "Suggested for you"). Optional so cached
     /// feeds from before still decode.
     var suggested: Bool?
+    /// People tagged in the photo (`usertags.in`), where they were tagged. Optional so cached
+    /// posts from before still decode.
+    var userTags: [UserTag]?
 
     /// A shortcode's media pk (the code is the pk in Instagram's URL-safe base 64; longer
     /// codes of private posts carry extra characters after the first 11).
@@ -405,6 +415,7 @@ extension RepostNote: Codable {}
 extension StorySticker.Kind: Codable {}
 extension StorySticker: Codable {}
 extension MusicTrack: Codable {}
+extension UserTag: Codable {}
 extension Media: Codable {}
 extension StoryReel: Codable {}
 extension DMThread: Codable {}

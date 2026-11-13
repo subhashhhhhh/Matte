@@ -136,6 +136,12 @@ nonisolated enum Parser {
         m.productType = j["product_type"].string
         m.commentsDisabled = j["comments_disabled"].bool
         if !j["usertags"].isNull { m.hasUsertags = !j["usertags"]["in"].array.isEmpty }
+        let tags = j["usertags"]["in"].array.compactMap { t -> UserTag? in
+            let p = t["position"].array
+            guard let u = user(t["user"]), p.count == 2, let x = p[0].double, let y = p[1].double else { return nil }
+            return UserTag(user: u, x: min(1, max(0, x)), y: min(1, max(0, y)))
+        }
+        if !tags.isEmpty { m.userTags = tags }
         m.children = j["carousel_media"].array.compactMap(media)
         if m.kind == .carousel, m.images.isEmpty, let first = m.children.first {
             m.images = first.images

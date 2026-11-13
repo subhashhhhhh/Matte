@@ -130,6 +130,7 @@ struct PostTile: View {
                         if i == page, isPreviewing, let url = previewVideo {
                             HoverPreview(url: url).id(url)
                         }
+                        UserTagsLayer(media: items[i], fill: true, compact: true)
                     }
                 }
             } else {
@@ -137,6 +138,7 @@ struct PostTile: View {
                 if isPreviewing, let url = previewVideo {
                     HoverPreview(url: url)
                 }
+                UserTagsLayer(media: post, fill: true, compact: true)
             }
         }
         .frame(width: w, height: w / Self.mediaAspect(post))
@@ -144,7 +146,10 @@ struct PostTile: View {
         .photoFlightTile(post, radius: 10)
         .overlay { if post.children.count > 1 { carouselChrome } }
         .overlay { HeartBurst(trigger: likeBurst, size: min(90, w * 0.3)) }
-        .overlay(alignment: .bottomLeading) { RepostBubbles(media: post, compact: true) }
+        // Beside the tags button when the photo showing has tags.
+        .overlay(alignment: .bottomLeading) {
+            RepostBubbles(media: post, compact: true).padding(.leading, post.shownItem.userTags == nil ? 0 : 34)
+        }
         .overlay(alignment: .topTrailing) {
             if post.children.count > 1 {
                 badge("square.on.square.fill", text: page > 0 ? "\(page + 1)/\(post.children.count)" : "\(post.children.count)")
