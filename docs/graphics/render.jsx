@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 import { renderToStaticMarkup } from 'react-dom/server';
 import sharp from 'sharp';
 import { mkdirSync } from 'node:fs';
-import { Icon, Window, Home, Messages, Reels, Planner, Mini, Toast, appCss, setGrain } from './app.jsx';
+import { Icon, Art, Avatar, Window, Home, Messages, Reels, Planner, Mini, Toast, appCss, setGrain } from './app.jsx';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -171,10 +171,27 @@ for (const light of [false, true]) {
     if (sc.toast) images[`shots/${name}-toast-${t}`] = shot(sc.w, sc.h, scene('toast'));
     if (sc.mini) images[`shots/${name}-mini-${t}`] = shot(sc.w, sc.h, scene('mini'));
   }
+  // The Reels scene on the site: the Home window that comes in front while the reel moves to the
+  // corner (placed where the Reels window is, so the two stack).
+  images[`shots/pip-home-${t}`] = shot(1440, 1100, (
+    <div style={{ position: 'relative', width: 1440, height: 1100 }}>
+      <div style={{ position: 'absolute', left: 130, top: 100 }}><Window page="Home" light={light}><Home /></Window></div>
+    </div>
+  ));
   images[`wordmark-${t}`] = { size: [600, 260], scale: 3, site: true, png: true, node: (
     <div style={{ width: 600, height: 260, display: 'grid', placeItems: 'center', fontFamily: 'Snell Roundhand', fontWeight: 900, fontSize: 150, color: light ? '#1b1815' : '#f4f1ec' }}>Matte</div>
   ) };
 }
+
+images['shots/reel'] = { size: [384, 683], scale: 2, site: true, node: (
+  <div style={{ position: 'relative', width: 384, height: 683 }}>
+    <div className="mt" style={{ position: 'absolute', inset: 0 }}>
+      <Art kind="neon" radius={14} style={{ width: 384, height: 683 }}>
+        <div className="rby" style={{ fontSize: 22, bottom: 30, left: 22, gap: 12 }}><Avatar kind="dusk" size={40} /> kiko.films</div>
+      </Art>
+    </div>
+  </div>
+) };
 
 const only = process.argv.slice(2);
 const browser = await chromium.launch();

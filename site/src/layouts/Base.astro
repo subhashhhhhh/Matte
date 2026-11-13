@@ -55,6 +55,10 @@ const ogImage = new URL('/og.jpg', Astro.site);
           apply();
         };
         document.documentElement.classList.add('js');
+        // If the motion script doesn't load, show everything.
+        setTimeout(function () {
+          if (!window.matteMotion) document.documentElement.classList.add('loaded');
+        }, 4000);
       })();
     </script>
   </head>

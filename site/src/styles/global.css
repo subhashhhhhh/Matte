@@ -173,6 +173,19 @@ p {
   display: none;
 }
 
+/* What the hero's entrance brings in waits, unseen, until the motion script takes over. */
+.js:not(.loaded) [data-hero-title],
+.js:not(.loaded) [data-hero-fade],
+.js:not(.loaded) [data-hero-window] {
+  opacity: 0;
+}
+
+/* SplitText's line masks: room for descenders inside the mask. */
+.split-line {
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+
 :focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 3px;
