@@ -34,7 +34,7 @@ nonisolated struct StoredCookie: Codable, Hashable, Sendable {
 actor IGSession {
     private var cookies: [String: StoredCookie]
     private let store: SessionStore
-    private let log = Logger(subsystem: "com.subhash.Instagram", category: "Session")
+    private let log = Logger(subsystem: "com.subhash.Matte", category: "Session")
     private var saveTask: Task<Void, Never>?
     /// Signed out: nothing may write this session to disk again.
     private var ended = false
@@ -133,7 +133,7 @@ nonisolated struct SessionStore: Sendable {
 
     static let directory: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: "com.subhash.Instagram", directoryHint: .isDirectory)
+            .appending(path: "com.subhash.Matte", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: 0o700])
         return dir
@@ -155,7 +155,7 @@ nonisolated struct SessionStore: Sendable {
             try data.write(to: url, options: [.atomic])
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         } catch {
-            Logger(subsystem: "com.subhash.Instagram", category: "Session").error("Session save failed: \(error.localizedDescription, privacy: .public)")
+            Logger(subsystem: "com.subhash.Matte", category: "Session").error("Session save failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

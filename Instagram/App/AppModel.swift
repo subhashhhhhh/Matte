@@ -252,7 +252,7 @@ final class AppModel {
     /// Last good results on disk, for this account (nil when signed out).
     @ObservationIgnored private(set) var cache: ResponseCache?
 
-    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "App")
+    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Matte", category: "App")
 
     init() {
         // Manager mode used to be a switch in Settings; it now follows the account type.

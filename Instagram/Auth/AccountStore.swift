@@ -63,7 +63,7 @@ nonisolated struct AccountStore: Sendable {
             try data.write(to: indexURL, options: [.atomic])
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: indexURL.path)
         } catch {
-            Logger(subsystem: "com.subhash.Instagram", category: "Accounts").error("Account list save failed: \(error.localizedDescription, privacy: .public)")
+            Logger(subsystem: "com.subhash.Matte", category: "Accounts").error("Account list save failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

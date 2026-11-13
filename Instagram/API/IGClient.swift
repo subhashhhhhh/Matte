@@ -62,7 +62,7 @@ actor IGClient {
     private var requestCounter = 1
     /// The web app numbers its Relay mutations' `client_mutation_id` "1", "2", … per page load.
     private var mutationCounter = 0
-    private let log = Logger(subsystem: "com.subhash.Instagram", category: "API")
+    private let log = Logger(subsystem: "com.subhash.Matte", category: "API")
 
     init(session: IGSession, configuration: URLSessionConfiguration = .ephemeral) {
         self.session = session

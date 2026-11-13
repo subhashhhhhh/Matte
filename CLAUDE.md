@@ -14,7 +14,7 @@ memory (the website uses 4–5 GB on an 8 GB Mac).
   (a fresh build number each time: macOS caches app icons by version, and a reused "1" keeps showing an old icon in the Dock).
 - The app is **Matte** (`PRODUCT_NAME`, Matte.app); the code module stays `Instagram`.
 - Install: **Debug only** (Release builds take too long): build Debug as above, quit the running app
-  (bundle id `com.subhash.Instagram`), `ditto <…>/Debug/Matte.app "/Applications/Matte Debug.app"`, open it.
+  (bundle id `com.subhash.Matte`; `com.subhash.Instagram` before 1.0, migrated by `IdentityMigration`), `ditto <…>/Debug/Matte.app "/Applications/Matte Debug.app"`, open it.
   The user's second Mac (`ssh server-lan`, macOS 15) gets the same build: zip with `ditto -c -k --keepParent`, scp, unzip into
   `/Applications/Matte Debug.app` there (quit it first, reopen if it was running).
   Debug-only test guards skip copies running from `/Applications/` (that copy marks stories seen).

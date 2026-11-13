@@ -2,9 +2,19 @@ import SwiftUI
 
 @main
 struct InstagramApp: App {
-    @State private var app = AppModel()
+    @State private var app: AppModel
 
     init() {
+        // The old identity's logins and settings move over before anything reads them.
+        IdentityMigration.runIfNeeded()
+        #if DEBUG
+        // `-IGMigrateOnly YES`: just the identity migration, then quit.
+        if UserDefaults.standard.bool(forKey: "IGMigrateOnly") {
+            UserDefaults.standard.synchronize()
+            exit(0)
+        }
+        #endif
+        _app = State(initialValue: AppModel())
         #if DEBUG
         Task { await DebugProbe.runIfAsked() }
         Task { await DebugCreate.makeTestMediaIfAsked() }

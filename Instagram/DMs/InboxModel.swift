@@ -37,7 +37,7 @@ final class InboxModel {
     /// After the gateway refused the session (and a normal request showed it's fine): when to try again.
     @ObservationIgnored private var realtimeRetryAt = Date.distantPast
     @ObservationIgnored private var inboxRefresh: Task<Void, Never>?
-    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "DMs")
+    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Matte", category: "DMs")
 
     init(app: AppModel, client: IGClient) {
         self.app = app

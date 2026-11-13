@@ -82,7 +82,7 @@ final class StoryEditorModel {
     @ObservationIgnored private var gestureBefore: StoryDoc?
     /// Screen pixels per canvas unit (the canvas view sets it as the window resizes).
     @ObservationIgnored private(set) var displayPPU: CGFloat = 1
-    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "StoryEditor")
+    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Matte", category: "StoryEditor")
 
     init(app: AppModel?, client: IGClient) {
         self.app = app

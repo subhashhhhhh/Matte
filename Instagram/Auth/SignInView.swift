@@ -94,7 +94,7 @@ private struct SignInWebView: NSViewRepresentable {
         private var captured = false
         private var pending: Task<Void, Never>?
         private var poll: Task<Void, Never>?
-        private let log = Logger(subsystem: "com.subhash.Instagram", category: "SignIn")
+        private let log = Logger(subsystem: "com.subhash.Matte", category: "SignIn")
 
         init(_ parent: SignInWebView) { self.parent = parent }
 

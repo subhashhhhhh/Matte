@@ -45,7 +45,7 @@ actor DMRealtime {
     private(set) var isSubscribed = false
     /// After 4003: nothing reconnects until `start` is called again.
     private var unauthorized = false
-    private let log = Logger(subsystem: "com.subhash.Instagram", category: "DGW")
+    private let log = Logger(subsystem: "com.subhash.Matte", category: "DGW")
 
     #if DEBUG
     /// Frame and delta counts for `-IGProbeDGW` (names only, never content).

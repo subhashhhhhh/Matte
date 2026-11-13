@@ -10,7 +10,7 @@ final class DMNotifier: NSObject, UNUserNotificationCenterDelegate {
     /// Opens a chat by thread id (set by the inbox).
     var open: ((String) -> Void)?
     private var authorized: Bool?
-    private let log = Logger(subsystem: "com.subhash.Instagram", category: "Notifications")
+    private let log = Logger(subsystem: "com.subhash.Matte", category: "Notifications")
 
     private var center: UNUserNotificationCenter? {
         // Notifications need a real app bundle (not a bare binary or a test host).

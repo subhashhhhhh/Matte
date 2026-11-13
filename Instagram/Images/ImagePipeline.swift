@@ -24,7 +24,7 @@ actor ImagePipeline {
     private let diskBudget: Int
     /// Bytes written since the last trim: the disk cache is trimmed as it grows, not only at launch.
     private var writtenSinceTrim = 0
-    private let log = Logger(subsystem: "com.subhash.Instagram", category: "Images")
+    private let log = Logger(subsystem: "com.subhash.Matte", category: "Images")
 
     init(memoryBudgetMB: Int = 96, diskBudgetMB: Int = 400) {
         let cfg = URLSessionConfiguration.default
@@ -33,7 +33,7 @@ actor ImagePipeline {
         session = URLSession(configuration: cfg)
         cache.totalCostLimit = memoryBudgetMB << 20
         disk = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appending(path: "com.subhash.Instagram/img", directoryHint: .isDirectory)
+            .appending(path: "com.subhash.Matte/img", directoryHint: .isDirectory)
         diskBudget = diskBudgetMB << 20
         try? FileManager.default.createDirectory(at: disk, withIntermediateDirectories: true)
         let dir = disk, budget = diskBudget

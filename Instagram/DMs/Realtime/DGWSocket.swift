@@ -92,7 +92,7 @@ actor DGWSocket {
     private var loops: [Task<Void, Never>] = []
     private(set) var closed: DGWClose?
     let label: String
-    private let log = Logger(subsystem: "com.subhash.Instagram", category: "DGW")
+    private let log = Logger(subsystem: "com.subhash.Matte", category: "DGW")
 
     static let pingInterval: Duration = .seconds(10)
     static let silenceTimeout: TimeInterval = 30

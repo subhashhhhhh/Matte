@@ -39,7 +39,7 @@ final class RepliesModel {
 
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let client: IGClient
-    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "Replies")
+    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Matte", category: "Replies")
 
     init(app: AppModel?, client: IGClient) {
         self.app = app

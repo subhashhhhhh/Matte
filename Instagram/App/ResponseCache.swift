@@ -5,7 +5,7 @@ import OSLog
 /// content at once while the fresh copy loads.
 ///
 /// Holds parsed models, never raw responses: small JSON files in
-/// `~/Library/Caches/com.subhash.Instagram/data/<ds_user_id>/`, one per page (`feed-home`,
+/// `~/Library/Caches/com.subhash.Matte/data/<ds_user_id>/`, one per page (`feed-home`,
 /// `tray`, `reels`, `explore`, `inbox`, `profile-<id>`), each list capped by its caller.
 /// Reads are synchronous (a few KB, on first show); writes go to one background queue.
 /// Anything that doesn't decode (an older shape of the models) is a miss and is deleted.
@@ -21,12 +21,12 @@ nonisolated final class ResponseCache: @unchecked Sendable {
 
     static var root: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appending(path: "com.subhash.Instagram/data", directoryHint: .isDirectory)
+            .appending(path: "com.subhash.Matte/data", directoryHint: .isDirectory)
     }
 
     /// One queue for every account: a sign-out's wipe lands after any write queued before it.
-    private static let queue = DispatchQueue(label: "com.subhash.Instagram.ResponseCache", qos: .utility)
-    private static let log = Logger(subsystem: "com.subhash.Instagram", category: "Cache")
+    private static let queue = DispatchQueue(label: "com.subhash.Matte.ResponseCache", qos: .utility)
+    private static let log = Logger(subsystem: "com.subhash.Matte", category: "Cache")
 
     let directory: URL
     private let lock = NSLock()

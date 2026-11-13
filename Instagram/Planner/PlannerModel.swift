@@ -21,7 +21,7 @@ final class PlannerModel {
 
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private let client: IGClient
-    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "Planner")
+    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Matte", category: "Planner")
     private static let cacheKey = "scheduled"
 
     init(app: AppModel?, client: IGClient) {

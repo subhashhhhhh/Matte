@@ -73,7 +73,7 @@ final class CreateModel {
     @ObservationIgnored private var prepared: [UUID: PreparedMedia] = [:]
     @ObservationIgnored private var uploaded: [UUID: String] = [:]
     @ObservationIgnored private var preparedKey: String?
-    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "Create")
+    @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Matte", category: "Create")
 
     init(app: AppModel?, client: IGClient) {
         self.app = app

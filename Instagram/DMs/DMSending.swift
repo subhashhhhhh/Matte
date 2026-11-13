@@ -35,7 +35,7 @@ extension IGClient {
         } catch let error as IGError where error == .signedOut {
             throw error
         } catch {
-            Logger(subsystem: "com.subhash.Instagram", category: "DMs")
+            Logger(subsystem: "com.subhash.Matte", category: "DMs")
                 .info("mercury upload failed (\(error.localizedDescription, privacy: .public)); trying rupload")
             return try await rupload(file: file, mimeType: mimeType, isVideo: isVideo)
         }

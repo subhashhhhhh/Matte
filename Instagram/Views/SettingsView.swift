@@ -492,7 +492,7 @@ private struct StoragePage: View {
 
     private func measure() async {
         memory = Self.footprint()
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "com.subhash.Instagram")
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "com.subhash.Matte")
         let (i, d) = await Task.detached(priority: .utility) {
             (Self.size(of: caches.appending(path: "img")), Self.size(of: caches.appending(path: "data")))
         }.value
