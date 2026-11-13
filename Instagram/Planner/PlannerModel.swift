@@ -40,7 +40,7 @@ final class PlannerModel {
         // time a day later, so the requests land in the dry run (nothing is sent).
         if UserDefaults.standard.bool(forKey: "IGPlannerSample") {
             let sample = ScheduledPost(id: "1617060876274799", publishAt: .now.addingTimeInterval(3 * 86_400), caption: "sample caption",
-                                       kind: .reel, thumbnail: nil, mediaId: "4037231283162991222_7785693251")
+                                       kind: .reel, thumbnail: nil, mediaId: "3900000000000000001_1000000001")
             posts = [sample]
             loaded = true
             editing = sample
