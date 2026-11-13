@@ -255,7 +255,13 @@ nonisolated enum Parser {
         let viewerMid = t["viewer"]["interop_messaging_user_fbid"].string
         var thread = DMThread(id: id, longId: t["thread_id"].string, threadKey: t["thread_key"].string, title: t["thread_title"].string ?? "",
                               users: users, isGroup: (t["is_group"].bool ?? false) || users.count > 1)
-        if thread.title.isEmpty { thread.title = users.map(\.username).joined(separator: ", ") }
+        var nicknames: [String: String] = [:]
+        for n in t["nicknames"].array {
+            if let who = idString(n["igid"]), let name = n["nickname"].string, !name.isEmpty { nicknames[who] = name }
+        }
+        if !nicknames.isEmpty { thread.nicknames = nicknames }
+        // Untitled chats are named after the people in them, by their nickname when set.
+        if thread.title.isEmpty { thread.title = users.map(thread.name(of:)).joined(separator: ", ") }
         thread.lastActivity = ms(t["last_activity_timestamp_ms"])
         thread.isMuted = t["is_muted"].bool ?? false
         thread.isPinned = t["is_pin"].bool ?? false

@@ -25,11 +25,15 @@ struct MessageRow: View {
                 if mine, hovering { actions }
                 VStack(alignment: mine ? .trailing : .leading, spacing: 3) {
                     if model.thread.isGroup, !mine, let u = model.user(for: message.senderId), showAvatar {
-                        Text(u.username).font(.system(size: 11)).foregroundStyle(.secondary).padding(.leading, 12)
+                        Text(model.thread.name(of: u)).font(.system(size: 11)).foregroundStyle(.secondary).padding(.leading, 12)
                     }
                     if let reply = message.replyTo { replyQuote(reply) }
                     MessageBody(message: message, mine: mine)
                         .opacity(message.pending ? 0.6 : 1)
+                        // Double-click a text message to like it, as on instagram.com.
+                        .simultaneousGesture(TapGesture(count: 2).onEnded {
+                            if case .text = message.body { Task { await model.like(message) } }
+                        })
                     if !message.reactions.isEmpty { reactions }
                     if message.failed {
                         Button("Not sent. Click to edit and try again.") { model.retry(message) }
@@ -91,21 +95,41 @@ struct MessageRow: View {
         .foregroundStyle(.secondary)
     }
 
+    /// "Replied to you" / "You replied to Anna" over the quoted message, as Instagram shows it.
     private func replyQuote(_ reply: DMMessage.ReplyPreview) -> some View {
-        Text(reply.text.isEmpty ? "Message" : reply.text)
-            .font(.system(size: 12))
-            .lineLimit(2)
+        let from = model.senderName(message.senderId)
+        let to = reply.senderId.isEmpty ? "" : model.senderName(reply.senderId)
+        let label: String = {
+            if to.isEmpty { return "\(from) replied" }
+            if from == "You" { return to == "You" ? "You replied to yourself" : "You replied to \(to)" }
+            if to == "You" { return "Replied to you" }
+            return from == to ? "\(from) replied to themself" : "\(from) replied to \(to)"
+        }()
+        return VStack(alignment: mine ? .trailing : .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrowshape.turn.up.left.fill").font(.system(size: 9))
+                Text(label)
+            }
+            .font(.system(size: 11))
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.panelStroke, lineWidth: 1.5))
+            .padding(.horizontal, 4)
+            Text(model.quoteText(reply) ?? "Original message")
+                .font(.system(size: 12))
+                .lineLimit(2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.panel))
+        }
+        .padding(.bottom, -2)
     }
 
     private var reactions: some View {
-        let grouped = Dictionary(grouping: message.reactions, by: \.emoji)
+        let grouped = Dictionary(grouping: message.reactions, by: { DMReaction.display($0.emoji) })
         return HStack(spacing: 2) {
             ForEach(grouped.keys.sorted(), id: \.self) { e in
-                Text(grouped[e]!.count > 1 ? "\(e) \(grouped[e]!.count)" : e).font(.system(size: 12))
+                let shown = e
+                Text(grouped[e]!.count > 1 ? "\(shown) \(grouped[e]!.count)" : shown).font(.system(size: 13))
             }
         }
         .padding(.horizontal, 6)

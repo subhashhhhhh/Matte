@@ -241,6 +241,8 @@ nonisolated struct DMThread: Hashable, Sendable, Identifiable {
     var isPinned = false
     /// Messages pinned to the top of the chat (`pinned_messages`).
     var pinnedMessageIds: [String] = []
+    /// Nicknames set in this chat, by user id (pk). Optional so cached inboxes still decode.
+    var nicknames: [String: String]?
     var isRequest = false
     var imageURL: URL?
     /// Each participant's read watermark, by messaging id.
@@ -248,6 +250,9 @@ nonisolated struct DMThread: Hashable, Sendable, Identifiable {
     var viewerMessagingId: String?
 
     var avatarUsers: [User] { Array(users.prefix(2)) }
+
+    /// What to call someone in this chat: their nickname here, else their username.
+    func name(of user: User) -> String { nicknames?[user.id] ?? user.username }
 }
 
 /// Someone's activity status, as the web app shows it ("Active now" / "Active 12m ago").
@@ -262,6 +267,19 @@ nonisolated struct Presence: Hashable, Sendable {
 nonisolated struct DMReaction: Hashable, Sendable {
     var emoji: String
     var senderId: String
+
+    /// The emoji as it should look: Instagram sends the heart as a bare "❤" (U+2764), which
+    /// macOS draws as a small white text symbol; with U+FE0F it's the red emoji.
+    static func display(_ e: String) -> String {
+        let scalars = Array(e.unicodeScalars)
+        guard scalars.count == 1, let s = scalars.first, s.properties.isEmoji, !s.properties.isEmojiPresentation else { return e }
+        return e + "\u{FE0F}"
+    }
+
+    /// Same reaction, ignoring the presentation selector ("❤" and "❤️").
+    static func same(_ a: String, _ b: String) -> Bool {
+        a.replacingOccurrences(of: "\u{FE0F}", with: "") == b.replacingOccurrences(of: "\u{FE0F}", with: "")
+    }
 }
 
 nonisolated struct DMAttachment: Hashable, Sendable {

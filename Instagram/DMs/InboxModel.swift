@@ -810,7 +810,7 @@ final class ConversationModel {
     func toggleReaction(_ emoji: String, on message: DMMessage) async {
         guard let viewerId, let i = messages.firstIndex(where: { $0.id == message.id }) else { return }
         let mine = messages[i].reactions.first { $0.senderId == viewerId }
-        let removing = mine?.emoji == emoji
+        let removing = mine.map { DMReaction.same($0.emoji, emoji) } ?? false
         // One reaction per person: replace ours.
         messages[i].reactions.removeAll { $0.senderId == viewerId }
         if !removing { messages[i].reactions.append(DMReaction(emoji: emoji, senderId: viewerId)) }
@@ -820,6 +820,27 @@ final class ConversationModel {
             if let j = messages.firstIndex(where: { $0.id == message.id }) { messages[j].reactions = message.reactions }
             inbox?.report(error)
         }
+    }
+
+    /// Double-click: likes the message with ❤️ (never takes a like away).
+    func like(_ message: DMMessage) async {
+        guard let viewerId else { return }
+        if let mine = message.reactions.first(where: { $0.senderId == viewerId }), DMReaction.same(mine.emoji, "❤️") { return }
+        await toggleReaction("❤️", on: message)
+    }
+
+    /// The quoted message's text: what Instagram sent with the reply, else the message itself
+    /// when it's loaded.
+    func quoteText(_ reply: DMMessage.ReplyPreview) -> String? {
+        if !reply.text.isEmpty { return reply.text }
+        return messages.first { $0.id == reply.id }?.previewText
+    }
+
+    /// What to call the sender of a message here (nickname or username; "You" for yourself).
+    func senderName(_ messagingId: String) -> String {
+        if messagingId == viewerId { return "You" }
+        guard let u = user(for: messagingId) else { return "" }
+        return thread.name(of: u)
     }
 
     func isPinned(_ message: DMMessage) -> Bool { thread.pinnedMessageIds.contains(message.id) }
