@@ -220,6 +220,16 @@ extension IGClient {
         _ = try await dmQuery("useIGDPinThreadMutation", variables: ["thread_fbid": .string(id), "pin": .bool(pin)])
     }
 
+    /// Deletes a chat for you; the others keep it, and a new message brings it back (recorded on
+    /// instagram.com 2026-11-13: `thread_fbid` and `should_move_future_requests_to_spam` false;
+    /// Instagram answers with `ig_direct_hide_thread`).
+    func deleteThread(_ id: String) async throws {
+        let data = try await dmQuery("IGDInboxInfoDeleteThreadDialogOffMsysMutation", variables: [
+            "thread_fbid": .string(id), "should_move_future_requests_to_spam": .bool(false),
+        ])
+        guard data["ig_direct_hide_thread"]["id"].string != nil else { throw IGError.api("Instagram didn't delete the chat.") }
+    }
+
     /// Mutes a chat for `seconds` (3600, 28800, 86400 as the web app offers; -1 until you
     /// change it; 0 unmutes). Returns whether it's muted now.
     @discardableResult
@@ -311,6 +321,7 @@ extension IGClient {
         // Recorded 2026-11-13: chat pin, mute, nicknames.
         "useIGDPinThreadMutation": "26491513390471063",
         "useIGDMuteThreadMutation": "27113115288379422",
+        "IGDInboxInfoDeleteThreadDialogOffMsysMutation": "35352443081068612",
         "useIGDEditNicknameMutation": "26698632706416151",
     ]
 }

@@ -686,7 +686,7 @@ Note it's the **long** thread ID here.
 
 ### 8.7 Thread management
 * Accept request: `{"thread_fbid":"<IGID>","ig_inbox_folder":null,"offline_threading_id":"<OTID>"}` (`requests.go:116-120`).
-* Delete/hide: `{"thread_fbid":"<IGID>","should_move_future_requests_to_spam":false}` (`requests.go:79-82`).
+* Delete/hide: `{"thread_fbid":"<IGID>","should_move_future_requests_to_spam":false}` (`requests.go:79-82`); recorded on instagram.com 2026-11-13 exactly so (doc `35352443081068612`, answer `data.ig_direct_hide_thread.id`). Matte: right-click a chat › Delete Chat… (`IGClient.deleteThread`).
 * Mute: `{"thread_fbid":"<IGID>","mute_seconds":-1|0|N,"offline_threading_id":"<OTID>"}` (-1 forever, 0 unmute; `requests.go:122-126`).
 * Pin thread: `{"thread_fbid":"<IGID>","pin":true}`; pin message `{"thread_fbid","message_id","should_replace_oldest_pin"?}`.
 * Leave: `{"thread_fbid":"<IGID>"}`; remove member `{"thread_fbid","user_igid"}`; add members `{"thread_fbid","user_igids":[…],<3 relay providers as in requests.go:93-109>}`; admins `{"thread_fbid","user_igids"}`; rename `{"thread_fbid","new_title"}` (`graphql/docs.go:232-235`).

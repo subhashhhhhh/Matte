@@ -61,6 +61,15 @@ struct MessagesView: View {
             }
         }
         .overlay {
+            if let thread = model.confirmingDelete {
+                ConfirmDialog(title: "Delete chat?",
+                              message: "It's deleted for you only. \(thread.isGroup ? "The others" : thread.title) will still see it, and a new message brings it back.",
+                              action: "Delete", busy: model.deleting,
+                              confirm: { Task { await model.delete(thread) } },
+                              cancel: { if !model.deleting { model.confirmingDelete = nil } })
+            }
+        }
+        .overlay {
             if composing {
                 NewMessageSheet(close: { composing = false }, initialQuery: newMessageQuery) { user in
                     composing = false
@@ -304,6 +313,8 @@ struct ChatSettingsMenu: View {
             Divider()
             Button("Nicknames…", action: nicknames)
         }
+        Divider()
+        Button("Delete Chat…", role: .destructive) { model.confirmingDelete = thread }
     }
 }
 

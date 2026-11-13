@@ -316,6 +316,28 @@ final class InboxModel {
         }
     }
 
+    /// The chat whose "Delete chat?" is being confirmed.
+    var confirmingDelete: DMThread?
+    private(set) var deleting = false
+
+    /// Deletes a chat for you (Instagram hides it; the others keep theirs).
+    func delete(_ thread: DMThread) async {
+        guard !deleting else { return }
+        deleting = true
+        defer { deleting = false }
+        do {
+            try await client.deleteThread(thread.id)
+            confirmingDelete = nil
+            if selectedId == thread.id { selectedId = nil }
+            threads.removeAll { $0.id == thread.id }
+            requests.removeAll { $0.id == thread.id }
+            show("Chat deleted")
+        } catch {
+            confirmingDelete = nil
+            report(error)
+        }
+    }
+
     /// Mutes for `seconds` (-1: until you change it; 0: unmutes).
     func mute(_ thread: DMThread, seconds: Int) {
         let before = thread.isMuted

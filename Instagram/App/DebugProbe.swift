@@ -184,6 +184,7 @@ enum DebugProbe {
                     ("recent search remove", { try await client.removeRecentKeyword("test") }),
                     ("chat pin", { try await client.setThreadPinned(true, thread: thread) }),
                     ("chat mute", { try await client.setThreadMuted(seconds: 3600, thread: thread) }),
+                    ("chat delete", { try await client.deleteThread(thread) }),
                     ("chat nickname", { _ = try await client.setNickname("n", userId: "2000000003", longThreadId: longThread) }),
                     ("repost", { _ = try await client.repost(media: post) }),
                     ("unrepost", { try await client.deleteRepost(noteId: "900000000000001") }),
