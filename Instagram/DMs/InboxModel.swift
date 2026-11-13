@@ -526,6 +526,28 @@ final class ConversationModel {
 
     /// The bar asks the list to bring a message into view.
     var scrollRequest: String?
+    /// A message just jumped to, highlighted for a moment.
+    private(set) var flashId: String?
+
+    /// Brings a message into view and highlights it (a reply's quote, a pin), loading older
+    /// messages until it's there (a few pages at most).
+    func jump(to id: String) async {
+        var pages = 0
+        while !messages.contains(where: { $0.id == id }), hasOlder, pages < 15 {
+            await loadOlder()
+            pages += 1
+        }
+        guard messages.contains(where: { $0.id == id }) else {
+            inbox?.show("That message is too far back to load")
+            return
+        }
+        // Let the newly loaded rows lay out before scrolling to one.
+        try? await Task.sleep(for: .milliseconds(pages > 0 ? 150 : 0))
+        scrollRequest = id
+        flashId = id
+        try? await Task.sleep(for: .seconds(1.6))
+        if flashId == id { flashId = nil }
+    }
 
     /// Sets (or, with an empty name, clears) someone's nickname in this chat.
     func setNickname(_ name: String, for user: User) async {

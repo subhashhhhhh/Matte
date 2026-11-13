@@ -30,6 +30,14 @@ struct MessageRow: View {
                     if let reply = message.replyTo { replyQuote(reply) }
                     MessageBody(message: message, mine: mine)
                         .opacity(message.pending ? 0.6 : 1)
+                        // Jumped to (from a reply's quote or a pin): a brief glow.
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .strokeBorder(Theme.link, lineWidth: 2)
+                                .opacity(model.flashId == message.id ? 1 : 0)
+                                .animation(.easeOut(duration: 0.3), value: model.flashId)
+                                .allowsHitTesting(false)
+                        }
                         // Double-click a text message to like it, as on instagram.com.
                         .simultaneousGesture(TapGesture(count: 2).onEnded {
                             if case .text = message.body { Task { await model.like(message) } }
@@ -120,6 +128,11 @@ struct MessageRow: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.panel))
+                .contentShape(Rectangle())
+                // Click the quote to go to the message it answers.
+                .onTapGesture { Task { await model.jump(to: reply.id) } }
+                .pointingHand()
+                .help("Go to the original message")
         }
         .padding(.bottom, -2)
     }

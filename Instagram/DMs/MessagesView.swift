@@ -423,12 +423,11 @@ struct ConversationView: View {
                                     // Not while the chat is still settling at the bottom: on open, the
                                     // top is briefly on screen, and loading then would leave you mid-chat.
                                     guard settled else { return }
-                                    // Keep the message you were reading in place as older ones are added above.
-                                    let anchor = model.messages.first?.id
-                                    Task {
-                                        await model.loadOlder()
-                                        if let anchor { proxy.scrollTo(anchor, anchor: .top) }
-                                    }
+                                    // What you're reading stays put as older messages are added above:
+                                    // the chat keeps its distance from the bottom when its size changes
+                                    // (`defaultScrollAnchor(.bottom, for: .sizeChanges)`). Scrolling to
+                                    // the old first message here fought a trackpad scroll still moving.
+                                    Task { await model.loadOlder() }
                                 }
                             if model.loadingOlder { Spinner(size: 14).padding(8) }
                         }
@@ -461,6 +460,10 @@ struct ConversationView: View {
                     .animation(settled ? Motion.pop : nil, value: model.messages.last?.id)
                 }
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
+                // Content added or measured above (older messages, rows getting their real
+                // height as you scroll up) grows the chat upward instead of pushing what you're
+                // reading down.
+                .defaultScrollAnchor(.bottom, for: .sizeChanges)
                 .scrollIndicators(.never)
                 // Stick to the bottom: whenever the content or the view changes size (a chat opening,
                 // rows being measured, a new message, the shared column opening), go back to the
@@ -489,6 +492,8 @@ struct ConversationView: View {
                 // bottom starts it again.
                 .onChange(of: model.scrollRequest) {
                     guard let id = model.scrollRequest else { return }
+                    following = false
+                    programmaticScroll = .now
                     withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
                     model.scrollRequest = nil
                 }
@@ -730,7 +735,8 @@ private struct PinnedBar: View {
         Button {
             guard !pinned.isEmpty else { return }
             index = (index + 1) % pinned.count
-            model.scrollRequest = pinned[index].id
+            let id = pinned[index].id
+            Task { await model.jump(to: id) }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "pin.fill").font(.system(size: 11)).rotationEffect(.degrees(45))
