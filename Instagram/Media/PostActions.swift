@@ -84,9 +84,13 @@ final class PostActions {
         overrides[m.pk] = new
         let name = collections?.first { $0.id == id }?.name ?? "collection"
         Task {
+            var savedNow = false
             do {
                 if adding {
-                    if !old.saved { try await client.setSaved(true, media: m) }
+                    if !old.saved {
+                        try await client.setSaved(true, media: m)
+                        savedNow = true
+                    }
                     try await client.addToCollection(id, media: m)
                     app?.show("Saved to \(name)")
                 } else {
@@ -94,7 +98,10 @@ final class PostActions {
                     app?.show("Removed from \(name)")
                 }
             } catch {
-                overrides[m.pk] = old
+                // Undo only what failed: a save that went through stays shown as saved.
+                var back = old
+                if savedNow { back.saved = true }
+                overrides[m.pk] = back
                 app?.report(error)
             }
         }
@@ -106,18 +113,22 @@ final class PostActions {
         guard !title.isEmpty else { return }
         let old = state(m)
         Task {
-            do {
-                let id = try await client.createCollection(named: title, with: m)
-                if !old.saved { try await client.setSaved(true, media: m) }
-                var new = state(m)
-                new.saved = true
-                new.collections.insert(id)
-                overrides[m.pk] = new
-                collections = [SavedCollection(id: id, name: title, cover: m.image(minWidth: 120))] + (collections ?? [])
-                app?.show("Saved to \(title)")
-            } catch {
+            let id: String
+            do { id = try await client.createCollection(named: title, with: m) } catch {
                 app?.report(error)
+                return
             }
+            // The collection exists (with the post in it) even if the save after it fails.
+            var new = state(m)
+            new.collections.insert(id)
+            collections = [SavedCollection(id: id, name: title, cover: m.image(minWidth: 120))] + (collections ?? [])
+            var saveFailed: Error?
+            if !old.saved {
+                do { try await client.setSaved(true, media: m) } catch { saveFailed = error }
+            }
+            if saveFailed == nil { new.saved = true }
+            overrides[m.pk] = new
+            if let saveFailed { app?.report(saveFailed) } else { app?.show("Saved to \(title)") }
         }
     }
 
