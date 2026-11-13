@@ -108,6 +108,17 @@ through the unchanged story path above (`CreateModel.shareFinishedStory` → `up
 
 ## Post or reel to your story (Matte)
 
+**Update 2026-11-13:** instagram.com's `configure_to_story` accepts these fields but drops the
+sticker (Matte's stories came back with `story_feed_media: null`; the ones shared from the phone
+have it). So this one publish goes to the phone app's endpoint instead
+(`API/Endpoints+PhoneStory.swift`, from instagrapi `login_by_sessionid` + `photo_configure_to_story`):
+`POST https://i.instagram.com/api/v1/media/configure_to_story/`, `signed_body=SIGNATURE.<json>`,
+`Authorization: Bearer IGT:2:<base64 {ds_user_id, sessionid, should_use_header_over_cookies}>`, Android
+UA 449.0.0.52.84, app id 567067343352427, device ids derived once from the account id. Ephemeral
+URLSession (its cookies never reach the web session); any failure falls back to the web publish
+with a toast, and never signs out. The upload is unchanged (rupload, web).
+
+
 instagram.com can't do this (only the phone app), so nothing could be recorded. Written from
 instagrapi's `photo_configure_to_story` (`medias`), **unverified until the user tries it**:
 the photo story form above plus `reshared_media_id=<pk>` and

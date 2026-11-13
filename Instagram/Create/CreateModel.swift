@@ -389,6 +389,22 @@ final class CreateModel {
         status = "Adding to your story…"
         progress = 0.9
         guard let id = uploaded[item.id] else { return nil }
+        // A shared post: the phone app's endpoint keeps the tappable sticker (instagram.com's
+        // drops it). If the phone request fails, publish the normal way and say so.
+        if let reshare = storyReshare, !item.source.isVideo {
+            do {
+                let media = prepared[item.id]
+                return try await client.configureReshareStoryByPhone(uploadId: id, width: media?.width ?? 1080,
+                                                                     height: media?.height ?? 1920, reshare: reshare)
+            } catch {
+                if error is CancellationError { throw error }
+                #if DEBUG
+                if case IGError.http(-1, _) = error { throw error }  // dry run
+                #endif
+                log.error("Phone story publish failed: \(error.localizedDescription, privacy: .public)")
+                app?.show("Posting without the tappable post (Instagram refused it)")
+            }
+        }
         return try await client.configureStory(uploadId: id, isVideo: item.source.isVideo, reshare: storyReshare) { [weak self] in
             Task { @MainActor in self?.status = "Instagram is processing the video…" }
         }

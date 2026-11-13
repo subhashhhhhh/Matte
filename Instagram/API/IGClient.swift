@@ -299,7 +299,7 @@ actor IGClient {
     @discardableResult
     nonisolated static func dryRunRecord(_ name: String, request: URLRequest, bodySize: Int? = nil) -> Bool {
         guard let dir = UserDefaults.standard.string(forKey: "IGDryRunWrites") else { return false }
-        let secretHeaders: Set = ["x-csrftoken", "x-fb-lsd", "x-ig-www-claim", "x-web-session-id", "x-mid"]
+        let secretHeaders: Set = ["x-csrftoken", "x-fb-lsd", "x-ig-www-claim", "x-web-session-id", "x-mid", "authorization"]
         let secretFields: Set = ["fb_dtsg", "lsd", "jazoest", "av", "__hs", "__hsi", "__rev", "__spin_r", "__spin_t", "__s"]
         var headers: [String: JSON] = [:]
         for (k, v) in request.allHTTPHeaderFields ?? [:] {
