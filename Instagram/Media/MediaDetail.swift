@@ -471,6 +471,9 @@ struct StageVideo: View {
         guard video == nil else { return }
         if let key, let handed = VideoHandoff.shared.claim(key) {
             // The same player, mid-play: no restart, no gap.
+            #if DEBUG
+            FileHandle.standardError.write(Data("VIDEO handed over at \(Int(handed.progress * 100))%\n".utf8))
+            #endif
             handed.isMuted = sound.muted
             if onScreen { if !handed.isPlaying { handed.play() } } else { handed.pause(); resumeOnReturn = true }
             video = handed

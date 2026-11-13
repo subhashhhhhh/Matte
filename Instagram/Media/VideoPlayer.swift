@@ -152,11 +152,15 @@ final class VideoHandoff {
     private var handedOff = Set<ObjectIdentifier>()
     private var expectingUntil = Date.distantPast
 
-    /// A handover is about to happen (a post shrinking into the mini player, or growing back).
-    func expect() { expectingUntil = .now.addingTimeInterval(1.2) }
+    /// A handover is about to happen (a post shrinking into the mini player, or growing back, or
+    /// a feed preview opening as the full post: that one waits for the photo flight to land).
+    func expect(for seconds: TimeInterval = 1.2) { expectingUntil = .now.addingTimeInterval(seconds) }
     var isExpecting: Bool { Date.now < expectingUntil }
 
     func register(_ video: LoopingVideo, key: String) { live[key] = video }
+
+    /// The player was taken by another view, which now plays, pauses and mutes it.
+    func isClaimed(_ video: LoopingVideo) -> Bool { handedOff.contains(ObjectIdentifier(video)) }
 
     /// The view showing `video` is leaving. True when the player was handed over (keep it going).
     func leave(_ video: LoopingVideo, key: String) -> Bool {

@@ -32,6 +32,8 @@ final class PhotoFlight {
     /// The photo decoded at the viewer's size, kept for the viewer and the flight back.
     private(set) var image: CGImage?
     @ObservationIgnored private var imagePk: String?
+    /// Which photo of the post that is (a carousel can be paged in the viewer before it flies back).
+    @ObservationIgnored private var imageItem: String?
     @ObservationIgnored private var decodeTask: Task<Void, Never>?
 
     // Lumen's springs (Compose stiffness/damping → response = 2π/√stiffness).
@@ -109,7 +111,8 @@ final class PhotoFlight {
             grown = 1
             backdropStart = backdrop
         }
-        if imagePk != media.pk { decode(media, at: from.size) }
+        // The photo showing now: paged on in the viewer, a carousel lands on another photo.
+        if imagePk != media.pk || imageItem != media.shownItem.pk { decode(media, at: from.size) }
         DispatchQueue.main.async { [self] in
             let animSize = Motion.reduced ? Animation.easeInOut(duration: 0.15) : Self.landSize
             withAnimation(Motion.reduced ? .easeInOut(duration: 0.15) : Self.landPosition) {
@@ -127,9 +130,10 @@ final class PhotoFlight {
     /// pixel bucket), so the viewer finds it ready.
     private func decode(_ media: Media, at size: CGSize) {
         decodeTask?.cancel()
-        if imagePk != media.pk { image = nil }
-        imagePk = media.pk
         let first = media.shownItem
+        if imagePk != media.pk || imageItem != first.pk { image = nil }
+        imagePk = media.pk
+        imageItem = first.pk
         guard let url = first.image(minWidth: 1080) else { return }
         let px = Self.bucket(size)
         // Warmed by hovering: the full-size photo is ready for the very first frame.
@@ -139,7 +143,7 @@ final class PhotoFlight {
         }
         decodeTask = Task { [weak self] in
             let decoded = await ImagePipeline.shared.image(for: url, maxPixel: px)
-            guard !Task.isCancelled, let self, self.imagePk == media.pk else { return }
+            guard !Task.isCancelled, let self, self.imagePk == media.pk, self.imageItem == first.pk else { return }
             self.image = decoded
         }
     }
@@ -230,7 +234,7 @@ private struct FlightPhoto: View {
                     .aspectRatio(contentMode: .fill)
             }
         }
-        .task(id: media.pk) {
+        .task(id: media.pk + "/" + media.shownItem.pk) {
             let first = media.shownItem
             guard decoded == nil, let url = first.image(minWidth: 480) else { return }
             low = await ImagePipeline.shared.image(for: url, maxPixel: 640)

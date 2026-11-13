@@ -141,7 +141,7 @@ struct PostTile: View {
                     ZStack {
                         RemoteImage(url: items[i].image(minWidth: w * 2), contentMode: .fill)
                         if i == page, isPreviewing, let url = previewVideo {
-                            HoverPreview(url: url).id(url)
+                            HoverPreview(url: url, key: items[i].pk).id(url)
                         }
                         UserTagsLayer(media: items[i], fill: true, compact: true)
                     }
@@ -149,7 +149,7 @@ struct PostTile: View {
             } else {
                 RemoteImage(url: post.image(minWidth: w * 2), contentMode: .fill)
                 if isPreviewing, let url = previewVideo {
-                    HoverPreview(url: url)
+                    HoverPreview(url: url, key: post.pk)
                 }
                 UserTagsLayer(media: post, fill: true, compact: true)
             }
@@ -253,9 +253,15 @@ struct HoverPreview: View {
     let url: URL
     /// With sound (the app's sound setting), as the phone's feed plays it; muted in grids.
     var sound = true
+    /// The video's pk: opening the post hands this player to the full view (`VideoHandoff`), so
+    /// it carries on from where the preview was instead of starting over.
+    var key: String? = nil
     @State private var video: LoopingVideo?
     @State private var setting = SoundSetting.shared
     @Environment(\.onScreen) private var onScreen
+
+    /// Taken by the full post: it plays, pauses and mutes it now.
+    private var claimed: Bool { video.map { VideoHandoff.shared.isClaimed($0) } ?? false }
 
     var body: some View {
         ZStack {
@@ -266,10 +272,20 @@ struct HoverPreview: View {
             let v = LoopingVideo(url: url, muted: !sound || setting.muted)
             if onScreen { v.play() }
             video = v
+            if let key { VideoHandoff.shared.register(v, key: key) }
         }
-        .onChange(of: setting.muted) { video?.isMuted = !sound || setting.muted }
-        .onChange(of: onScreen) { if onScreen { video?.play() } else { video?.pause() } }
+        .onChange(of: setting.muted) { if !claimed { video?.isMuted = !sound || setting.muted } }
+        .onChange(of: onScreen) {
+            // Covered by the post opening from it: that view carries on with this player.
+            guard !claimed, !VideoHandoff.shared.isExpecting else { return }
+            if onScreen { video?.play() } else { video?.pause() }
+        }
         .onDisappear {
+            if let key, let video {
+                if VideoHandoff.shared.leave(video, key: key) { self.video = nil; return }
+                // Gone while its post is opening (the photo is still flying): kept for it.
+                if VideoHandoff.shared.isExpecting { VideoHandoff.shared.offer(video, key: key); self.video = nil; return }
+            }
             video?.tearDown()
             video = nil
         }

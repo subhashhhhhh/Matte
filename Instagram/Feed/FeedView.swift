@@ -33,6 +33,8 @@ struct FeedView: View {
     private func openPost(_ i: Int) {
         let posts = model.visible
         guard posts.indices.contains(i), !flight.isFlying else { return }
+        // A video previewing in its card carries on in the full post (VideoHandoff), after the flight.
+        VideoHandoff.shared.expect(for: 2)
         flight.open(posts[i], to: PostLightbox.stageRect(in: flight.hostSize, media: posts[i])) {}
         model.open(at: i)
     }
