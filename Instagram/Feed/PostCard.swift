@@ -19,6 +19,8 @@ struct PostTile: View {
     @State private var holder = UUID()
     @State private var music = PostMusic.shared
     @Environment(\.onScreen) private var onScreen
+    /// The carousel photo showing (shared with the opened post).
+    @State private var pages = CarouselPages.shared
 
     /// Instagram's own limits: no taller than 4:5, no wider than 1.91:1.
     static func mediaAspect(_ post: Media) -> CGFloat { min(1.91, max(0.8, post.aspect)) }
@@ -27,8 +29,13 @@ struct PostTile: View {
         width / mediaAspect(post) + ((post.caption ?? "").isEmpty ? 70 : 104)
     }
 
+    private var page: Int { min(pages.page(post.pk), max(post.children.count - 1, 0)) }
+    private var pageBinding: Binding<Int> {
+        Binding { page } set: { pages.set($0, for: post.pk) }
+    }
+
     private var previewVideo: URL? {
-        let source = post.children.first ?? post
+        let source = post.shownItem
         return source.isVideo ? source.video(minWidth: width * 2) : nil
     }
 
@@ -50,9 +57,15 @@ struct PostTile: View {
         .onAppear { if track == nil { track = PostMusic.shared.cached(post.pk) } }
         .onDisappear { musicTask?.cancel(); PostMusic.shared.release(holder) }
         .onChange(of: onScreen) { if !onScreen { musicTask?.cancel(); PostMusic.shared.release(holder) } }
+        // Paged onto a video while resting on the card: preview it (and stop on a photo).
+        .onChange(of: page) {
+            if hovering, previewVideo != nil { setPreviewing(true) } else if isPreviewing, previewVideo == nil { setPreviewing(false) }
+            prefetchNeighbours()
+        }
         .onHover { inside in
             hovering = inside
             hoverTask?.cancel()
+            if inside, post.children.count > 1 { prefetchNeighbours() }
             hoverMusic(inside)
             guard previewVideo != nil else { return }
             if inside {
@@ -101,25 +114,84 @@ struct PostTile: View {
 
     private var media: some View {
         let w = width - 20
+        let items = post.children
         return ZStack {
-            RemoteImage(url: post.image(minWidth: w * 2), contentMode: .fill)
-            if isPreviewing, let url = previewVideo {
-                HoverPreview(url: url)
+            if items.count > 1 {
+                CarouselPager(count: items.count, page: pageBinding) { i in
+                    ZStack {
+                        RemoteImage(url: items[i].image(minWidth: w * 2), contentMode: .fill)
+                        if i == page, isPreviewing, let url = previewVideo {
+                            HoverPreview(url: url).id(url)
+                        }
+                    }
+                }
+            } else {
+                RemoteImage(url: post.image(minWidth: w * 2), contentMode: .fill)
+                if isPreviewing, let url = previewVideo {
+                    HoverPreview(url: url)
+                }
             }
         }
         .frame(width: w, height: w / Self.mediaAspect(post))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .photoFlightTile(post, radius: 10)
+        .overlay { if post.children.count > 1 { carouselChrome } }
         .overlay(alignment: .bottomLeading) { RepostBubbles(media: post, compact: true) }
         .overlay(alignment: .topTrailing) {
             if post.children.count > 1 {
-                badge("square.on.square.fill", text: "\(post.children.count)")
+                badge("square.on.square.fill", text: page > 0 ? "\(page + 1)/\(post.children.count)" : "\(post.children.count)")
             } else if post.isVideo, !isPreviewing {
                 badge("play.fill", text: nil)
             } else if music.playingPk == post.pk {
                 MuteButton().padding(8)
             }
         }
+    }
+
+    /// Arrows while the pointer is on the card (for a mouse), and the page dots.
+    private var carouselChrome: some View {
+        let count = post.children.count
+        return ZStack {
+            if hovering {
+                HStack {
+                    if page > 0 { pageArrow("chevron.left") { pageBinding.wrappedValue = page - 1 } }
+                    Spacer()
+                    if page < count - 1 { pageArrow("chevron.right") { pageBinding.wrappedValue = page + 1 } }
+                }
+                .padding(.horizontal, 8)
+                .transition(.opacity)
+            }
+            VStack {
+                Spacer()
+                HStack(spacing: 4) {
+                    ForEach(0..<min(count, 12), id: \.self) { i in
+                        Circle().fill(.white.opacity(i == page ? 1 : 0.45)).frame(width: 5, height: 5)
+                    }
+                }
+                .shadow(color: .black.opacity(0.35), radius: 2)
+                .padding(.bottom, 9)
+            }
+            .allowsHitTesting(false)
+        }
+        .animation(.easeOut(duration: 0.15), value: hovering)
+    }
+
+    private func pageArrow(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(.black)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(.white.opacity(0.85)))
+        }
+        .buttonStyle(.pressable)
+    }
+
+    /// The photos either side of the one showing, so a swipe never lands on a blank.
+    private func prefetchNeighbours() {
+        let urls = [page - 1, page + 1].filter { post.children.indices.contains($0) }
+            .compactMap { post.children[$0].image(minWidth: width * 2) }
+        Task { await ImagePipeline.shared.prefetch(urls) }
     }
 
     private func badge(_ symbol: String, text: String?) -> some View {

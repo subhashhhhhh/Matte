@@ -254,7 +254,23 @@ struct MediaStage: View {
     var initialImage: CGImage? = nil
     /// Arrows, the song chip: off in the mini player (it's too small; the song still plays).
     var chrome = true
-    @State private var page = 0
+    @State private var pages = CarouselPages.shared
+    /// Shared with the feed card (and the mini player): opens on the photo you paged to.
+    private var page: Int {
+        get { min(pages.page(media.pk), max(items.count - 1, 0)) }
+        nonmutating set { pages.set(newValue, for: media.pk) }
+    }
+    private var pageBinding: Binding<Int> { Binding { page } set: { page = $0 } }
+    /// The photo it opened on: the flight's decoded photo (`initialImage`) is that one.
+    @State private var startPage: Int
+
+    init(media: Media, cornerRadius: CGFloat = 12, initialImage: CGImage? = nil, chrome: Bool = true) {
+        self.media = media
+        self.cornerRadius = cornerRadius
+        self.initialImage = initialImage
+        self.chrome = chrome
+        _startPage = State(initialValue: CarouselPages.shared.page(media.pk))
+    }
     @Environment(AppModel.self) private var app
     @State private var track: MusicTrack?
     @State private var holder = UUID()
@@ -264,16 +280,12 @@ struct MediaStage: View {
     private var items: [Media] { media.children.isEmpty ? [media] : media.children }
 
     var body: some View {
-        let current = items[min(page, items.count - 1)]
         ZStack {
             Color.black
-            if current.isVideo, let url = current.video(minWidth: 720) {
-                StageVideo(url: url, cover: current.image(minWidth: 720), initialCover: page == 0 ? initialImage : nil,
-                           key: current.pk)
-                    .id(current.pk + url.absoluteString)
+            if items.count > 1 {
+                CarouselPager(count: items.count, page: pageBinding) { i in item(i) }
             } else {
-                RemoteImage(url: current.image(minWidth: 1080), contentMode: .fit, initial: page == 0 ? initialImage : nil)
-                    .id(current.pk)
+                item(0)
             }
             if items.count > 1, chrome {
                 HStack {
@@ -312,7 +324,6 @@ struct MediaStage: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: track)
-        .onChange(of: media.pk) { page = 0 }
         // A photo post's song plays while it's open.
         .task(id: media.pk) {
             track = nil
@@ -326,6 +337,21 @@ struct MediaStage: View {
         .onChange(of: onScreen) {
             if !onScreen { PostMusic.shared.release(holder) }
             else if let track { PostMusic.shared.play(track, for: media.pk, holder: holder) }
+        }
+    }
+
+    /// One photo or video of the post. Only the one showing plays: the photos beside it (kept
+    /// by the swipe) show their cover.
+    @ViewBuilder
+    private func item(_ i: Int) -> some View {
+        let current = items[i]
+        let initial = i == startPage ? initialImage : nil
+        if current.isVideo, i == page, let url = current.video(minWidth: 720) {
+            StageVideo(url: url, cover: current.image(minWidth: 720), initialCover: initial, key: current.pk)
+                .id(current.pk + url.absoluteString)
+        } else {
+            RemoteImage(url: current.image(minWidth: 1080), contentMode: .fit, initial: initial)
+                .id(current.pk)
         }
     }
 

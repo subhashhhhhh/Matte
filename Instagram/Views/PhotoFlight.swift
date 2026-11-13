@@ -129,7 +129,7 @@ final class PhotoFlight {
         decodeTask?.cancel()
         if imagePk != media.pk { image = nil }
         imagePk = media.pk
-        let first = media.children.first ?? media
+        let first = media.shownItem
         guard let url = first.image(minWidth: 1080) else { return }
         let px = Self.bucket(size)
         // Warmed by hovering: the full-size photo is ready for the very first frame.
@@ -146,14 +146,14 @@ final class PhotoFlight {
 
     /// Decodes a post's full-size photo ahead of a likely click (hovering its tile).
     func warm(_ media: Media) {
-        guard hostSize.width > 0, let url = (media.children.first ?? media).image(minWidth: 1080) else { return }
+        guard hostSize.width > 0, let url = media.shownItem.image(minWidth: 1080) else { return }
         let px = Self.bucket(PostLightbox.stageRect(in: hostSize, media: media).size)
         Task { await ImagePipeline.shared.warm(url, maxPixel: px) }
     }
 
     /// Downloads a post's full-size photo to disk when its tile scrolls into view.
     static func prefetch(_ media: Media) {
-        guard let url = (media.children.first ?? media).image(minWidth: 1080) else { return }
+        guard let url = media.shownItem.image(minWidth: 1080) else { return }
         Task { await ImagePipeline.shared.prefetch([url]) }
     }
 
@@ -231,7 +231,7 @@ private struct FlightPhoto: View {
             }
         }
         .task(id: media.pk) {
-            let first = media.children.first ?? media
+            let first = media.shownItem
             guard decoded == nil, let url = first.image(minWidth: 480) else { return }
             low = await ImagePipeline.shared.image(for: url, maxPixel: 640)
         }
