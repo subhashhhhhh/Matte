@@ -405,6 +405,7 @@ final class ProfileModel: Identifiable {
         profile = p
         do {
             let f = try await client.setFollowing(follow, userId: user.id)
+            app?.follows?.record(f, for: user.id)
             p.following = f.following
             p.requested = f.requested
             p.followedBy = f.followedBy
@@ -463,6 +464,15 @@ final class FollowListModel: Identifiable {
         self.isMine = isMine
         self.client = client
         self.app = app
+    }
+
+    /// The person with what the list knows about following them (for the Follow button).
+    func withFriendship(_ user: User) -> User {
+        guard let f = friendships[user.id] else { return user }
+        var u = user
+        u.following = f.following
+        u.requested = f.requested
+        return u
     }
 
     func followsYou(_ user: User) -> Bool {

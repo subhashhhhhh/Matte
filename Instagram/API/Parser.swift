@@ -13,11 +13,14 @@ nonisolated enum Parser {
 
     static func user(_ j: JSON) -> User? {
         guard let id = idString(j["pk"]) ?? idString(j["id"]), let username = j["username"].string else { return nil }
+        let f = j["friendship_status"]
         return User(id: id, username: username, fullName: j["full_name"].string ?? "",
                     avatar: (j["profile_pic_url"].string).flatMap(URL.init(string:)),
                     isVerified: j["is_verified"].bool ?? false,
                     messagingId: idString(j["interop_messaging_user_fbid"]),
-                    latestStory: j["latest_reel_media"].int.flatMap { $0 > 0 ? $0 : nil })
+                    latestStory: j["latest_reel_media"].int.flatMap { $0 > 0 ? $0 : nil },
+                    following: f["following"].bool ?? j["followed_by_viewer"].bool,
+                    requested: f["outgoing_request"].bool ?? j["requested_by_viewer"].bool)
     }
 
     /// A business or creator account: `is_professional_account`, or `account_type` 2 (business) /

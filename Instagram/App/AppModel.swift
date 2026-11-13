@@ -175,6 +175,8 @@ final class AppModel {
     var sharing: Media?
     /// Like/save/send/copy/download for posts and reels everywhere.
     private(set) var actions: PostActions?
+    /// Follows changed this session, shared by every Follow button.
+    private(set) var follows: Follows?
     /// The create sheet, when open.
     private(set) var creating: CreateModel?
     /// The story editor, when open.
@@ -386,6 +388,7 @@ final class AppModel {
         reels = ReelsModel(app: self, client: client)
         inbox = InboxModel(app: self, client: client)
         actions = PostActions(app: self, client: client)
+        follows = Follows()
         explore = ExploreModel(app: self, client: client)
         search = SearchModel(client: client)
         let activity = ActivityModel(app: self, client: client)

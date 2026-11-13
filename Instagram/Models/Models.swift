@@ -11,6 +11,11 @@ nonisolated struct User: Hashable, Sendable, Identifiable {
     var messagingId: String?
     /// Newest story time (Unix seconds), when the account has an active story.
     var latestStory: Int?
+    /// Whether you follow them (`friendship_status.following`, or `followed_by_viewer`), when the
+    /// response says; nil when it doesn't (no Follow button is shown then).
+    var following: Bool?
+    /// Your follow request to them is waiting.
+    var requested: Bool?
 
     var displayName: String { fullName.isEmpty ? username : fullName }
 }

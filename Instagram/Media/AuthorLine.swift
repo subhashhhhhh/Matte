@@ -19,6 +19,7 @@ struct AuthorLine: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     name(owner)
+                    if others.isEmpty, let owner { InlineFollow(user: owner, fontSize: fontSize) }
                     if others.count == 1 {
                         Text("and").font(.system(size: fontSize)).foregroundStyle(.secondary)
                         name(others[0])
@@ -95,5 +96,20 @@ struct AuthorLine: View {
         }
         .padding(8)
         .frame(width: 240)
+    }
+}
+
+/// "· Follow" after a post's author when you don't follow them.
+private struct InlineFollow: View {
+    let user: User
+    let fontSize: CGFloat
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        if let f = app.follows?.state(user), user.id != app.viewerId, !f.following && !f.requested || app.follows?.changed[user.id] != nil {
+            Text("·").font(.system(size: fontSize)).foregroundStyle(.secondary)
+            FollowChip(user: user)
+                .font(.system(size: fontSize, weight: .semibold))
+        }
     }
 }

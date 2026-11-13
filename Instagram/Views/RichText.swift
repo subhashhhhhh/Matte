@@ -24,7 +24,7 @@ struct RichText: View {
 
     static let scheme = "matte-link"
 
-    /// `#tag` (letters, digits, underscores, any script) and `@name` (letters, digits, `.`, `_`;
+    /// `#tag` (letters with their combining marks, digits, underscores; any script) and `@name` (letters, digits, `.`, `_`;
     /// not part of an email address, and without a trailing dot).
     static func attributed(_ text: String) -> AttributedString {
         var out = AttributedString(text)
@@ -48,5 +48,5 @@ struct RichText: View {
         return out
     }
 
-    private static let pattern = try! NSRegularExpression(pattern: "#[\\p{L}\\p{N}_]+|@[A-Za-z0-9._]+")
+    private static let pattern = try! NSRegularExpression(pattern: "#[\\p{L}\\p{M}\\p{N}_]+|@[A-Za-z0-9._]+")
 }

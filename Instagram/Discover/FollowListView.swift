@@ -53,7 +53,7 @@ struct FollowListPanel: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(model.users) { user in
-                        FollowRow(user: user, followsYou: model.followsYou(user)) { app.openProfile(user) }
+                        FollowRow(user: model.withFriendship(user), followsYou: model.followsYou(user)) { app.openProfile(user) }
                             .onAppear { model.appeared(user) }
                     }
                     if model.isLoading {
@@ -92,6 +92,7 @@ private struct FollowRow: View {
                     }
                 }
                 Spacer(minLength: 8)
+                FollowChip(user: user, button: true, onlyToFollow: false)
                 if followsYou {
                     Text("Follows you")
                         .font(.system(size: 11, weight: .semibold))
