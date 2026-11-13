@@ -299,6 +299,11 @@ final class AppModel {
                         try? await Task.sleep(for: .seconds(5))
                         FileHandle.standardError.write(Data("MINI expand\n".utf8))
                         returnFromMini()
+                        // `-IGMiniShare YES`: then press Send on it (the share sheet must show on top).
+                        if UserDefaults.standard.bool(forKey: "IGMiniShare") {
+                            try? await Task.sleep(for: .seconds(2))
+                            sharing = openedPost?.media
+                        }
                     }
                 }
             }

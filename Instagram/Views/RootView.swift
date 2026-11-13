@@ -3,6 +3,8 @@ import UniformTypeIdentifiers
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
+    /// Where the pages sit in the window (below the top bar, beside the sidebar).
+    @State private var pageArea: CGRect = .zero
 
     var body: some View {
         @Bindable var app = app
@@ -57,6 +59,18 @@ struct RootView: View {
                     .transition(.opacity)
                     .zIndex(10)
             }
+            // A post opened over everything (a story's post sticker, the mini player going back):
+            // above stories, below the sheets it can open (Send to…, edit, delete), in the page
+            // area like every other post viewer (so the mini player grows exactly into it).
+            if let post = app.openedPost {
+                PostLightbox(model: post, canPrevious: false, canNext: false, step: { _ in },
+                             close: { app.openedPost = nil; app.openedPostFromMini = false })
+                    .environment(\.onScreen, app.storyEditor == nil && app.creating == nil)
+                    .frame(width: pageArea.width, height: pageArea.height)
+                    .position(x: pageArea.midX, y: pageArea.midY)
+                    .transition(app.openedPostFromMini ? .asymmetric(insertion: .identity, removal: .opacity) : .opacity)
+                    .zIndex(15)
+            }
             if app.showCreateMenu, app.authState == .signedIn {
                 CreateMenu()
                     .transition(.opacity)
@@ -76,14 +90,6 @@ struct RootView: View {
                 StoryEditorView(model: editor)
                     .transition(.opacity.combined(with: .scale(scale: Motion.reduced ? 1 : 0.985)))
                     .zIndex(30)
-            }
-        }
-        .overlay {
-            if let post = app.openedPost {
-                PostLightbox(model: post, canPrevious: false, canNext: false, step: { _ in },
-                             close: { app.openedPost = nil; app.openedPostFromMini = false })
-                    .environment(\.onScreen, app.storyEditor == nil && app.creating == nil)
-                    .transition(app.openedPostFromMini ? .asymmetric(insertion: .identity, removal: .opacity) : .opacity)
             }
         }
         .animation(.easeOut(duration: 0.16), value: app.openedPost == nil)
@@ -120,6 +126,7 @@ struct RootView: View {
         .animation(.easeOut(duration: 0.14), value: app.showSwitcher)
         .animation(.easeOut(duration: 0.14), value: app.showSettings)
         .background(Theme.background)
+        .coordinateSpace(.named("root"))
         .ignoresSafeArea()
         .sheet(isPresented: $app.showSignIn) {
             SignInView(onComplete: { app.completeSignIn($0) }, onCancel: { app.showSignIn = false })
@@ -176,6 +183,7 @@ struct RootView: View {
             }
         }
         .coordinateSpace(.named("pageArea"))
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("root")) } action: { pageArea = $0 }
         // The post or reel you left for a profile, small in the corner (under any opened post).
         .overlay {
             if let mini = app.miniPost {
