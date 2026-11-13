@@ -90,10 +90,14 @@ struct PostTile: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 AuthorLine(media: post, avatarSize: 24, fontSize: 12.5)
+                // Named by the feed straight away; the audio is asked for when you rest on it.
                 if let track {
                     MusicLine(track: track, fontSize: 11, playing: music.playingPk == post.pk)
                         .padding(.leading, 32)
                         .transition(.opacity)
+                } else if let song = post.songName {
+                    MusicLine(title: song.title, artist: song.artist, fontSize: 11)
+                        .padding(.leading, 32)
                 }
             }
             Spacer(minLength: 0)

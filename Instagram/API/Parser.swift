@@ -126,6 +126,10 @@ nonisolated enum Parser {
         }
         m.storyStickers = storyStickers(j)
         m.music = music(j["music_metadata"]["music_info"])
+        if m.music == nil, let title = j["music_metadata"]["music_info"]["music_asset_info"]["title"].string, !title.isEmpty,
+           j["music_metadata"]["music_info"]["music_consumption_info"]["should_mute_audio"].bool != true {
+            m.songName = SongName(title: title, artist: j["music_metadata"]["music_info"]["music_asset_info"]["display_artist"].string ?? "")
+        }
         m.trackingToken = j["organic_tracking_token"].string
         m.loggingToken = j["logging_info_token"].string
         m.images = renditions(j["image_versions2"]["candidates"])

@@ -64,6 +64,13 @@ nonisolated struct MusicTrack: Hashable, Sendable {
     var cover: URL?
 }
 
+/// A photo post's song by name only: the feed names it but leaves out the audio, which the
+/// post's own info has (asked when it's about to play).
+nonisolated struct SongName: Hashable, Sendable {
+    var title: String
+    var artist: String
+}
+
 nonisolated struct RepostNote: Hashable, Sendable {
     var id: String
     var userId: String
@@ -147,6 +154,8 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     var pinnedOnReels: [String]?
     /// Your collections it's in (`saved_collection_ids`; only on posts you saved).
     var savedCollectionIds: [String]?
+    /// The song's name when the response named it without its audio (the home feed).
+    var songName: SongName?
 
     /// A shortcode's media pk (the code is the pk in Instagram's URL-safe base 64; longer
     /// codes of private posts carry extra characters after the first 11).
@@ -421,6 +430,7 @@ extension RepostNote: Codable {}
 extension StorySticker.Kind: Codable {}
 extension StorySticker: Codable {}
 extension MusicTrack: Codable {}
+extension SongName: Codable {}
 extension UserTag: Codable {}
 extension Media: Codable {}
 extension StoryReel: Codable {}

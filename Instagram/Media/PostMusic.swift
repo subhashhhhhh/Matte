@@ -101,16 +101,28 @@ final class PostMusic {
 
 /// "♪ Title · Artist", as Instagram shows a post's song under its author.
 struct MusicLine: View {
-    let track: MusicTrack
+    let title: String
+    let artist: String
     var fontSize: CGFloat = 12
     var playing = false
+
+    init(track: MusicTrack, fontSize: CGFloat = 12, playing: Bool = false) {
+        self.init(title: track.title, artist: track.artist, fontSize: fontSize, playing: playing)
+    }
+
+    init(title: String, artist: String, fontSize: CGFloat = 12, playing: Bool = false) {
+        self.title = title
+        self.artist = artist
+        self.fontSize = fontSize
+        self.playing = playing
+    }
 
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: playing ? "waveform" : "music.note")
                 .font(.system(size: fontSize - 1, weight: .semibold))
                 .symbolEffect(.variableColor.iterative, isActive: playing)
-            Text([track.title, track.artist].filter { !$0.isEmpty }.joined(separator: " · "))
+            Text([title, artist].filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.system(size: fontSize))
                 .lineLimit(1)
         }
