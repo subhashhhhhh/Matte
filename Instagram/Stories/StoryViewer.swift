@@ -116,7 +116,11 @@ final class StoryViewerModel {
     /// past doesn't count), once per item.
     private func markSeenSoon(_ item: Media, reelId: String) {
         seenTask?.cancel()
-        guard !markedSeen.contains(item.pk), reel.user.id != app?.viewerId else { return }
+        guard !markedSeen.contains(item.pk) else { return }
+        // Your own story too, as instagram.com does (recorded 2026-11-13: the same mutation when
+        // you watch yours), so the ring stays grey everywhere. Only your live story, not a
+        // highlight or the archive (never recorded).
+        if reel.user.id == app?.viewerId, reel.id != reel.user.id { return }
         #if DEBUG
         // Test launches never mark the user's stories as watched (only with `-IGMarkSeen YES`).
         // The Debug copy installed in /Applications ("Matte Debug") is the user's: it does.
