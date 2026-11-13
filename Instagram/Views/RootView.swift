@@ -78,6 +78,14 @@ struct RootView: View {
                     .zIndex(30)
             }
         }
+        .overlay {
+            if let post = app.openedPost {
+                PostLightbox(model: post, canPrevious: false, canNext: false, step: { _ in },
+                             close: { app.openedPost = nil })
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.16), value: app.openedPost == nil)
         .overlay(alignment: .bottomTrailing) {
             if !app.uploads.isEmpty, app.storyEditor == nil { UploadsCorner() }
         }

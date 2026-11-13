@@ -284,6 +284,20 @@ final class StoryViewerModel {
     }
     @ObservationIgnored private var pausedForMenu = false
 
+    /// Something covers the story (a post opened from it, a sticker's bubble): it waits.
+    var covered = false {
+        didSet {
+            guard covered != oldValue else { return }
+            if covered {
+                if !paused { togglePause(); pausedForCover = true }
+            } else if pausedForCover {
+                if paused { togglePause() }
+                pausedForCover = false
+            }
+        }
+    }
+    @ObservationIgnored private var pausedForCover = false
+
     /// The story item's link, as "Copy link" gives it.
     var itemURL: URL? {
         guard let item else { return nil }
@@ -505,6 +519,7 @@ private struct StoryReplyBar: View {
 
 struct StoryViewer: View {
     let model: StoryViewerModel
+    @Environment(AppModel.self) private var app
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -586,6 +601,10 @@ struct StoryViewer: View {
                 Color.clear.contentShape(Rectangle()).onTapGesture { model.previous() }
                 Color.clear.contentShape(Rectangle()).onTapGesture { model.next() }
             }
+            if let item = model.item, !item.storyStickers.isEmpty {
+                StoryStickerLayer(model: model, stickers: item.storyStickers, size: CGSize(width: width, height: height))
+                    .id(item.pk)
+            }
             VStack(spacing: 10) {
                 progressBars
                 header
@@ -605,6 +624,7 @@ struct StoryViewer: View {
             }
         }
         .contextMenu { StoryMenu(model: model) }
+        .onChange(of: app.openedPost == nil) { _, closed in if closed { model.covered = false } }
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in model.menuOpen = true }
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in model.menuOpen = false }
         .overlay { HeartBurst(trigger: model.likeBurst) }
@@ -922,6 +942,97 @@ private struct StoryMenu: View {
                 Divider()
                 Button("Delete Story…") { model.confirmingDelete = true }
             }
+        }
+    }
+}
+
+/// The tappable parts of a story (a shared post, a mention, a link, a hashtag). Clicking one
+/// shows a bubble over it, as tapping does on the phone ("View post"); clicking the bubble
+/// opens it. The story waits while the bubble shows; clicking anywhere else hides it.
+private struct StoryStickerLayer: View {
+    let model: StoryViewerModel
+    let stickers: [StorySticker]
+    let size: CGSize
+    @Environment(AppModel.self) private var app
+    @State private var selected: Int?
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if selected != nil {
+                // Clicking outside the bubble only closes it (no skipping to the next story).
+                Color.black.opacity(0.25)
+                    .contentShape(Rectangle())
+                    .onTapGesture { select(nil) }
+                    .transition(.opacity)
+            }
+            ForEach(Array(stickers.enumerated()), id: \.offset) { i, s in
+                let r = rect(s)
+                Color.clear
+                    .frame(width: r.width, height: r.height)
+                    .contentShape(Rectangle())
+                    .rotationEffect(.radians(s.rotation))
+                    .position(x: r.midX, y: r.midY)
+                    .onTapGesture { select(selected == i ? nil : i) }
+                    .onHover { inside in if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+                    .help(s.title)
+            }
+            if let i = selected, stickers.indices.contains(i) {
+                bubble(stickers[i])
+            }
+        }
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .animation(.easeOut(duration: 0.15), value: selected)
+        .onDisappear { if selected != nil { model.covered = false } }
+    }
+
+    private func rect(_ s: StorySticker) -> CGRect {
+        let w = max(s.width * size.width, 44), h = max(s.height * size.height, 32)
+        return CGRect(x: s.x * size.width - w / 2, y: s.y * size.height - h / 2, width: w, height: h)
+    }
+
+    private func bubble(_ s: StorySticker) -> some View {
+        let r = rect(s)
+        // Above the sticker, or below it when it's near the top.
+        let y = r.minY > 70 ? r.minY - 26 : r.maxY + 26
+        return Button { open(s) } label: {
+            HStack(spacing: 6) {
+                Text(s.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(.black)
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+            .background(Capsule().fill(.white))
+            .shadow(color: .black.opacity(0.3), radius: 10, y: 3)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.pressable)
+        .fixedSize()
+        .position(x: min(max(r.midX, 90), size.width - 90), y: y)
+        .transition(.scale(scale: 0.85).combined(with: .opacity))
+    }
+
+    private func select(_ i: Int?) {
+        selected = i
+        model.covered = i != nil || app.openedPost != nil
+    }
+
+    private func open(_ s: StorySticker) {
+        selected = nil
+        switch s.kind {
+        case .post(let pk, _, _):
+            model.covered = true
+            app.openPost(pk: pk)
+        case .mention(let username):
+            model.covered = false
+            app.openProfile(username: username)
+        case .link(let url):
+            model.covered = false
+            NSWorkspace.shared.open(url)
+        case .hashtag(let name):
+            model.covered = false
+            app.stories?.close()
+            app.openHashtag(name)
         }
     }
 }

@@ -78,6 +78,8 @@ final class AppModel {
     var stories: StoryViewerModel?
     /// A post opened from a DM or elsewhere, shown over the current page.
     var openedMedia: Media?
+    /// A post opened from somewhere without a grid (a story's post sticker): shown over everything.
+    var openedPost: MediaDetailModel?
     /// Shown as a small banner (errors, "copied").
     var toast: String?
     /// The ⌘K quick switcher.
@@ -263,6 +265,25 @@ final class AppModel {
         stories?.close()
         if profiles.last?.id == "user:" + user.id { return }
         profiles.append(.profile(ProfileModel(user: user, app: self, client: client)))
+    }
+
+    /// Opens a post by its pk over whatever is showing (the story waits underneath).
+    func openPost(pk: String) {
+        guard let client else { return }
+        openedPost = MediaDetailModel.cached(pk: pk, client: client)
+    }
+
+    /// A profile from just a username (a story mention): looked up by search, exact match only.
+    func openProfile(username: String) {
+        guard let client else { return }
+        Task {
+            let results = try? await client.search(username, sessionId: UUID().uuidString.lowercased())
+            if let user = results?.users.first(where: { $0.username.lowercased() == username.lowercased() }) {
+                openProfile(user)
+            } else if let url = URL(string: "https://www.instagram.com/\(username)/") {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 
     /// A hashtag's page ("travel" or "#travel").

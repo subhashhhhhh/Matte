@@ -20,6 +20,36 @@ nonisolated enum Parser {
                     latestStory: j["latest_reel_media"].int.flatMap { $0 > 0 ? $0 : nil })
     }
 
+    /// A story item's tappable stickers (shapes as seen in story responses, 2026-11-13).
+    static func storyStickers(_ j: JSON) -> [StorySticker] {
+        func place(_ s: JSON, _ kind: StorySticker.Kind) -> StorySticker? {
+            guard let x = s["x"].double, let y = s["y"].double else { return nil }
+            return StorySticker(kind: kind, x: x, y: y, width: s["width"].double ?? 0.3, height: s["height"].double ?? 0.1,
+                                rotation: s["rotation"].double ?? 0)
+        }
+        var out: [StorySticker] = []
+        for s in j["story_feed_media"].array {
+            // `id` is not the post's pk; its shortcode is, encoded.
+            guard let code = s["media_code"].string, let pk = Media.pk(fromCode: code) else { continue }
+            if let st = place(s, .post(pk: pk, code: code, isReel: s["product_type"].string == "clips")) { out.append(st) }
+        }
+        for s in j["story_bloks_stickers"].array {
+            if let u = s["bloks_sticker"]["sticker_data"]["ig_mention"]["username"].string, let st = place(s, .mention(username: u)) {
+                out.append(st)
+            }
+        }
+        for s in j["reel_mentions"].array {
+            if let u = s["user"]["username"].string, let st = place(s, .mention(username: u)) { out.append(st) }
+        }
+        for s in j["story_link_stickers"].array {
+            if let raw = s["story_link"]["url"].string, let url = URL(string: raw), let st = place(s, .link(url)) { out.append(st) }
+        }
+        for s in j["story_hashtags"].array {
+            if let h = s["hashtag"]["name"].string, let st = place(s, .hashtag(h)) { out.append(st) }
+        }
+        return out
+    }
+
     static func media(_ j: JSON) -> Media? {
         guard let pk = j["pk"].string ?? j["pk"].int.map(String.init) else { return nil }
         let type = j["media_type"].int ?? 1
@@ -65,6 +95,7 @@ nonisolated enum Parser {
             return RepostNote(id: id, userId: user, user: who,
                               text: n["text"].string.flatMap { $0.isEmpty ? nil : $0 })
         }
+        m.storyStickers = storyStickers(j)
         m.trackingToken = j["organic_tracking_token"].string
         m.loggingToken = j["logging_info_token"].string
         m.images = renditions(j["image_versions2"]["candidates"])

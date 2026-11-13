@@ -23,6 +23,36 @@ nonisolated struct Rendition: Hashable, Sendable {
 }
 
 /// One repost of a media (Instagram calls them media notes).
+/// Something tappable on a story, where it sits as fractions of the story (centre and size).
+nonisolated struct StorySticker: Hashable, Sendable {
+    enum Kind: Hashable, Sendable {
+        /// A shared post or reel (`story_feed_media`).
+        case post(pk: String, code: String?, isReel: Bool)
+        /// A mention (`story_bloks_stickers` → `ig_mention`, or `reel_mentions`).
+        case mention(username: String)
+        /// A link sticker (`story_link_stickers`).
+        case link(URL)
+        /// A hashtag sticker (`story_hashtags`).
+        case hashtag(String)
+    }
+
+    var kind: Kind
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double
+    var rotation: Double = 0
+
+    var title: String {
+        switch kind {
+        case .post(_, _, let isReel): isReel ? "View reel" : "View post"
+        case .mention(let u): "View profile · \(u)"
+        case .link(let url): url.host().map { "Open \($0)" } ?? "Open link"
+        case .hashtag(let h): "#\(h)"
+        }
+    }
+}
+
 nonisolated struct RepostNote: Hashable, Sendable {
     var id: String
     var userId: String
@@ -82,6 +112,23 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     var commentsDisabled: Bool?
     /// People are tagged in it (`usertags.in`), when the response says.
     var hasUsertags: Bool?
+    /// Stories: what can be tapped on it (a shared post, a mention, a link, a hashtag).
+    var storyStickers: [StorySticker] = []
+
+    /// A shortcode's media pk (the code is the pk in Instagram's URL-safe base 64; longer
+    /// codes of private posts carry extra characters after the first 11).
+    static func pk(fromCode code: String) -> String? {
+        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        var n: UInt64 = 0
+        for ch in code.prefix(11) {
+            guard let i = alphabet.firstIndex(of: ch) else { return nil }
+            let (shifted, o1) = n.multipliedReportingOverflow(by: 64)
+            let (sum, o2) = shifted.addingReportingOverflow(UInt64(i))
+            if o1 || o2 { return nil }
+            n = sum
+        }
+        return n > 0 ? String(n) : nil
+    }
 
     /// Width over height, clamped to what a layout can show sensibly.
     var aspect: CGFloat { CGFloat(width) / CGFloat(max(height, 1)) }
@@ -335,6 +382,8 @@ extension User: Codable {}
 extension Rendition: Codable {}
 extension Media.Kind: Codable {}
 extension RepostNote: Codable {}
+extension StorySticker.Kind: Codable {}
+extension StorySticker: Codable {}
 extension Media: Codable {}
 extension StoryReel: Codable {}
 extension DMThread: Codable {}
