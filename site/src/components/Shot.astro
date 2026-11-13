@@ -1,5 +1,7 @@
 ---
-// One of the app's windows (docs/graphics/render.jsx draws them), in the page's theme.
+// One of the app's windows (docs/graphics/render.jsx draws them), in the page's theme. A
+// notification or mini player beside it is its own layer of the same size, stacked on top,
+// so it can arrive after the window (site.ts adds `play` when the shot comes into view).
 interface Props {
   name: 'home' | 'messages' | 'reels' | 'planner';
   alt: string;
@@ -9,16 +11,97 @@ const { name, alt, eager } = Astro.props;
 // The shots are 2× of these sizes, with room around the window for its shadow.
 const size = name === 'home' ? { width: 1480, height: 1100 } : { width: 1440, height: 1100 };
 const loading = eager ? 'eager' : 'lazy';
+const toast = name === 'home' || name === 'messages';
+const mini = name === 'home' || name === 'reels';
 ---
 
-<div class="shot">
-  <img class="only-dark" src={`/shots/${name}-dark.webp`} alt={alt} {...size} loading={loading} decoding="async" />
-  <img class="only-light" src={`/shots/${name}-light.webp`} alt={alt} {...size} loading={loading} decoding="async" />
+<div class="shot" data-shot>
+  <div class="layer base">
+    <img class="only-dark" src={`/shots/${name}-dark.webp`} alt={alt} {...size} loading={loading} decoding="async" />
+    <img class="only-light" src={`/shots/${name}-light.webp`} alt={alt} {...size} loading={loading} decoding="async" />
+  </div>
+  {toast && (
+    <div class="layer toast" aria-hidden="true">
+      <img class="only-dark" src={`/shots/${name}-toast-dark.webp`} alt="" {...size} loading={loading} decoding="async" />
+      <img class="only-light" src={`/shots/${name}-toast-light.webp`} alt="" {...size} loading={loading} decoding="async" />
+    </div>
+  )}
+  {mini && (
+    <div class={`layer mini mini-${name}`} aria-hidden="true">
+      <div class="bob">
+        <img class="only-dark" src={`/shots/${name}-mini-dark.webp`} alt="" {...size} loading={loading} decoding="async" />
+        <img class="only-light" src={`/shots/${name}-mini-light.webp`} alt="" {...size} loading={loading} decoding="async" />
+      </div>
+    </div>
+  )}
 </div>
 
 <style>
+  .shot {
+    position: relative;
+    transform: translate3d(0, var(--py, 0px), 0);
+  }
+
   .shot img {
     width: 100%;
     height: auto;
+  }
+
+  .layer:not(.base) {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* Where each floating piece sits in its layer, so it grows from there. */
+  .toast {
+    transform-origin: 72% 6%;
+  }
+
+  .mini-home {
+    transform-origin: 86% 64%;
+  }
+
+  .mini-reels {
+    transform-origin: 89% 64%;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.js) .toast {
+      opacity: 0;
+      transform: translateY(-5%) scale(0.96);
+      transition:
+        opacity 700ms var(--ease) 700ms,
+        transform 900ms cubic-bezier(0.34, 1.4, 0.64, 1) 700ms;
+    }
+
+    :global(.js) .mini {
+      opacity: 0;
+      transform: translate(5%, 3%) scale(0.82);
+      transition:
+        opacity 700ms var(--ease) 1300ms,
+        transform 1100ms cubic-bezier(0.34, 1.25, 0.64, 1) 1300ms;
+    }
+
+    .shot:global(.play) .toast,
+    .shot:global(.play) .mini {
+      opacity: 1;
+      transform: none;
+    }
+
+    /* The mini player floats a little, as if it were above the page. */
+    .shot:global(.play) .bob {
+      animation: bob 6s ease-in-out 2.4s infinite;
+    }
+  }
+
+  @keyframes bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-0.6%);
+    }
   }
 </style>

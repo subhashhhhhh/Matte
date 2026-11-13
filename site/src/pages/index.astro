@@ -8,7 +8,7 @@ import { brew } from '../data';
 const reasons = [
   {
     title: 'Easy on your Mac',
-    text: 'instagram.com in a browser often takes 4–5 GB of memory. Matte takes a fraction of that, so the rest of your Mac stays quick.',
+    text: 'instagram.com in a browser often takes 4\u2060–\u20605\u00a0GB of memory. Matte takes a fraction of that, so the rest of your Mac stays quick.',
     icon: 'M13 2 3 14h9l-1 8 10-12h-9l1-8z',
   },
   {
@@ -47,10 +47,14 @@ const more = [
     <section class="hero">
       <div class="glow" aria-hidden="true"></div>
       <div class="wrap center">
-        <p class="eyebrow pill" data-reveal>Free · For macOS 15 and later</p>
-        <h1 data-reveal>Your Instagram,<br />on the big screen</h1>
-        <p class="lede" data-reveal>Feed, Reels, stories and DMs in a Mac app that won’t slow your computer down.</p>
-        <div class="ctas" data-reveal>
+        <p class="eyebrow pill rise" style="--d:0ms">Free · For macOS 15 and later</p>
+        <h1 aria-label="Your Instagram, on the big screen">
+          {['Your', 'Instagram,', null, 'on', 'the', 'big', 'screen'].map((w, i) =>
+            w === null ? <br /> : <span class="w" style={`--i:${i}`} aria-hidden="true">{w} </span>,
+          )}
+        </h1>
+        <p class="lede rise" style="--d:650ms">Feed, Reels, stories and DMs in a Mac app that won’t slow your computer down.</p>
+        <div class="ctas rise" style="--d:800ms">
           <a class="btn btn-primary" href="/download">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16.37 12.73c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.77-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.76 2.27-1.6 2.78-.41 6.9 1.15 9.16.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.24-.02 2.02-1.12 2.77-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.41-3.65zM14.1 5.98c.63-.77 1.06-1.83.94-2.89-.91.04-2.01.61-2.66 1.37-.58.67-1.09 1.75-.96 2.79 1.02.08 2.05-.52 2.68-1.27z"></path></svg>
             Download for Mac
@@ -58,7 +62,7 @@ const more = [
           <Command command={brew} />
         </div>
       </div>
-      <div class="wrap hero-shot" data-reveal>
+      <div class="wrap hero-shot rise" style="--d:950ms" data-tilt>
         <Shot name="home" eager alt="Matte’s home feed: posts in three columns, stories down the side, a reel playing in the corner and a message arriving" />
       </div>
     </section>
@@ -66,7 +70,7 @@ const more = [
     <section class="reasons wrap" aria-label="Why Matte">
       {reasons.map((r) => (
         <div class="reason" data-reveal>
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={r.icon}></path></svg>
+          <span class="tile"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="draw" pathLength="1" d={r.icon}></path></svg></span>
           <h3>{r.title}</h3>
           <p>{r.text}</p>
         </div>
@@ -81,7 +85,7 @@ const more = [
         <h2>Answer DMs without reaching for your phone</h2>
         <p class="lede">Messages pop up on your Mac while you work. Reply with a real keyboard, send photos and videos straight from your computer, and keep the chats that matter pinned at the top.</p>
       </div>
-      <div class="media" data-reveal>
+      <div class="media" data-reveal data-drift>
         <Shot name="messages" alt="A conversation in Matte with a shared reel, a voice note and a reaction, and a new message notification" />
       </div>
     </section>
@@ -92,7 +96,7 @@ const more = [
         <h2>Reels on a screen big enough to enjoy them</h2>
         <p class="lede">Watch with the comments right beside the video. Go check something else and the reel keeps playing in the corner.</p>
       </div>
-      <div class="media" data-reveal>
+      <div class="media" data-reveal data-drift>
         <Shot name="reels" alt="A reel in Matte with its comments beside it, and another reel playing in the corner" />
       </div>
     </section>
@@ -103,7 +107,7 @@ const more = [
         <h2>Post on time, even on your busiest days</h2>
         <p class="lede">Line up a month of posts and reels, and Instagram publishes each one on time, even with your Mac closed. Then answer every comment still waiting for you, from one list.</p>
       </div>
-      <div class="media" data-reveal>
+      <div class="media" data-reveal data-drift>
         <Shot name="planner" alt="Matte’s planner: a month of scheduled posts and reels, with the upcoming ones listed beside it" />
       </div>
     </section>
@@ -114,7 +118,7 @@ const more = [
         <h2>Look without being seen</h2>
         <p class="lede">Check a story or read a message on your own time, without anyone knowing you saw it. Turn on only the ones you want.</p>
       </div>
-      <div class="switches" data-reveal>
+      <div class="switches" data-reveal data-ghost>
         {ghost.map(([title, text], i) => (
           <div class="row">
             <div>
@@ -132,7 +136,7 @@ const more = [
       <div class="grid">
         {more.map(([title, text, icon]) => (
           <div class="card" data-reveal>
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={icon}></path></svg>
+            <span class="tile"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="draw" pathLength="1" d={icon}></path></svg></span>
             <h3>{title}</h3>
             <p>{text}</p>
           </div>
@@ -183,9 +187,11 @@ const more = [
 
   .glow {
     position: absolute;
-    inset: 0;
+    inset: 0 0 -240px 0;
     z-index: -1;
     pointer-events: none;
+    /* Fades out below the section instead of stopping at its edge. */
+    mask-image: linear-gradient(to bottom, #000 60%, transparent);
     background:
       radial-gradient(60% 46% at 50% 66%, var(--glow-a), transparent 72%),
       radial-gradient(34% 34% at 86% 84%, var(--glow-b), transparent 70%),
@@ -206,6 +212,37 @@ const more = [
     font-size: clamp(48px, 8.4vw, 108px);
   }
 
+  /* The headline rises a word at a time; the rest follows it in. */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.js) .hero .w {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(0.35em);
+      filter: blur(10px);
+      animation: rise 1000ms var(--ease) forwards;
+      animation-delay: calc(120ms + var(--i) * 75ms);
+    }
+
+    :global(.js) .rise {
+      opacity: 0;
+      transform: translateY(24px);
+      animation: rise 1100ms var(--ease) forwards;
+      animation-delay: var(--d);
+    }
+  }
+
+  @keyframes rise {
+    to {
+      opacity: 1;
+      transform: none;
+      filter: none;
+    }
+  }
+
+  .hero .w {
+    white-space: pre;
+  }
+
   .hero .lede {
     margin-top: 26px;
     max-width: 560px;
@@ -223,20 +260,60 @@ const more = [
   .hero-shot {
     max-width: 1340px;
     margin-top: 40px;
+    perspective: 1800px;
+  }
+
+  /* Tilted back at first; flat once it's scrolled up into view (site.ts sets --p). */
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-shot :global(.shot) {
+      transform: rotateX(calc((1 - var(--p, 0)) * 14deg)) scale(calc(0.94 + var(--p, 0) * 0.06));
+      transform-origin: 50% 0;
+      will-change: transform;
+    }
   }
 
   /* Reasons */
   .reasons {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 48px;
+    gap: 16px;
     padding-top: 40px;
     padding-bottom: 80px;
   }
 
+  .reason {
+    padding: 28px;
+    border-radius: 24px;
+    background: var(--card);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+
+  .tile {
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    background: var(--card-strong);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+
+  /* Icons draw themselves in as their card arrives. */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.js) .draw {
+      stroke-dasharray: 1;
+      stroke-dashoffset: 1;
+      transition: stroke-dashoffset 1400ms var(--ease) 250ms;
+    }
+
+    :global(.in) .draw {
+      stroke-dashoffset: 0;
+    }
+  }
+
   .reason h3,
   .card h3 {
-    margin-top: 18px;
+    margin-top: 22px;
     font-size: 21px;
     letter-spacing: -0.02em;
     line-height: 1.25;
@@ -247,6 +324,7 @@ const more = [
     margin-top: 10px;
     color: var(--ink-2);
     font-size: 16px;
+    text-wrap: wrap;
   }
 
   .reason svg,
@@ -341,6 +419,7 @@ const more = [
 
   .switch {
     position: relative;
+    -webkit-tap-highlight-color: transparent;
     flex-shrink: 0;
     width: 54px;
     height: 32px;
@@ -361,7 +440,7 @@ const more = [
     border-radius: 50%;
     background: var(--bg-raised);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-    transition: transform 260ms var(--ease), background-color 260ms var(--ease);
+    transition: transform 460ms cubic-bezier(0.34, 1.5, 0.64, 1), background-color 260ms var(--ease);
   }
 
   .switch[aria-checked='true'] {

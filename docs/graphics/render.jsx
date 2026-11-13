@@ -144,40 +144,40 @@ h1 { font-family: Display; font-weight: 500; letter-spacing: -0.035em; color: #f
 ${appCss}
 `;
 
-// The website's screenshots: the window (and what floats around it) on a transparent
-// background, once per theme. Room is left around the window for its shadow.
+// The website's screenshots: the window on a transparent background, once per theme, with room
+// around it for its shadow. What floats beside the window (a notification, the mini player) is
+// a separate layer of the same size, so the site can stack them exactly and animate each one.
 const shot = (w, h, node) => ({ size: [w, h], scale: 2, site: true, node });
+const Only = ({ on, children }) => <div style={{ visibility: on ? 'visible' : 'hidden' }}>{children}</div>;
+const scenes = {
+  home: { w: 1480, h: 1100, at: [110, 96], page: 'Home', body: <Home />,
+    toast: (light) => <Toast x={930} y={40} icon={appIcon} light={light} />,
+    mini: (light) => <Mini x={1196} y={600} w={170} light={light} /> },
+  messages: { w: 1440, h: 1100, at: [130, 100], page: 'Messages', body: <Messages />,
+    toast: (light) => <Toast x={900} y={44} icon={appIcon} light={light} name="Theo" text="Can you send me the photos from Saturday?" /> },
+  reels: { w: 1440, h: 1100, at: [130, 100], page: 'Reels', body: <Reels />,
+    mini: (light) => <Mini x={1210} y={600} w={150} kind="dunes" by="ines.r" byKind="dunes" light={light} /> },
+  planner: { w: 1440, h: 1100, at: [130, 100], page: 'Planner', manager: true, body: <Planner /> },
+};
 for (const light of [false, true]) {
   const t = light ? 'light' : 'dark';
-  Object.assign(images, {
-    [`shots/home-${t}`]: shot(1480, 1100, (
-      <div style={{ position: 'relative', width: 1480, height: 1100 }}>
-        <div style={{ position: 'absolute', left: 110, top: 96 }}><Window page="Home" light={light}><Home /></Window></div>
-        <Toast x={930} y={40} icon={appIcon} light={light} />
-        <Mini x={1196} y={600} w={170} light={light} />
+  for (const [name, sc] of Object.entries(scenes)) {
+    const scene = (layer) => (
+      <div style={{ position: 'relative', width: sc.w, height: sc.h }}>
+        <Only on={layer === 'window'}>
+          <div style={{ position: 'absolute', left: sc.at[0], top: sc.at[1] }}><Window page={sc.page} manager={sc.manager} light={light}>{sc.body}</Window></div>
+        </Only>
+        {sc.toast && <Only on={layer === 'toast'}>{sc.toast(light)}</Only>}
+        {sc.mini && <Only on={layer === 'mini'}>{sc.mini(light)}</Only>}
       </div>
-    )),
-    [`shots/messages-${t}`]: shot(1440, 1100, (
-      <div style={{ position: 'relative', width: 1440, height: 1100 }}>
-        <div style={{ position: 'absolute', left: 130, top: 100 }}><Window page="Messages" light={light}><Messages /></Window></div>
-        <Toast x={900} y={44} icon={appIcon} light={light} name="Theo" text="Can you send me the photos from Saturday?" />
-      </div>
-    )),
-    [`shots/reels-${t}`]: shot(1440, 1100, (
-      <div style={{ position: 'relative', width: 1440, height: 1100 }}>
-        <div style={{ position: 'absolute', left: 130, top: 100 }}><Window page="Reels" light={light}><Reels /></Window></div>
-        <Mini x={1210} y={600} w={150} kind="dunes" by="ines.r" byKind="dunes" light={light} />
-      </div>
-    )),
-    [`shots/planner-${t}`]: shot(1440, 1100, (
-      <div style={{ position: 'relative', width: 1440, height: 1100 }}>
-        <div style={{ position: 'absolute', left: 130, top: 100 }}><Window page="Planner" manager light={light}><Planner /></Window></div>
-      </div>
-    )),
-    [`wordmark-${t}`]: { size: [600, 260], scale: 3, site: true, png: true, node: (
-      <div style={{ width: 600, height: 260, display: 'grid', placeItems: 'center', fontFamily: 'Snell Roundhand', fontWeight: 900, fontSize: 150, color: light ? '#1b1815' : '#f4f1ec' }}>Matte</div>
-    ) },
-  });
+    );
+    images[`shots/${name}-${t}`] = shot(sc.w, sc.h, scene('window'));
+    if (sc.toast) images[`shots/${name}-toast-${t}`] = shot(sc.w, sc.h, scene('toast'));
+    if (sc.mini) images[`shots/${name}-mini-${t}`] = shot(sc.w, sc.h, scene('mini'));
+  }
+  images[`wordmark-${t}`] = { size: [600, 260], scale: 3, site: true, png: true, node: (
+    <div style={{ width: 600, height: 260, display: 'grid', placeItems: 'center', fontFamily: 'Snell Roundhand', fontWeight: 900, fontSize: 150, color: light ? '#1b1815' : '#f4f1ec' }}>Matte</div>
+  ) };
 }
 
 const only = process.argv.slice(2);
@@ -194,7 +194,7 @@ for (const [name, img] of Object.entries(images)) {
     path = join(site, `${name}.${img.png ? 'png' : 'webp'}`);
     mkdirSync(dirname(path), { recursive: true });
     if (img.png) await sharp(png).trim().png({ compressionLevel: 9 }).toFile(path);
-    else await sharp(png).webp({ quality: 84, alphaQuality: 90, effort: 6 }).toFile(path);
+    else await sharp(png).webp({ quality: 84, alphaQuality: 100, effort: 6 }).toFile(path);
   } else {
     path = join(out, `${name}.${img.type === 'jpeg' ? 'jpg' : 'png'}`);
     await page.screenshot({ path, type: img.type, quality: img.type === 'jpeg' ? 88 : undefined });
