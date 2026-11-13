@@ -10,10 +10,13 @@ memory (the website uses 4–5 GB on an 8 GB Mac).
 - The Xcode project is generated: edit `project.yml`, run `xcodegen generate`.
 - macOS 15, Swift 6, **MainActor default isolation**. Types that cross actors are
   `nonisolated`; `IGClient`, `IGSession`, `ImagePipeline` are actors.
-- Debug build: `xcodebuild -project Instagram.xcodeproj -scheme Instagram -configuration Debug -derivedDataPath <scratchpad>/dd build`
+- Debug build: `xcodebuild -project Instagram.xcodeproj -scheme Instagram -configuration Debug -derivedDataPath <scratchpad>/dd CURRENT_PROJECT_VERSION=$(git rev-list --count HEAD) build`
+  (a fresh build number each time: macOS caches app icons by version, and a reused "1" keeps showing an old icon in the Dock).
 - The app is **Matte** (`PRODUCT_NAME`, Matte.app); the code module stays `Instagram`.
 - Install: **Debug only** (Release builds take too long): build Debug as above, quit the running app
   (bundle id `com.subhash.Instagram`), `ditto <…>/Debug/Matte.app "/Applications/Matte Debug.app"`, open it.
+  The user's second Mac (`ssh server-lan`, macOS 15) gets the same build: zip with `ditto -c -k --keepParent`, scp, unzip into
+  `/Applications/Matte Debug.app` there (quit it first, reopen if it was running).
   Debug-only test guards skip copies running from `/Applications/` (that copy marks stories seen).
 - Tests: `xcodebuild test -project Instagram.xcodeproj -scheme Instagram -derivedDataPath <scratchpad>/dd-test`.
   Read the whole result, including the trailing summary.
