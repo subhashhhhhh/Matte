@@ -60,6 +60,7 @@ final class Preferences {
         ghostReadReceipts = bool("pref.ghostReadReceipts", false)
         ghostTyping = bool("pref.ghostTyping", false)
         downloadPlace = string("pref.downloadPlace", DownloadPlace.downloads)
+        checkUpdates = bool("pref.checkUpdates", true)
         downloadFolder = UserDefaults.standard.string(forKey: "pref.downloadFolder")
     }
 
@@ -114,6 +115,11 @@ final class Preferences {
         get { ghostStories && ghostReadReceipts && ghostTyping }
         set { ghostStories = newValue; ghostReadReceipts = newValue; ghostTyping = newValue }
     }
+
+    // MARK: Updates
+
+    /// Look for a new Matte once a day (Settings › About).
+    var checkUpdates: Bool { didSet { defaults.set(checkUpdates, forKey: "pref.checkUpdates") } }
 
     // MARK: Downloads
 

@@ -564,6 +564,13 @@ private struct AboutPage: View {
             }
         }
         .padding(.bottom, 20)
+        UpdatesGroup()
+        SettingsGroup(title: "Links", note: "Matte is free and open source under the MIT License. It isn't affiliated with Instagram or Meta.") {
+            LinkRow(title: "Website", detail: "matte.subhashh.tech", url: URL(string: "https://matte.subhashh.tech")!, divider: false)
+            LinkRow(title: "Source code", detail: "GitHub", url: ReleaseFeed.repositoryURL)
+            LinkRow(title: "Report a problem or suggest a feature", detail: "GitHub Issues", url: ReleaseFeed.newIssue)
+            LinkRow(title: "Release notes", detail: "All versions", url: ReleaseFeed.releasesPage)
+        }
         SettingsGroup(title: "Keyboard shortcuts") {
             ForEach(Array(shortcuts.enumerated()), id: \.offset) { i, s in
                 SettingRow(title: s.1, divider: i > 0) {
@@ -662,6 +669,89 @@ private struct AddAccountRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.pressable)
+        .onHover { hovering = $0 }
+    }
+}
+
+// MARK: - Updates and links
+
+/// Matte's own updates: the daily check, and installing a new version in place.
+private struct UpdatesGroup: View {
+    @Environment(AppModel.self) private var app
+    @Bindable private var prefs = Preferences.shared
+
+    var body: some View {
+        let updates = app.updates
+        SettingsGroup(title: "Updates") {
+            SettingRow(title: "Check for updates automatically", divider: false) {
+                MatteSwitch(isOn: $prefs.checkUpdates)
+            }
+            switch updates.state {
+            case .idle, .upToDate, .failed:
+                SettingRow(title: status(updates), detail: detail(updates)) {
+                    Button("Check Now") { updates.checkNow() }.buttonStyle(.secondaryPill)
+                }
+            case .checking:
+                SettingRow(title: "Checking for updates…") { Spinner(size: 14) }
+            case .available(let release):
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Matte \(release.version.description) is available").font(.system(size: 13.5, weight: .semibold))
+                        Spacer()
+                        Button(updates.canInstall ? "Install and Relaunch" : "Download") { updates.install() }
+                            .buttonStyle(.prominentCompact)
+                    }
+                    if !release.notes.isEmpty {
+                        Text(release.notes)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(8)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(14)
+                .overlay(alignment: .top) { Rectangle().fill(Theme.hairline).frame(height: 1).padding(.leading, 14) }
+            case .installing(let release, let phase):
+                SettingRow(title: "Installing Matte \(release.version.description)…", detail: phase.message) {
+                    Button("Cancel") { updates.cancelInstall() }.buttonStyle(.secondaryPill)
+                }
+            }
+        }
+    }
+
+    private func status(_ u: UpdateController) -> String {
+        switch u.state {
+        case .upToDate: "Matte is up to date"
+        case .failed: "Couldn't check for updates"
+        default: "Software update"
+        }
+    }
+
+    private func detail(_ u: UpdateController) -> String? {
+        if case .failed(let message) = u.state { return message }
+        return u.lastChecked.map { "Checked \($0.formatted(.relative(presentation: .named)))" }
+    }
+}
+
+private struct LinkRow: View {
+    let title: String
+    let detail: String
+    let url: URL
+    var divider = true
+    @State private var hovering = false
+
+    var body: some View {
+        Button { NSWorkspace.shared.open(url) } label: {
+            SettingRow(title: title, divider: divider) {
+                HStack(spacing: 5) {
+                    Text(detail).font(.system(size: 12.5)).foregroundStyle(.secondary)
+                    Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(.tertiary)
+                }
+            }
+            .background(hovering ? Theme.hover : .clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
         .onHover { hovering = $0 }
     }
 }

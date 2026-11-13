@@ -191,6 +191,8 @@ final class AppModel {
     var sharing: Media?
     /// Like/save/send/copy/download for posts and reels everywhere.
     private(set) var actions: PostActions?
+    /// Matte's own updates (a daily check; Settings › About installs them).
+    let updates = UpdateController()
     /// Follows changed this session, shared by every Follow button.
     private(set) var follows: Follows?
     /// The create sheet, when open.
@@ -255,6 +257,10 @@ final class AppModel {
     @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Matte", category: "App")
 
     init() {
+        updates.onFound = { [weak self] release in
+            self?.show("Matte \(release.version.description) is available. Update it in Settings › About.")
+        }
+        updates.start { Preferences.shared.checkUpdates }
         // Manager mode used to be a switch in Settings; it now follows the account type.
         UserDefaults.standard.removeObject(forKey: "managerMode")
         if let session = IGSession.restore() {
