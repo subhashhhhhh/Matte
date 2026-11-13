@@ -708,6 +708,8 @@ final class ConversationModel {
     /// Tells the thread we're typing (`true`) or stopped. Meant to be called as the draft
     /// changes: repeats of the same state within 5 s aren't sent again.
     func sendTyping(_ typing: Bool) async {
+        // Ghost mode (Settings): no "typing…".
+        guard !Preferences.shared.ghostTyping else { return }
         if let last = sentTyping, last.on == typing, !typing || Date.now.timeIntervalSince(last.at) < 5 { return }
         guard let realtime = inbox?.realtime else { return }
         sentTyping = (typing, .now)
@@ -986,6 +988,8 @@ final class ConversationModel {
     func acceptRequest() async { await inbox?.accept(thread) }
 
     private func markRead() async {
+        // Ghost mode (Settings): reading doesn't send "Seen".
+        guard !Preferences.shared.ghostReadReceipts else { return }
         // Reading a request doesn't tell them (as on Instagram) until it's accepted.
         guard !thread.isRequest, let longId = thread.longId,
               let newest = messages.last(where: { $0.senderId != viewerId && !$0.pending }),

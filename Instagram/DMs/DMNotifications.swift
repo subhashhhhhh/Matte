@@ -33,7 +33,8 @@ final class DMNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// Posts a notification for `message` in `thread` (`sender` for groups).
     func notify(thread: DMThread, message: DMMessage, sender: User?) {
-        guard let center, authorized != false else { return }
+        let prefs = Preferences.shared
+        guard let center, authorized != false, prefs.notifications else { return }
         let content = UNMutableNotificationContent()
         if thread.isGroup {
             content.title = thread.title
@@ -41,8 +42,8 @@ final class DMNotifier: NSObject, UNUserNotificationCenterDelegate {
         } else {
             content.title = sender?.username ?? thread.title
         }
-        content.body = Self.preview(message)
-        content.sound = .default
+        content.body = prefs.notificationPreviews ? Self.preview(message) : "New message"
+        content.sound = prefs.notificationSound ? .default : nil
         content.threadIdentifier = thread.id
         content.userInfo = ["thread": thread.id]
         let request = UNNotificationRequest(identifier: "dm-\(message.id)", content: content, trigger: nil)
@@ -73,7 +74,7 @@ final class DMNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// The unread chat count on the Dock icon (nothing at zero).
     static func setBadge(_ count: Int) {
-        let label = count > 0 ? String(count) : nil
+        let label = count > 0 && Preferences.shared.dockBadge ? String(count) : nil
         if NSApp?.dockTile.badgeLabel != label { NSApp?.dockTile.badgeLabel = label }
     }
 

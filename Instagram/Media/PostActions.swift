@@ -283,14 +283,15 @@ final class PostActions {
                 let suffix = items.count > 1 ? "-\(i + 1)" : ""
                 if await save(url, as: "\(owner)-\(m.code ?? m.pk)\(suffix).\(video ? "mp4" : "jpg")") { saved += 1 }
             }
-            if saved > 0 { app?.show(saved == 1 ? "Saved to Downloads" : "\(saved) files saved to Downloads") }
+            let place = Preferences.shared.downloadPlaceName
+            if saved > 0 { app?.show(saved == 1 ? "Saved to \(place)" : "\(saved) files saved to \(place)") }
         }
     }
 
     /// Saves one file (a story item, a DM photo or video) to Downloads.
     func download(url: URL, video: Bool, name: String? = nil) {
         let file = (name ?? "instagram-\(Int(Date.now.timeIntervalSince1970))") + (video ? ".mp4" : ".jpg")
-        Task { if await save(url, as: file) { app?.show("Saved to Downloads") } }
+        Task { if await save(url, as: file) { app?.show("Saved to \(Preferences.shared.downloadPlaceName)") } }
     }
 
     /// Saves one frame of a video as a photo (a video story "as a photo").
@@ -304,10 +305,10 @@ final class PostActions {
                 let (image, _) = try await generator.image(at: CMTime(seconds: max(0, seconds), preferredTimescale: 600))
                 let rep = NSBitmapImageRep(cgImage: image)
                 guard let data = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.95]) else { return }
-                let dest = try Self.downloads().appending(path: name + ".jpg")
+                guard let dest = await Self.destination(for: name + ".jpg") else { return }
                 try? FileManager.default.removeItem(at: dest)
                 try data.write(to: dest)
-                app?.show("Saved to Downloads")
+                app?.show("Saved to \(Preferences.shared.downloadPlaceName)")
             } catch {
                 app?.report(error)
             }
@@ -316,8 +317,8 @@ final class PostActions {
 
     private func save(_ url: URL, as name: String) async -> Bool {
         do {
+            guard let dest = await Self.destination(for: name) else { return false }
             let (temp, _) = try await URLSession.shared.download(from: url)
-            let dest = try Self.downloads().appending(path: name)
             try? FileManager.default.removeItem(at: dest)
             try FileManager.default.moveItem(at: temp, to: dest)
             return true
@@ -327,8 +328,19 @@ final class PostActions {
         }
     }
 
-    private static func downloads() throws -> URL {
-        try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+    /// Where a download goes (Settings › Downloads): Downloads, your folder, or, set to ask,
+    /// wherever you pick in the save dialog (nil: cancelled).
+    private static func destination(for name: String) async -> URL? {
+        let prefs = Preferences.shared
+        guard prefs.downloadPlace == .ask else {
+            let dir = prefs.downloadDirectory
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            return dir.appending(path: name)
+        }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = name
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        return await panel.begin() == .OK ? panel.url : nil
     }
 
     func send(_ m: Media) { app?.sharing = m }

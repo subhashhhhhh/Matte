@@ -149,6 +149,8 @@ struct RootView: View {
         // In fullscreen the toolbar (and its window buttons) comes down with the menu bar only
         // when the pointer is at the top of the screen.
         .windowToolbarFullScreenVisibility(.onHover)
+        // Appearance (Settings › General): light, dark or the Mac's.
+        .onAppear { Preferences.shared.applyAppearance() }
         .sheet(isPresented: $app.showSignIn) {
             SignInView(onComplete: { app.completeSignIn($0) }, onCancel: { app.showSignIn = false })
         }

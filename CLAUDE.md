@@ -52,6 +52,10 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
   (the "@name" is added on send), like, mark done, saved replies (UserDefaults `savedReplies`).
   `-IGRepliesUser <username>` reads another public account's comments, `-IGRepliesOpen YES` opens the
   first reply box (screenshots; nothing is sent).
+- Settings (`Views/SettingsView.swift`, sections down the side) read and write `App/Preferences.swift` (UserDefaults
+  `pref.*`): appearance, open-on page, starting feed, hide suggested, start muted, hover previews, mini player,
+  notifications, Dock badge, ghost mode (no story seen / read receipts / typing), download place, storage, accounts, about.
+  `-IGSettingsSection <name>` opens a section; `-IGRenderSettings <dir>` renders every section (light and dark) without a window.
 - `Instagram/Images/` — `ImagePipeline` (downsampled decode, cost-limited cache), `RemoteImage`.
 - `Instagram/App/` — `AppModel`, `MemoryRelief`, `ResponseCache`, debug tools.
 - `ResponseCache`: last good first pages (feed per source, tray, reels, Explore, inbox, 20 recent

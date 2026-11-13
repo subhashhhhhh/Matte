@@ -73,7 +73,7 @@ struct PostTile: View {
         .onChange(of: onScreen) { if !onScreen { musicTask?.cancel(); PostMusic.shared.release(holder) } }
         // Paged onto a video while resting on the card: preview it (and stop on a photo).
         .onChange(of: page) {
-            if hovering, previewVideo != nil { setPreviewing(true) } else if isPreviewing, previewVideo == nil { setPreviewing(false) }
+            if hovering, previewVideo != nil, Preferences.shared.hoverPreviews { setPreviewing(true) } else if isPreviewing, previewVideo == nil { setPreviewing(false) }
             // A carousel's song gives way to a video page's own sound, and comes back on a photo.
             if previewVideo != nil { musicTask?.cancel(); PostMusic.shared.release(holder) } else if hovering { hoverMusic(true) }
             prefetchNeighbours()
@@ -87,7 +87,7 @@ struct PostTile: View {
             if inside {
                 hoverTask = Task {
                     try? await Task.sleep(for: .milliseconds(450))
-                    if !Task.isCancelled { setPreviewing(true) }
+                    if !Task.isCancelled, Preferences.shared.hoverPreviews { setPreviewing(true) }
                 }
             } else if isPreviewing {
                 setPreviewing(false)
@@ -120,7 +120,7 @@ struct PostTile: View {
     /// Resting on a photo post plays its song (asked once), as the feed plays it on the phone.
     private func hoverMusic(_ inside: Bool) {
         musicTask?.cancel()
-        guard inside else { PostMusic.shared.release(holder); return }
+        guard inside, Preferences.shared.hoverPreviews else { PostMusic.shared.release(holder); return }
         guard previewVideo == nil, !post.isVideo else { return }
         musicTask = Task {
             try? await Task.sleep(for: .milliseconds(450))

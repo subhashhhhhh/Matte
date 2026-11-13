@@ -46,7 +46,11 @@ final class FeedModel {
     private var cursor: String?
     private var hasMore = true
     /// Remembered between launches.
-    var source: FeedSource = FeedSource(rawValue: UserDefaults.standard.string(forKey: "feedSource") ?? "") ?? .forYou {
+    var source: FeedSource = {
+        let start = Preferences.shared.startFeed
+        if start != .last, let s = FeedSource(rawValue: start.rawValue) { return s }
+        return FeedSource(rawValue: UserDefaults.standard.string(forKey: "feedSource") ?? "") ?? .forYou
+    }() {
         didSet {
             guard source != oldValue else { return }
             UserDefaults.standard.set(source.rawValue, forKey: "feedSource")
@@ -77,7 +81,10 @@ final class FeedModel {
     }
 
     /// The loaded posts that pass the filter, in the feed's own order (what the grid shows).
-    var visible: [Media] { posts.filter(filter.matches) }
+    var visible: [Media] {
+        let hide = Preferences.shared.hideSuggested
+        return posts.filter { filter.matches($0) && !(hide && $0.suggested == true) }
+    }
 
     /// A narrow filter can leave the grid nearly empty: load a few more pages to fill it.
     private func fillForFilter() async {

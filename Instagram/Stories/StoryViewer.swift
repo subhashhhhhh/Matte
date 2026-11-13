@@ -123,6 +123,8 @@ final class StoryViewerModel {
         // The Debug copy installed in /Applications ("Matte Debug") is the user's: it does.
         guard UserDefaults.standard.bool(forKey: "IGMarkSeen") || Bundle.main.bundlePath.hasPrefix("/Applications/") else { return }
         #endif
+        // Ghost mode (Settings): stories you watch aren't marked seen.
+        guard !Preferences.shared.ghostStories else { return }
         seenTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1))
             guard let self, !Task.isCancelled, self.item?.pk == item.pk else { return }

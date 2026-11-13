@@ -113,7 +113,7 @@ struct GridTile: View {
                 if inside {
                     hoverTask = Task {
                         try? await Task.sleep(for: .milliseconds(600))
-                        if !Task.isCancelled { setPreviewing(true) }
+                        if !Task.isCancelled, Preferences.shared.hoverPreviews { setPreviewing(true) }
                     }
                 } else if isPreviewing {
                     setPreviewing(false)

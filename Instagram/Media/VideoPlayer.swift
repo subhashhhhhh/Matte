@@ -133,7 +133,8 @@ final class LoopingVideo {
 @Observable
 final class SoundSetting {
     static let shared = SoundSetting()
-    var muted = false { didSet { PostMusic.shared.setMuted(muted) } }
+    /// Starts as set in Settings › Playback; the sound button changes it for this session.
+    var muted = Preferences.shared.startMuted { didSet { PostMusic.shared.setMuted(muted) } }
 }
 
 /// Hands a playing video from one view to the next without stopping it: the full-size post and

@@ -66,7 +66,7 @@ final class AppModel {
     private(set) var client: IGClient?
     var showSignIn = false
     /// Opens where you left it (Home the first time).
-    var destination: Destination = Destination(rawValue: UserDefaults.standard.string(forKey: "lastPage") ?? "") ?? .home {
+    var destination: Destination = AppModel.startDestination {
         didSet {
             // Leaving with a post or reel open (another tab, or the same tab closing a profile):
             // it shrinks into the mini player, as opening a profile does.
@@ -84,7 +84,17 @@ final class AppModel {
     private(set) var me: User?
     private(set) var viewerId: String?
     /// Pages opened at least once: only these are built (a page never visited loads nothing).
-    private(set) var visited: Set<Destination> = [Destination(rawValue: UserDefaults.standard.string(forKey: "lastPage") ?? "") ?? .home]
+    private(set) var visited: Set<Destination> = [AppModel.startDestination]
+
+    /// Where Matte opens (Settings › General): a chosen page, or where you left off.
+    static var startDestination: Destination {
+        switch Preferences.shared.startPage {
+        case .last: Destination(rawValue: UserDefaults.standard.string(forKey: "lastPage") ?? "") ?? .home
+        case .home: .home
+        case .messages: .messages
+        case .reels: .reels
+        }
+    }
     /// The story viewer, when open.
     var stories: StoryViewerModel?
     /// A post opened from a DM or elsewhere, shown over the current page.
@@ -123,6 +133,12 @@ final class AppModel {
     /// The open post or reel shrinks into the mini player (you're leaving `origin`).
     private func shrinkOpenPost(from origin: MiniPost.Origin) {
         guard let p = presentedPost, p.model.media != nil else { return }
+        // Mini player off (Settings › Playback): leaving a post just closes it.
+        guard Preferences.shared.miniPlayer else {
+            presentedPost = nil
+            p.close()
+            return
+        }
         VideoHandoff.shared.expect()
         if origin.isReelsPage { reels?.handOffCurrent() }
         presentedPost = nil
