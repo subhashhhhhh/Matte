@@ -144,10 +144,14 @@ nonisolated enum Parser {
         let conn = data.first(root) ?? .null
         let items = conn["edges"].array.compactMap { edge -> Media? in
             let node = edge["node"]
-            let m = nodeIsMedia ? node : node["media"]
-            // Ads and suggestion units: no plain `media`, or one marked as an ad.
+            // Suggested posts (home feed) come as their own unit, `explore_story.media`.
+            let suggestion = nodeIsMedia ? JSON.null : node["explore_story"]["media"]
+            let m = nodeIsMedia ? node : (node["media"].isNull ? suggestion : node["media"])
+            // Ads and other units: no `media`, or one marked as an ad.
             guard !m.isNull, node["ad"].isNull, m["ad_id"].isNull, m["product_type"].string != "ad" else { return nil }
-            return media(m)
+            var item = media(m)
+            if !suggestion.isNull { item?.suggested = true }
+            return item
         }
         let info = conn["page_info"]
         return Page(items: dedupe(items), cursor: info["end_cursor"].string, hasMore: info["has_next_page"].bool ?? false)

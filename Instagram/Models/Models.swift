@@ -127,6 +127,10 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     var storyStickers: [StorySticker] = []
     /// A photo post's song (`music_metadata`; only the post's own info has it, not the feed).
     var music: MusicTrack?
+    /// A home-feed post from someone you don't follow, mixed in by Instagram (an
+    /// `explore_story` unit; the website marks it "Suggested for you"). Optional so cached
+    /// feeds from before still decode.
+    var suggested: Bool?
 
     /// A shortcode's media pk (the code is the pk in Instagram's URL-safe base 64; longer
     /// codes of private posts carry extra characters after the first 11).

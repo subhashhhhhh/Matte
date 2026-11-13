@@ -32,7 +32,16 @@ struct AuthorLine: View {
                     }
                 }
                 .lineLimit(1)
-                if let subtitle {
+                if media.suggested == true {
+                    // Someone you don't follow, mixed into your feed by Instagram.
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkles").font(.system(size: fontSize - 3, weight: .semibold))
+                        Text("Suggested for you" + (subtitle.map { " · " + $0 } ?? ""))
+                    }
+                    .font(.system(size: fontSize - 1.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                } else if let subtitle {
                     Text(subtitle).font(.system(size: fontSize - 1)).foregroundStyle(.secondary)
                 }
             }

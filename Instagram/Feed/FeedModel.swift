@@ -203,7 +203,7 @@ final class FeedModel {
             tray = t
             cache?.save(t.map { var r = $0; r.items = []; return r }, "tray")
         }
-        // Feed pages are short (ads and suggestions are left out): fill a few grid rows.
+        // Feed pages are short (ads are left out): fill a few grid rows.
         var tries = 0
         while posts.count < 8, hasMore, tries < 3 {
             tries += 1
