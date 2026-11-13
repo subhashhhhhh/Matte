@@ -117,7 +117,7 @@ const images = {
   },
 };
 
-// Marketing type and the dark stage, after the README images' look.
+// Marketing type on a plain dark stage; the app's windows carry the colour.
 const css = `
 @font-face { font-family: Display; src: url(${sans}) format('woff2'); font-weight: 100 900; }
 @font-face { font-family: Mono; src: url(${mono}) format('woff2'); font-weight: 100 900; }
@@ -125,11 +125,7 @@ const css = `
 html, body { background: transparent; }
 body { overflow: hidden; color: #f2f2f4; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; -webkit-font-smoothing: antialiased; }
 i, em { font-style: normal; }
-.stage { position: relative; overflow: hidden; background:
-  radial-gradient(60% 70% at 78% 40%, rgba(232,51,109,.13), rgba(232,51,109,0) 70%),
-  radial-gradient(50% 60% at 95% 90%, rgba(123,92,255,.12), rgba(123,92,255,0) 70%),
-  radial-gradient(40% 50% at 10% 0%, rgba(255,255,255,.05), rgba(255,255,255,0) 70%), #0c0c0e; }
-.stage::after { content: ''; position: absolute; inset: 0; background-image: url("${grain}"); opacity: .06; mix-blend-mode: overlay; pointer-events: none; }
+.stage { position: relative; overflow: hidden; background: #0c0c0e; }
 .brand { display: flex; align-items: center; gap: 14px; }
 .brand img { width: 56px; height: 56px; }
 .brand span { font-family: 'Snell Roundhand'; font-weight: 900; font-size: 46px; line-height: 1; padding-top: 4px; }

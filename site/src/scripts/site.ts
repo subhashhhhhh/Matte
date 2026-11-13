@@ -1,6 +1,6 @@
-// Small things the pages do: reveal on scroll, the shots' entrances, the hero's tilt and the
-// shots' drift with the scroll, the theme switch, copy buttons, the nav's backdrop once the
-// page scrolls, and the ghost-mode switches. Motion is skipped with Reduce Motion.
+// Small things the pages do: the shots' notification and mini player, the ghost-mode switches,
+// the theme switch, copy buttons and the nav's backdrop once the page scrolls. Motion only
+// where it shows what the app does, and none with Reduce Motion.
 
 declare global {
   interface Window {
@@ -29,14 +29,14 @@ const watch = (els: Iterable<Element>, onIn: (el: HTMLElement) => void, threshol
   for (const el of els) io.observe(el);
 };
 
-watch(document.querySelectorAll('[data-reveal]'), (el) => el.classList.add('in'));
-// The hero's window plays once it has risen into place; the others as they come into view.
-const heroShot = document.querySelector<HTMLElement>('[data-tilt] [data-shot]');
-if (heroShot) setTimeout(() => heroShot.classList.add('play'), still ? 0 : 900);
+// The shots' notification and mini player play once: the hero's after the page's entrance,
+// the others when they come into view.
+const heroShot = document.querySelector<HTMLElement>('[data-hero]');
+if (heroShot) setTimeout(() => heroShot.classList.add('play'), still ? 0 : 700);
 watch(
   [...document.querySelectorAll('[data-shot]')].filter((el) => el !== heroShot),
   (el) => el.classList.add('play'),
-  0.3,
+  0.4,
 );
 
 // Ghost mode: the switches flip on one after the other when they come into view (without
@@ -48,41 +48,9 @@ if (ghost && !still) {
   switches.forEach((s) => s.setAttribute('aria-checked', 'false'));
   watch([ghost], () => {
     switches.forEach((s, i) => {
-      if (target[i] === 'true') setTimeout(() => s.setAttribute('aria-checked', 'true'), 500 + i * 450);
+      if (target[i] === 'true') setTimeout(() => s.setAttribute('aria-checked', 'true'), 300 + i * 300);
     });
   }, 0.5);
-}
-
-// Scroll-linked motion: the hero window starts tilted back and settles as the page scrolls;
-// the other shots drift slightly against the scroll.
-const tilt = document.querySelector<HTMLElement>('[data-tilt]');
-const drifting = [...document.querySelectorAll<HTMLElement>('[data-drift] [data-shot]')];
-if (!still && (tilt || drifting.length)) {
-  let queued = false;
-  const frame = () => {
-    queued = false;
-    const vh = window.innerHeight;
-    if (tilt) {
-      const top = tilt.getBoundingClientRect().top;
-      const p = Math.min(1, Math.max(0, 1 - (top - vh * 0.18) / (vh * 0.55)));
-      tilt.style.setProperty('--p', p.toFixed(3));
-    }
-    for (const el of drifting) {
-      const r = el.getBoundingClientRect();
-      if (r.bottom < -200 || r.top > vh + 200) continue;
-      const offset = (r.top + r.height / 2 - vh / 2) * -0.06;
-      el.style.setProperty('--py', `${offset.toFixed(1)}px`);
-    }
-  };
-  const queue = () => {
-    if (!queued) {
-      queued = true;
-      requestAnimationFrame(frame);
-    }
-  };
-  frame();
-  window.addEventListener('scroll', queue, { passive: true });
-  window.addEventListener('resize', queue);
 }
 
 for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]')) {

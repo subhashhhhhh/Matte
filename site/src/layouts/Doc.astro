@@ -15,7 +15,6 @@ const { title, description, eyebrow, heading, intro, noindex } = Astro.props;
 
 <Base title={title} description={description} noindex={noindex}>
   <main class="doc">
-    <div class="glow" aria-hidden="true"></div>
     <header class="wrap head">
       <p class="eyebrow">{eyebrow}</p>
       <h1>{heading}</h1>
@@ -29,18 +28,8 @@ const { title, description, eyebrow, heading, intro, noindex } = Astro.props;
 
 <style>
   .doc {
-    position: relative;
     padding-top: 150px;
     padding-bottom: 60px;
-  }
-
-  .glow {
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 520px;
-    z-index: -1;
-    background: radial-gradient(50% 60% at 30% 20%, var(--glow-a), transparent 70%);
-    pointer-events: none;
   }
 
   .head {

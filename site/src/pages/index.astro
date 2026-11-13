@@ -8,7 +8,7 @@ import { brew } from '../data';
 const reasons = [
   {
     title: 'Easy on your Mac',
-    text: 'instagram.com in a browser often takes 4\u2060–\u20605\u00a0GB of memory. Matte takes a fraction of that, so the rest of your Mac stays quick.',
+    text: 'instagram.com in a browser often takes 4⁠–⁠5 GB of memory. Matte takes a fraction of that, so the rest of your Mac stays quick.',
     icon: 'M13 2 3 14h9l-1 8 10-12h-9l1-8z',
   },
   {
@@ -24,18 +24,18 @@ const reasons = [
 ];
 
 const ghost = [
-  ['Watch stories without “Seen”', 'Your name stays off the viewer list.'],
-  ['Read messages without “Seen”', 'The chat stays unread for the sender.'],
-  ['Type without “typing…”', 'Nobody sees you writing a reply.'],
+  ['Watch stories without “Seen”', 'Your name stays off the viewer list'],
+  ['Read messages without “Seen”', 'The chat stays unread for the sender'],
+  ['Type without “typing…”', 'Nobody sees you writing a reply'],
 ];
 
 const more = [
-  ['Post from your Mac', 'Photos, carousels and reels, and a story editor with text, drawing, stickers, filters and music.', 'M12 5v14M5 12h14'],
-  ['Every account, one window', 'Add your other accounts and switch between them in a click.', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'],
-  ['Saved, sorted', 'Your saved posts and collections, laid out to browse.', 'm19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z'],
-  ['Explore and search', 'Find people, tags and places, with your recent searches kept.', 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-4.3-4.3'],
-  ['Day or night', 'Light and dark mode, following your Mac.', 'M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z'],
-  ['Free, for good', 'No ads, no subscription, no account with us. The code is open for anyone to read.', 'M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z'],
+  ['Post from your Mac', 'Photos, carousels and reels, and a story editor with text, drawing, stickers, filters and music'],
+  ['Every account in one window', 'Add your other accounts and switch between them in a click'],
+  ['Saved posts and collections', 'Everything you saved, laid out to browse'],
+  ['Explore and search', 'People, tags and places, with your recent searches kept'],
+  ['Light and dark', 'Follows your Mac’s appearance'],
+  ['Free', 'No ads, no subscription, no account with us. The code is open for anyone to read'],
 ];
 ---
 
@@ -45,32 +45,27 @@ const more = [
 >
   <main>
     <section class="hero">
-      <div class="glow" aria-hidden="true"></div>
       <div class="wrap center">
-        <p class="eyebrow pill rise" style="--d:0ms">Free · For macOS 15 and later</p>
-        <h1 aria-label="Your Instagram, on the big screen">
-          {['Your', 'Instagram,', null, 'on', 'the', 'big', 'screen'].map((w, i) =>
-            w === null ? <br /> : <span class="w" style={`--i:${i}`} aria-hidden="true">{w} </span>,
-          )}
-        </h1>
-        <p class="lede rise" style="--d:650ms">Feed, Reels, stories and DMs in a Mac app that won’t slow your computer down.</p>
-        <div class="ctas rise" style="--d:800ms">
+        <h1 class="enter" style="--n:0">Your Instagram,<br />on the big screen</h1>
+        <p class="lede enter" style="--n:1">Feed, Reels, stories and DMs in a Mac app that won’t slow your computer down.</p>
+        <div class="ctas enter" style="--n:2">
           <a class="btn btn-primary" href="/download">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16.37 12.73c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.77-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.76 2.27-1.6 2.78-.41 6.9 1.15 9.16.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.24-.02 2.02-1.12 2.77-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.41-3.65zM14.1 5.98c.63-.77 1.06-1.83.94-2.89-.91.04-2.01.61-2.66 1.37-.58.67-1.09 1.75-.96 2.79 1.02.08 2.05-.52 2.68-1.27z"></path></svg>
             Download for Mac
           </a>
           <Command command={brew} />
         </div>
+        <p class="meta enter" style="--n:2">Free · macOS 15 or later · Apple silicon and Intel</p>
       </div>
-      <div class="wrap hero-shot rise" style="--d:950ms" data-tilt>
-        <Shot name="home" eager alt="Matte’s home feed: posts in three columns, stories down the side, a reel playing in the corner and a message arriving" />
+      <div class="wrap hero-shot enter" style="--n:3">
+        <Shot name="home" eager hero alt="Matte’s home feed: posts in three columns, stories down the side, a reel playing in the corner and a message arriving" />
       </div>
     </section>
 
     <section class="reasons wrap" aria-label="Why Matte">
       {reasons.map((r) => (
-        <div class="reason" data-reveal>
-          <span class="tile"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="draw" pathLength="1" d={r.icon}></path></svg></span>
+        <div class="reason">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={r.icon}></path></svg>
           <h3>{r.title}</h3>
           <p>{r.text}</p>
         </div>
@@ -80,45 +75,45 @@ const more = [
     <div id="features"></div>
 
     <section class="feature wrap">
-      <div class="copy" data-reveal>
-        <p class="eyebrow">Messages</p>
+      <div class="copy">
+        <p class="label">Messages</p>
         <h2>Answer DMs without reaching for your phone</h2>
         <p class="lede">Messages pop up on your Mac while you work. Reply with a real keyboard, send photos and videos straight from your computer, and keep the chats that matter pinned at the top.</p>
       </div>
-      <div class="media" data-reveal data-drift>
+      <div class="media">
         <Shot name="messages" alt="A conversation in Matte with a shared reel, a voice note and a reaction, and a new message notification" />
       </div>
     </section>
 
     <section class="feature flip wrap">
-      <div class="copy" data-reveal>
-        <p class="eyebrow">Reels</p>
+      <div class="copy">
+        <p class="label">Reels</p>
         <h2>Reels on a screen big enough to enjoy them</h2>
         <p class="lede">Watch with the comments right beside the video. Go check something else and the reel keeps playing in the corner.</p>
       </div>
-      <div class="media" data-reveal data-drift>
+      <div class="media">
         <Shot name="reels" alt="A reel in Matte with its comments beside it, and another reel playing in the corner" />
       </div>
     </section>
 
     <section class="feature wrap">
-      <div class="copy" data-reveal>
-        <p class="eyebrow">For business and creator accounts</p>
+      <div class="copy">
+        <p class="label">For business and creator accounts</p>
         <h2>Post on time, even on your busiest days</h2>
         <p class="lede">Line up a month of posts and reels, and Instagram publishes each one on time, even with your Mac closed. Then answer every comment still waiting for you, from one list.</p>
       </div>
-      <div class="media" data-reveal data-drift>
+      <div class="media">
         <Shot name="planner" alt="Matte’s planner: a month of scheduled posts and reels, with the upcoming ones listed beside it" />
       </div>
     </section>
 
     <section class="ghost wrap">
-      <div class="copy" data-reveal>
-        <p class="eyebrow">Ghost mode</p>
+      <div class="copy">
+        <p class="label">Ghost mode</p>
         <h2>Look without being seen</h2>
         <p class="lede">Check a story or read a message on your own time, without anyone knowing you saw it. Turn on only the ones you want.</p>
       </div>
-      <div class="switches" data-reveal data-ghost>
+      <div class="switches" data-ghost>
         {ghost.map(([title, text], i) => (
           <div class="row">
             <div>
@@ -132,36 +127,34 @@ const more = [
     </section>
 
     <section class="more wrap">
-      <h2 data-reveal>And everything else you’d expect</h2>
-      <div class="grid">
-        {more.map(([title, text, icon]) => (
-          <div class="card" data-reveal>
-            <span class="tile"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="draw" pathLength="1" d={icon}></path></svg></span>
-            <h3>{title}</h3>
-            <p>{text}</p>
+      <h2>And everything else you’d expect</h2>
+      <dl class="list">
+        {more.map(([title, text]) => (
+          <div class="item">
+            <dt>{title}</dt>
+            <dd>{text}</dd>
           </div>
         ))}
-      </div>
+      </dl>
     </section>
 
     <section class="privacy wrap">
-      <div class="panel" data-reveal>
-        <p class="eyebrow">Privacy</p>
+      <div class="panel">
+        <p class="label">Privacy</p>
         <h2>Your account stays between you and Instagram</h2>
         <ul>
-          <li><strong>You sign in on Instagram’s own page.</strong> Matte never sees your password.</li>
-          <li><strong>Nothing goes to us.</strong> No analytics, no tracking, no servers of our own. Matte talks to Instagram, and to GitHub to check for updates.</li>
-          <li><strong>Your session stays on your Mac.</strong> Sign out and it’s gone.</li>
+          <li><strong>You sign in on Instagram’s own page</strong> Matte never sees your password.</li>
+          <li><strong>Nothing goes to us</strong> No analytics, no tracking, no servers of our own. Matte talks to Instagram, and to GitHub to check for updates.</li>
+          <li><strong>Your session stays on your Mac</strong> Sign out and it’s gone.</li>
         </ul>
         <a class="more-link" href="/privacy">What Matte keeps and sends, in full →</a>
       </div>
     </section>
 
     <section class="final">
-      <div class="glow" aria-hidden="true"></div>
-      <div class="wrap center" data-reveal>
+      <div class="wrap center">
         <Wordmark height={84} />
-        <p class="lede">Free. For Macs with Apple silicon or Intel, on macOS 15 or later.</p>
+        <p class="lede">Free for Macs with Apple silicon or Intel, on macOS 15 or later</p>
         <div class="ctas">
           <a class="btn btn-primary" href="/download">Download for Mac</a>
           <Command command={brew} />
@@ -181,70 +174,15 @@ const more = [
 
   /* Hero */
   .hero {
-    position: relative;
-    padding-top: 150px;
-  }
-
-  .glow {
-    position: absolute;
-    inset: 0 0 -240px 0;
-    z-index: -1;
-    pointer-events: none;
-    /* Fades out below the section instead of stopping at its edge. */
-    mask-image: linear-gradient(to bottom, #000 60%, transparent);
-    background:
-      radial-gradient(60% 46% at 50% 66%, var(--glow-a), transparent 72%),
-      radial-gradient(34% 34% at 86% 84%, var(--glow-b), transparent 70%),
-      radial-gradient(30% 30% at 12% 70%, var(--glow-b), transparent 70%),
-      radial-gradient(40% 30% at 50% 0%, var(--glow-c), transparent 70%);
-  }
-
-  .pill {
-    padding: 8px 14px;
-    border-radius: 999px;
-    background: var(--card);
-    box-shadow: inset 0 0 0 1px var(--line);
-    letter-spacing: 0.04em;
+    padding-top: 152px;
   }
 
   .hero h1 {
-    margin-top: 28px;
     font-size: clamp(48px, 8.4vw, 108px);
   }
 
-  /* The headline rises a word at a time; the rest follows it in. */
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.js) .hero .w {
-      display: inline-block;
-      opacity: 0;
-      transform: translateY(0.35em);
-      filter: blur(10px);
-      animation: rise 1000ms var(--ease) forwards;
-      animation-delay: calc(120ms + var(--i) * 75ms);
-    }
-
-    :global(.js) .rise {
-      opacity: 0;
-      transform: translateY(24px);
-      animation: rise 1100ms var(--ease) forwards;
-      animation-delay: var(--d);
-    }
-  }
-
-  @keyframes rise {
-    to {
-      opacity: 1;
-      transform: none;
-      filter: none;
-    }
-  }
-
-  .hero .w {
-    white-space: pre;
-  }
-
   .hero .lede {
-    margin-top: 26px;
+    margin-top: 24px;
     max-width: 560px;
   }
 
@@ -257,79 +195,67 @@ const more = [
     margin-top: 36px;
   }
 
+  .meta {
+    margin-top: 20px;
+    font-size: 14px;
+    color: var(--ink-3);
+  }
+
+  /* The shot keeps room below the window for its shadow; pull the next section up into it. */
   .hero-shot {
     max-width: 1340px;
     margin-top: 40px;
-    perspective: 1800px;
+    margin-bottom: -8%;
   }
 
-  /* Tilted back at first; flat once it's scrolled up into view (site.ts sets --p). */
+  /* The one entrance: the hero fades and rises a few pixels, in order. */
   @media (prefers-reduced-motion: no-preference) {
-    .hero-shot :global(.shot) {
-      transform: rotateX(calc((1 - var(--p, 0)) * 14deg)) scale(calc(0.94 + var(--p, 0) * 0.06));
-      transform-origin: 50% 0;
-      will-change: transform;
+    :global(.js) .enter {
+      opacity: 0;
+      transform: translateY(12px);
+      animation: enter 640ms var(--ease) forwards;
+      animation-delay: calc(80ms + var(--n) * 80ms);
     }
   }
 
-  /* Reasons */
+  @keyframes enter {
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Reasons: three columns of text, icons and headings on one line each */
   .reasons {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    padding-top: 40px;
-    padding-bottom: 80px;
+    gap: 48px;
+    padding-top: 0;
+    padding-bottom: 96px;
   }
 
-  .reason {
-    padding: 28px;
-    border-radius: 24px;
-    background: var(--card);
-    box-shadow: inset 0 0 0 1px var(--line);
+  .reason svg {
+    color: var(--ink-2);
   }
 
-  .tile {
-    display: grid;
-    place-items: center;
-    width: 46px;
-    height: 46px;
-    border-radius: 14px;
-    background: var(--card-strong);
-    box-shadow: inset 0 0 0 1px var(--line);
+  .reason h3 {
+    margin-top: 16px;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
   }
 
-  /* Icons draw themselves in as their card arrives. */
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.js) .draw {
-      stroke-dasharray: 1;
-      stroke-dashoffset: 1;
-      transition: stroke-dashoffset 1400ms var(--ease) 250ms;
-    }
-
-    :global(.in) .draw {
-      stroke-dashoffset: 0;
-    }
-  }
-
-  .reason h3,
-  .card h3 {
-    margin-top: 22px;
-    font-size: 21px;
-    letter-spacing: -0.02em;
-    line-height: 1.25;
-  }
-
-  .reason p,
-  .card p {
-    margin-top: 10px;
+  .reason p {
+    margin-top: 8px;
     color: var(--ink-2);
     font-size: 16px;
     text-wrap: wrap;
   }
 
-  .reason svg,
-  .card svg {
-    color: var(--ink-2);
+  .label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--ink-3);
   }
 
   /* Features */
@@ -353,27 +279,16 @@ const more = [
   .copy h2,
   .more h2 {
     margin-top: 16px;
-    font-size: clamp(38px, 4.6vw, 60px);
+    font-size: clamp(36px, 4.4vw, 56px);
   }
 
   .copy .lede {
-    margin-top: 22px;
+    margin-top: 20px;
   }
 
   /* The shots have room for the window's shadow; let it spill past the column. */
   .media {
-    position: relative;
     margin: 0 -7%;
-  }
-
-  /* A little light behind each window. */
-  .media::before {
-    content: '';
-    position: absolute;
-    inset: 10% 8%;
-    z-index: -1;
-    background: radial-gradient(closest-side, var(--glow-a), transparent);
-    filter: blur(20px);
   }
 
   /* Ghost mode */
@@ -382,21 +297,21 @@ const more = [
     grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
     align-items: center;
     gap: 80px;
-    padding-top: 90px;
-    padding-bottom: 110px;
+    padding-top: 88px;
+    padding-bottom: 112px;
   }
 
   .switches {
     display: grid;
-    gap: 14px;
+    gap: 12px;
   }
 
   .row {
     display: flex;
     align-items: center;
     gap: 24px;
-    padding: 22px 26px;
-    border-radius: 22px;
+    padding: 20px 24px;
+    border-radius: 16px;
     background: var(--card);
     box-shadow: inset 0 0 0 1px var(--line);
   }
@@ -406,8 +321,8 @@ const more = [
   }
 
   .row h3 {
-    font-size: 20px;
-    letter-spacing: -0.02em;
+    font-size: 18px;
+    letter-spacing: -0.01em;
     line-height: 1.3;
   }
 
@@ -419,28 +334,27 @@ const more = [
 
   .switch {
     position: relative;
-    -webkit-tap-highlight-color: transparent;
     flex-shrink: 0;
-    width: 54px;
+    width: 52px;
     height: 32px;
     border: 0;
-    border-radius: 999px;
+    border-radius: 16px;
     background: var(--line-strong);
     cursor: pointer;
-    transition: background-color 260ms var(--ease);
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 240ms var(--ease);
   }
 
   .switch::after {
     content: '';
     position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 26px;
-    height: 26px;
+    top: 4px;
+    left: 4px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     background: var(--bg-raised);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-    transition: transform 460ms cubic-bezier(0.34, 1.5, 0.64, 1), background-color 260ms var(--ease);
+    transition: transform 240ms var(--ease), background-color 240ms var(--ease);
   }
 
   .switch[aria-checked='true'] {
@@ -448,44 +362,54 @@ const more = [
   }
 
   .switch[aria-checked='true']::after {
-    transform: translateX(22px);
+    transform: translateX(20px);
     background: var(--switch-knob);
   }
 
-  /* Everything else */
+  /* Everything else: a quiet two-column list */
   .more {
-    padding-top: 60px;
-    padding-bottom: 100px;
+    padding-top: 48px;
+    padding-bottom: 96px;
   }
 
   .more h2 {
     max-width: 640px;
   }
 
-  .grid {
+  .list {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin-top: 48px;
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: 64px;
+    margin: 40px 0 0;
   }
 
-  .card {
-    padding: 28px;
-    border-radius: 24px;
-    background: var(--card);
-    box-shadow: inset 0 0 0 1px var(--line);
+  .item {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: 24px;
+    padding: 20px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  dt {
+    font-weight: 500;
+  }
+
+  dd {
+    margin: 0;
+    color: var(--ink-2);
   }
 
   /* Privacy */
   .privacy {
-    padding-bottom: 60px;
+    padding-bottom: 64px;
   }
 
   .panel {
     padding: clamp(32px, 6vw, 72px);
-    border-radius: 32px;
+    border-radius: 20px;
     background: var(--card);
-    box-shadow: inset 0 0 0 1px var(--line), var(--shadow);
+    box-shadow: inset 0 0 0 1px var(--line);
   }
 
   .panel h2 {
@@ -508,49 +432,55 @@ const more = [
     display: block;
     margin-bottom: 8px;
     color: var(--ink);
-    font-weight: 600;
+    font-weight: 500;
   }
 
   .more-link {
     display: inline-block;
     margin-top: 40px;
-    font-weight: 600;
+    font-weight: 500;
     border-bottom: 1px solid var(--line-strong);
     padding-bottom: 2px;
+    transition: border-color 160ms var(--ease);
+  }
+
+  .more-link:hover {
+    border-color: var(--ink);
   }
 
   /* Final call */
   .final {
-    position: relative;
-    padding: 120px 0 100px;
-  }
-
-  .final .glow {
-    background: radial-gradient(40% 50% at 50% 50%, var(--glow-a), transparent 70%);
+    padding: 112px 0 96px;
   }
 
   .final .lede {
-    margin-top: 22px;
+    margin-top: 20px;
   }
 
   @media (max-width: 900px) {
     .reasons,
-    .grid,
+    .list,
     .panel ul {
       grid-template-columns: 1fr;
       gap: 28px;
     }
 
+    .list {
+      gap: 0;
+    }
+
+    .item {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+
     .feature,
+    .feature.flip,
     .ghost {
       grid-template-columns: 1fr;
       gap: 32px;
       padding-top: 56px;
       padding-bottom: 56px;
-    }
-
-    .feature.flip {
-      grid-template-columns: 1fr;
     }
 
     .feature.flip .copy {

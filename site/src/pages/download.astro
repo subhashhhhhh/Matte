@@ -51,15 +51,15 @@ import { downloads, brew, version, checksums } from '../data';
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 30px;
-    border-radius: 26px;
+    padding: 28px;
+    border-radius: 20px;
     background: var(--card);
     box-shadow: inset 0 0 0 1px var(--line), var(--shadow);
-    transition: transform 240ms var(--ease);
+    transition: background-color 160ms var(--ease);
   }
 
   .choice:hover {
-    transform: translateY(-2px);
+    background: var(--card-strong);
   }
 
   .name {

@@ -420,8 +420,8 @@ export const appCss = `
 .mt.light { --wbg: #fcfcfd; --rail: #f2f2f4; --ink: #111113; --ink-2: #5f5f66; --ink-3: #85858c; --ink-nav: #3a3a40; --cap: #2a2a2e;
   --f1: rgba(0,0,0,.03); --f2: rgba(0,0,0,.05); --f3: rgba(0,0,0,.07); --f4: rgba(0,0,0,.085);
   --line: rgba(0,0,0,.08); --stroke: rgba(0,0,0,.07); --solid: #131315; --on-solid: #fcfcfd; --link: #0d73d1; --unread: #0d73d1;
-  --frame: 0 0 0 1px rgba(40,30,20,.12), 0 40px 90px rgba(70,50,30,.2), 0 14px 30px rgba(70,50,30,.1);
-  --float: 0 0 0 1px rgba(40,30,20,.1), 0 24px 50px rgba(70,50,30,.2); --toast: rgba(250,248,245,.92); --react: #ececee; }
+  --frame: 0 0 0 1px rgba(0,0,0,.1), 0 30px 70px rgba(0,0,0,.12), 0 8px 20px rgba(0,0,0,.06);
+  --float: 0 0 0 1px rgba(0,0,0,.08), 0 16px 40px rgba(0,0,0,.12); --toast: rgba(250,248,245,.92); --react: #ececee; }
 .mt *, .mt { box-sizing: border-box; }
 .mt i, .mt em { font-style: normal; }
 .mt p, .mt h2, .mt h3 { margin: 0; }

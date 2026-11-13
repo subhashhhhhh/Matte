@@ -6,8 +6,10 @@ interface Props {
   name: 'home' | 'messages' | 'reels' | 'planner';
   alt: string;
   eager?: boolean;
+  /** The hero's shot plays right after the page's entrance instead of on scroll. */
+  hero?: boolean;
 }
-const { name, alt, eager } = Astro.props;
+const { name, alt, eager, hero } = Astro.props;
 // The shots are 2× of these sizes, with room around the window for its shadow.
 const size = name === 'home' ? { width: 1480, height: 1100 } : { width: 1440, height: 1100 };
 const loading = eager ? 'eager' : 'lazy';
@@ -15,7 +17,7 @@ const toast = name === 'home' || name === 'messages';
 const mini = name === 'home' || name === 'reels';
 ---
 
-<div class="shot" data-shot>
+<div class="shot" data-shot data-hero={hero ? "" : undefined}>
   <div class="layer base">
     <img class="only-dark" src={`/shots/${name}-dark.webp`} alt={alt} {...size} loading={loading} decoding="async" />
     <img class="only-light" src={`/shots/${name}-light.webp`} alt={alt} {...size} loading={loading} decoding="async" />
@@ -28,10 +30,8 @@ const mini = name === 'home' || name === 'reels';
   )}
   {mini && (
     <div class={`layer mini mini-${name}`} aria-hidden="true">
-      <div class="bob">
-        <img class="only-dark" src={`/shots/${name}-mini-dark.webp`} alt="" {...size} loading={loading} decoding="async" />
-        <img class="only-light" src={`/shots/${name}-mini-light.webp`} alt="" {...size} loading={loading} decoding="async" />
-      </div>
+      <img class="only-dark" src={`/shots/${name}-mini-dark.webp`} alt="" {...size} loading={loading} decoding="async" />
+      <img class="only-light" src={`/shots/${name}-mini-light.webp`} alt="" {...size} loading={loading} decoding="async" />
     </div>
   )}
 </div>
@@ -39,7 +39,6 @@ const mini = name === 'home' || name === 'reels';
 <style>
   .shot {
     position: relative;
-    transform: translate3d(0, var(--py, 0px), 0);
   }
 
   .shot img {
@@ -66,42 +65,29 @@ const mini = name === 'home' || name === 'reels';
     transform-origin: 89% 64%;
   }
 
+  /* They show what Matte does: a message arrives over the window, then the reel you left moves
+     into the corner. Each once, a short fade and move with the page's one easing curve. */
   @media (prefers-reduced-motion: no-preference) {
     :global(.js) .toast {
       opacity: 0;
-      transform: translateY(-5%) scale(0.96);
+      transform: translateY(-2%);
       transition:
-        opacity 700ms var(--ease) 700ms,
-        transform 900ms cubic-bezier(0.34, 1.4, 0.64, 1) 700ms;
+        opacity 480ms var(--ease) 400ms,
+        transform 480ms var(--ease) 400ms;
     }
 
     :global(.js) .mini {
       opacity: 0;
-      transform: translate(5%, 3%) scale(0.82);
+      transform: translate(3%, 2%) scale(0.92);
       transition:
-        opacity 700ms var(--ease) 1300ms,
-        transform 1100ms cubic-bezier(0.34, 1.25, 0.64, 1) 1300ms;
+        opacity 560ms var(--ease) 1000ms,
+        transform 560ms var(--ease) 1000ms;
     }
 
     .shot:global(.play) .toast,
     .shot:global(.play) .mini {
       opacity: 1;
       transform: none;
-    }
-
-    /* The mini player floats a little, as if it were above the page. */
-    .shot:global(.play) .bob {
-      animation: bob 6s ease-in-out 2.4s infinite;
-    }
-  }
-
-  @keyframes bob {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-0.6%);
     }
   }
 </style>
