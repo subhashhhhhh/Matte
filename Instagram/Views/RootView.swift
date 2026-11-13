@@ -11,9 +11,7 @@ struct RootView: View {
         ZStack {
             switch app.authState {
             case .signedOut:
-                EmptyState(symbol: "camera", title: "Instagram",
-                           message: "Sign in on Instagram's own page. The session stays on this Mac.",
-                           actionTitle: "Sign In") { app.showSignIn = true }
+                WelcomeView()
             case .signedIn:
                 HStack(spacing: 0) {
                     Sidebar()
