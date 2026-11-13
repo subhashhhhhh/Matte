@@ -147,6 +147,20 @@ final class FeedModel {
         cache?.save(posts.cacheable(Self.cachedPosts), "feed-" + requested.rawValue)
     }
 
+    /// A refresh you asked for (⌘R, or double-clicking the feed's tab) is under way.
+    private(set) var refreshing = false
+
+    /// ⌘R or a double-click on the feed's tab: the first page read again and shown from the top.
+    func userRefresh() async {
+        guard !isLoading, !refreshing else { return }
+        refreshing = true
+        defer { refreshing = false }
+        closeOpened()
+        scrolledAway = false
+        scrollToTopRequest += 1
+        await refresh()
+    }
+
     /// The "New posts" pill: the held-back posts go on top and the feed scrolls up to them.
     func showPending() {
         let known = Set(pending.map(\.pk))

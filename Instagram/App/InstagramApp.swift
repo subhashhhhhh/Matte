@@ -80,6 +80,11 @@ struct InstagramApp: App {
                     .keyboardShortcut(",")
             }
             CommandGroup(replacing: .sidebar) {
+                // ⌘R: the feed, the Planner or Replies, read again.
+                Button("Refresh") { app.refreshPage() }
+                    .keyboardShortcut("r")
+                    .disabled(!app.canRefreshPage)
+                Divider()
                 Button(app.isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar") { app.toggleSidebar() }
                     .keyboardShortcut("s")
             }

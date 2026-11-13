@@ -156,10 +156,14 @@ private struct FeedControls: View {
                             .foregroundStyle(on ? .primary : .secondary)
                     }
                     .buttonStyle(.pressable)
+                    // A double-click reads that feed again.
+                    .simultaneousGesture(TapGesture(count: 2).onEnded { Task { await model.userRefresh() } })
+                    .help("Double-click to refresh")
                 }
             }
             .padding(3)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
+            if model.refreshing { Spinner(size: 14).transition(.opacity) }
             Spacer()
         }
     }

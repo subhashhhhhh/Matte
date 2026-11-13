@@ -230,6 +230,18 @@ final class AppModel {
     }
     /// The pages the sidebar shows (a professional account adds the Planner and Replies).
     var destinations: [Destination] { Destination.allCases.filter { managerMode || !$0.managerOnly } }
+
+    /// ⌘R: reads the page on screen again (the feed, the Planner or Replies).
+    var canRefreshPage: Bool { [.home, .planner, .replies].contains(destination) && profiles.isEmpty }
+    func refreshPage() {
+        guard canRefreshPage else { return }
+        switch destination {
+        case .home: if let feed { Task { await feed.userRefresh() } }
+        case .planner: if let planner { Task { await planner.reload() } }
+        case .replies: if let replies { Task { await replies.refresh() } }
+        default: break
+        }
+    }
     /// The sidebar is a narrow rail of icons (⌘S), remembered across launches; collapsed until
     /// you first expand it.
     var isSidebarCollapsed = UserDefaults.standard.object(forKey: "sidebarCollapsed") as? Bool ?? true {
