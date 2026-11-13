@@ -317,16 +317,21 @@ struct MediaStage: View {
         .overlay { HeartBurst(trigger: likeBurst) }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay(alignment: .topLeading) {
-            if let track, chrome {
+            if chrome, track != nil || media.audioName != nil {
                 HStack(spacing: 8) {
-                    MusicLine(track: track, fontSize: 12, playing: music.playingPk == media.pk)
-                        .foregroundStyle(.white)
-                        .environment(\.colorScheme, .dark)
-                    MuteButton()
+                    if let track {
+                        MusicLine(track: track, fontSize: 12, playing: music.playingPk == media.pk)
+                    } else if let audio = media.audioName {
+                        // A reel's own audio (the video has its own sound button).
+                        MusicLine(title: audio.title, artist: audio.artist, fontSize: 12)
+                    }
+                    if track != nil { MuteButton() }
                 }
+                .foregroundStyle(.white)
+                .environment(\.colorScheme, .dark)
                 .padding(.leading, 12)
-                .padding(.trailing, 4)
-                .padding(.vertical, 4)
+                .padding(.trailing, track != nil ? 4 : 12)
+                .padding(.vertical, track != nil ? 4 : 8)
                 .background(Capsule().fill(.black.opacity(0.45)))
                 .padding(12)
                 .transition(.opacity)

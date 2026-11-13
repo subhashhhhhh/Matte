@@ -156,6 +156,9 @@ private struct Masonry: View {
                                      if on { model.playing = post.pk } else if model.playing == post.pk { model.playing = nil }
                                  },
                                  open: { openPost(i) })
+                            // Keyed by the post, not its place: another feed's post at the same
+                            // place is a new card (its song, hover and the rest start over).
+                            .id(post.pk)
                             .onAppear {
                                 if i >= posts.count - 4 { Task { await model.loadMore() } }
                             }

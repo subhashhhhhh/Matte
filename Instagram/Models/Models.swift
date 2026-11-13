@@ -64,6 +64,13 @@ nonisolated struct MusicTrack: Hashable, Sendable {
     var cover: URL?
 }
 
+/// A reel's audio by name (`clips_metadata`): a song, or "Original audio" by its creator. The
+/// reel plays it itself; this is only the label.
+nonisolated struct AudioName: Hashable, Sendable {
+    var title: String
+    var artist: String
+}
+
 nonisolated struct RepostNote: Hashable, Sendable {
     var id: String
     var userId: String
@@ -147,6 +154,8 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     var pinnedOnReels: [String]?
     /// Your collections it's in (`saved_collection_ids`; only on posts you saved).
     var savedCollectionIds: [String]?
+    /// A reel's audio (song or original audio), for its label.
+    var audioName: AudioName?
 
     /// A shortcode's media pk (the code is the pk in Instagram's URL-safe base 64; longer
     /// codes of private posts carry extra characters after the first 11).
@@ -421,6 +430,7 @@ extension RepostNote: Codable {}
 extension StorySticker.Kind: Codable {}
 extension StorySticker: Codable {}
 extension MusicTrack: Codable {}
+extension AudioName: Codable {}
 extension UserTag: Codable {}
 extension Media: Codable {}
 extension StoryReel: Codable {}

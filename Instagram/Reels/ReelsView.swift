@@ -248,6 +248,10 @@ struct ReelsView: View {
     private func info(_ reel: Media, caption showsCaption: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             AuthorLine(media: reel, avatarSize: 30, fontSize: 13)
+            if let audio = reel.audioName {
+                MusicLine(title: audio.title, artist: audio.artist, fontSize: 12, playing: model.current?.isPlaying == true)
+                    .foregroundStyle(.white.opacity(0.85))
+            }
             if showsCaption, let caption = reel.caption, !caption.isEmpty {
                 Text(caption).font(.system(size: 12.5)).lineLimit(2)
             }

@@ -103,6 +103,10 @@ struct PostTile: View {
                     MusicLine(track: track, fontSize: 11, playing: music.playingPk == post.pk)
                         .padding(.leading, 32)
                         .transition(.opacity)
+                } else if let audio = post.audioName {
+                    // A reel's audio: named by the feed itself.
+                    MusicLine(title: audio.title, artist: audio.artist, fontSize: 11, playing: isPreviewing)
+                        .padding(.leading, 32)
                 }
             }
             Spacer(minLength: 0)

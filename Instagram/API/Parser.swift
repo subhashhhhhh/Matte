@@ -29,6 +29,19 @@ nonisolated enum Parser {
     }
 
     /// A photo post's song (`music_metadata.music_info`, seen in `media/<pk>/info/`).
+    /// A reel's audio label: the song it uses, or "Original audio" by whoever made it.
+    static func audioName(_ clips: JSON) -> AudioName? {
+        let song = clips["music_info"]["music_asset_info"]
+        if let title = song["title"].string, !title.isEmpty {
+            return AudioName(title: title, artist: song["display_artist"].string ?? "")
+        }
+        let original = clips["original_sound_info"]
+        if let title = original["original_audio_title"].string, !title.isEmpty {
+            return AudioName(title: title, artist: original["ig_artist"]["username"].string ?? "")
+        }
+        return nil
+    }
+
     static func music(_ info: JSON) -> MusicTrack? {
         let asset = info["music_asset_info"], use = info["music_consumption_info"]
         guard let raw = asset["progressive_download_url"].string ?? asset["fast_start_progressive_download_url"].string,
@@ -126,6 +139,7 @@ nonisolated enum Parser {
         }
         m.storyStickers = storyStickers(j)
         m.music = music(j["music_metadata"]["music_info"])
+        m.audioName = audioName(j["clips_metadata"])
         m.trackingToken = j["organic_tracking_token"].string
         m.loggingToken = j["logging_info_token"].string
         m.images = renditions(j["image_versions2"]["candidates"])
