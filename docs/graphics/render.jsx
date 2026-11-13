@@ -559,10 +559,10 @@ const Mini = ({ x, y, w = 168, kind = 'dusk', by = 'kiko.films', byKind = 'dusk'
   </div>
 );
 
-const Toast = ({ x, y }) => (
+const Toast = ({ x, y, name = 'Maya Lindqvist', text = 'The light at 6 is unreal, don’t be late 🌅' }) => (
   <div className="toast" style={{ left: x, top: y }}>
     <img src={appIcon} style={{ width: 38, height: 38 }} />
-    <div><div style={{ fontSize: 14, fontWeight: 600 }}>Maya Lindqvist</div><div style={{ fontSize: 13.5, color: '#c4c4ca', marginTop: 2 }}>The light at 6 is unreal, don’t be late 🌅</div></div>
+    <div><div style={{ fontSize: 14, fontWeight: 600 }}>{name}</div><div style={{ fontSize: 13.5, color: '#c4c4ca', marginTop: 2 }}>{text}</div></div>
   </div>
 );
 
@@ -599,7 +599,7 @@ const images = {
         <div style={{ position: 'absolute', left: 72, top: 60, bottom: 60, width: 520, display: 'flex', flexDirection: 'column' }}>
           <div className="brand"><img src={appIcon} /><span>Matte</span></div>
           <h1 style={{ fontSize: 64, lineHeight: '68px', marginTop: 'auto' }}>Your Instagram, on the big screen</h1>
-          <p className="sub" style={{ fontSize: 26, lineHeight: '36px', marginTop: 20 }}>A native Mac app, light on memory. Free and open source.</p>
+          <p className="sub" style={{ fontSize: 26, lineHeight: '36px', marginTop: 20 }}>Feed, Reels, stories and DMs in a Mac app that won’t slow your computer down. Free.</p>
           <p className="url" style={{ fontSize: 20, marginTop: 34 }}>matte.subhashh.tech</p>
         </div>
         <Scaled s={0.78} x={640} y={92}><Window page="Home"><Home /></Window></Scaled>
@@ -609,15 +609,16 @@ const images = {
   messages: {
     size: [1600, 900], scale: 2, type: 'jpeg',
     node: (
-      <Feature label="Messages" title="Chats that arrive the moment they’re sent" sub="Reactions, replies, voice notes, photos, shared posts and reels, pinned chats, and notifications.">
+      <Feature label="Messages" title="Answer DMs without reaching for your phone" sub="Messages pop up on your Mac while you work. Reply with a real keyboard, and send photos and videos straight from your computer.">
         <Scaled s={0.8} x={620} y={138}><Window page="Messages"><Messages /></Window></Scaled>
+        <Toast x={1100} y={62} name="Theo" text="Can you send me the photos from Saturday?" />
       </Feature>
     ),
   },
   reels: {
     size: [1600, 900], scale: 2, type: 'jpeg',
     node: (
-      <Feature label="Reels and stories" title="Big, clear, and they keep playing" sub="Leave a reel or a post and it shrinks into a mini player in the corner, still playing.">
+      <Feature label="Reels" title="Reels on a screen big enough to enjoy them" sub="Watch with the comments right beside the video. Go check something else and the reel keeps playing in the corner.">
         <Scaled s={0.8} x={620} y={138}><Window page="Reels"><Reels /></Window></Scaled>
         <Mini x={1446} y={548} w={124} kind="dunes" by="ines.r" byKind="dunes" />
       </Feature>
@@ -626,7 +627,7 @@ const images = {
   planner: {
     size: [1600, 900], scale: 2, type: 'jpeg',
     node: (
-      <Feature label="For business and creator accounts" title="Plan the month, then let it post itself" sub="Schedule posts and reels on a calendar, move or edit them, and answer the comments waiting for a reply.">
+      <Feature label="For business and creator accounts" title="Post on time, even on your busiest days" sub="Line up a month of posts and reels, and Instagram publishes each one on time, even with your Mac closed. Then answer every comment still waiting for you.">
         <Scaled s={0.8} x={620} y={138}><Window page="Planner" manager><Planner /></Window></Scaled>
       </Feature>
     ),
@@ -634,7 +635,7 @@ const images = {
   ghost: {
     size: [1600, 900], scale: 2, type: 'jpeg',
     node: (
-      <Feature label="Ghost mode" title="Look without being seen" sub="Each one is optional, and you can turn it off at any time.">
+      <Feature label="Ghost mode" title="Look without being seen" sub="Check a story or read a message on your own time, without anyone knowing you saw it.">
         <div style={{ position: 'absolute', left: 700, top: 0, bottom: 0, width: 780, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 18 }}>
           {[['eyeOff', 'Watch stories without “Seen”', 'Your name stays off the viewer list.'], ['send', 'Read messages without “Seen”', 'Chats stay unread for the sender.'], ['comment', 'Type without “typing…”', 'Nobody sees you writing a reply.']].map(([icon, t, d]) => (
             <div key={t} className="toggle">
