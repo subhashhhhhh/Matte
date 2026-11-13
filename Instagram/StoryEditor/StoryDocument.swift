@@ -14,6 +14,8 @@ nonisolated struct StoryDoc: Equatable, Sendable {
     var bgScale: CGFloat = 1
     var bgOffset: CGSize = .zero
     var filter: StoryFilter = .normal
+    /// What fills the canvas around the picture.
+    var background: StoryBackground = .gradient
     /// Video only: the part that's kept (seconds) and whether its sound is.
     var trimStart: Double = 0
     var trimEnd: Double = 0
@@ -29,6 +31,15 @@ nonisolated struct StoryDoc: Equatable, Sendable {
         w *= bgScale; h *= bgScale
         return CGRect(x: c.width / 2 + bgOffset.width - w / 2, y: c.height / 2 + bgOffset.height - h / 2, width: w, height: h)
     }
+}
+
+/// What fills the story around the picture: two colours from it (as Instagram fills a photo
+/// that isn't 9:16), the picture itself blurred (as the phone app does for a shared post), or
+/// one colour.
+nonisolated enum StoryBackground: Equatable, Hashable, Sendable {
+    case gradient
+    case blur
+    case color(StoryColor)
 }
 
 /// A piece of text or a sticker on the canvas.

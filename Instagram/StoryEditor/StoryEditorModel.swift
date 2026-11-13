@@ -18,6 +18,7 @@ final class StoryEditorModel {
         case draw
         case stickers
         case filters
+        case background
     }
 
     enum Export: Equatable {
@@ -27,7 +28,15 @@ final class StoryEditorModel {
     }
 
     private(set) var source: CreateSource?
-    private(set) var doc = StoryDoc()
+    private(set) var doc = StoryDoc() {
+        didSet {
+            if doc.background != oldValue.background || doc.filter != oldValue.filter { refreshBackdrop() }
+        }
+    }
+    /// The blurred background at screen size (when the background is "Blur").
+    private(set) var backdropPreview: CGImage?
+    /// A shared post's card look (clicking the card switches it).
+    private(set) var cardStyle: PostStoryCard.Style = .full
     /// The background at screen size, as picked and with the filter on.
     private(set) var display: CGImage?
     private(set) var filtered: CGImage?
@@ -64,6 +73,10 @@ final class StoryEditorModel {
     @ObservationIgnored private var lastText = StoryText()
     @ObservationIgnored private var images: [UUID: (kind: StoryItem.Kind, ppu: CGFloat, piece: Piece)] = [:]
     @ObservationIgnored private var filterTask: Task<Void, Never>?
+    @ObservationIgnored private var backdropTask: Task<Void, Never>?
+    /// The picture, tiny: the gradient's colours and the blurred background come from it.
+    @ObservationIgnored private var small: CGImage?
+    @ObservationIgnored private var reshareMedia: Media?
     @ObservationIgnored private var exportTask: Task<Void, Never>?
     @ObservationIgnored private var exported: (doc: StoryDoc, media: PreparedMedia)?
     @ObservationIgnored private var gestureBefore: StoryDoc?
@@ -124,6 +137,8 @@ final class StoryEditorModel {
             redoStack = []
             syncUndo()
             exported = nil
+            self.small = small
+            refreshBackdrop()
             if let small {
                 gradient = StoryRenderer.gradient(from: small)
                 filterThumbs = await Self.thumbs(small)
@@ -134,11 +149,13 @@ final class StoryEditorModel {
         }
     }
 
-    /// Starts a story from a post or reel: its card (author and picture), a little smaller than
-    /// the story's width, on a gradient from its colours.
+    /// Starts a story from a post or reel, as the phone app does: its card (author, picture,
+    /// caption), a little narrower than the story, on the picture blurred.
     func loadReshare(_ media: Media) async {
         loading = true
-        guard let file = await PostStoryCard.render(media) else {
+        reshareMedia = media
+        cardStyle = .full
+        guard let file = await PostStoryCard.render(media, style: .full) else {
             loading = false
             notice = "Couldn't load this post."
             return
@@ -146,8 +163,55 @@ final class StoryEditorModel {
         await load(file)
         guard source != nil else { return }
         doc.bgScale = PostStoryCard.width / StoryDoc.size.width
+        doc.background = .blur
         original = doc
         reshare = StoryReshare(mediaPk: media.pk, ownerId: media.user?.id ?? "")
+    }
+
+    /// Switches a shared post between the full card and the picture alone (clicking the card).
+    /// Keeps where it is, its size and everything else on the story.
+    func toggleCardStyle() {
+        guard let media = reshareMedia, !isBusy, !loading else { return }
+        let next: PostStoryCard.Style = cardStyle == .full ? .photo : .full
+        loading = true
+        Task {
+            defer { loading = false }
+            guard let file = await PostStoryCard.render(media, style: next),
+                  let s = try? await CreateMedia.read(file) else { return }
+            let shown = await CreateMedia.still(s, maxPixels: 2048)
+            source = s
+            display = shown
+            filtered = nil
+            exported = nil
+            cardStyle = next
+            applyFilter()
+            MemoryRelief.soon()
+        }
+    }
+
+    func setBackground(_ b: StoryBackground) {
+        commit { $0.background = b }
+    }
+
+    /// Draws the blurred background for the canvas from the tiny picture, with the same recipe
+    /// as the export (so what you see is what's shared).
+    private func refreshBackdrop() {
+        backdropTask?.cancel()
+        guard doc.background == .blur, let small else { backdropPreview = nil; return }
+        let doc = doc, gradient = gradient
+        backdropTask = Task {
+            let image = await Self.backdrop(small, doc: doc, gradient: gradient)
+            if !Task.isCancelled { backdropPreview = image }
+        }
+    }
+
+    @concurrent
+    private static func backdrop(_ image: CGImage, doc: StoryDoc, gradient: StoryExport.Gradient) async -> CGImage? {
+        let ctx = CIContext(options: [.cacheIntermediates: false])
+        let full = StoryRenderer.backdrop(source: CIImage(cgImage: image), doc: doc, gradient: gradient)
+        let k: CGFloat = 0.25
+        let out = full.transformed(by: CGAffineTransform(scaleX: k, y: k))
+        return ctx.createCGImage(out, from: CGRect(x: 0, y: 0, width: StoryDoc.size.width * k, height: StoryDoc.size.height * k))
     }
 
     @concurrent

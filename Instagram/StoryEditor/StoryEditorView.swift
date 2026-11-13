@@ -207,6 +207,7 @@ private struct RightColumn: View {
                 RoundTool(symbol: "face.smiling", label: "Stickers", active: model.mode == .stickers) { model.toggle(.stickers) }
                 RoundTool(symbol: "scribble.variable", label: "Draw", active: false) { model.toggle(.draw) }
                 RoundTool(symbol: "camera.filters", label: "Filters", active: model.mode == .filters) { model.toggle(.filters) }
+                RoundTool(symbol: "circle.lefthalf.filled", label: "Background", active: model.mode == .background) { model.toggle(.background) }
                     .help("Filters (← → to change)")
                 if model.isVideo {
                     RoundTool(symbol: model.doc.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
@@ -394,6 +395,8 @@ private struct BottomPanel: View {
                     .font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
             } else if model.mode == .filters {
                 FilterStrip(model: model)
+            } else if model.mode == .background {
+                BackgroundStrip(model: model)
             } else {
                 if let video = model.video {
                     TrimBar(model: model, video: video)
@@ -407,7 +410,10 @@ private struct BottomPanel: View {
     }
 
     private var hint: String {
-        model.selection != nil
+        if model.reshare != nil, model.selection == nil {
+            return "Click the post to change its look · Drag or scroll to move it · Double-click to add text"
+        }
+        return model.selection != nil
             ? "Drag to move · Corner handle or pinch to resize and turn · Delete to remove"
             : "Double-click to add text · Drag or scroll to place the picture · ← → filters"
     }
@@ -749,5 +755,59 @@ private struct EmptyStoryPicker: View {
         panel.message = "Choose a photo or video for your story"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await model.load(url) }
+    }
+}
+
+/// Background choices: the picture blurred, its two colours, or one colour.
+private struct BackgroundStrip: View {
+    let model: StoryEditorModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            swatch(.blur, label: "Blur") {
+                if let image = model.backdropPreview, model.doc.background == .blur {
+                    Image(decorative: image, scale: 1).resizable().aspectRatio(contentMode: .fill)
+                } else {
+                    LinearGradient(colors: [Color(cgColor: model.gradient.top.cg).opacity(0.7), Color(cgColor: model.gradient.bottom.cg)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                        .blur(radius: 4)
+                }
+            }
+            swatch(.gradient, label: "Colors") {
+                LinearGradient(colors: [Color(cgColor: model.gradient.top.cg), Color(cgColor: model.gradient.bottom.cg)],
+                               startPoint: .top, endPoint: .bottom)
+            }
+            Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 34)
+            ForEach(StoryColor.palette, id: \.self) { c in
+                let selected = model.doc.background == .color(c)
+                Button { model.setBackground(.color(c)) } label: {
+                    Circle().fill(Color(cgColor: c.cg))
+                        .frame(width: 22, height: 22)
+                        .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                        .scaleEffect(selected ? 1.25 : 1)
+                        .shadow(color: .black.opacity(0.3), radius: 2)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.pressable)
+            }
+        }
+        .animation(Motion.slide, value: model.doc.background)
+    }
+
+    private func swatch<Content: View>(_ b: StoryBackground, label: String, @ViewBuilder content: () -> Content) -> some View {
+        let selected = model.doc.background == b
+        return Button { model.setBackground(b) } label: {
+            VStack(spacing: 5) {
+                content()
+                    .frame(width: 30, height: 46)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(selected ? Color.white : .white.opacity(0.25), lineWidth: selected ? 2 : 1))
+                Text(label).font(.system(size: 10.5, weight: .medium)).foregroundStyle(.white.opacity(selected ? 1 : 0.6))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.pressable)
     }
 }

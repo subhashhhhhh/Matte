@@ -66,8 +66,7 @@ struct StoryCanvas: View {
     private var background: some View {
         let r = bgRect
         return ZStack(alignment: .topLeading) {
-            LinearGradient(colors: [Color(cgColor: model.gradient.top.cg), Color(cgColor: model.gradient.bottom.cg)],
-                           startPoint: .top, endPoint: .bottom)
+            backdrop
             Group {
                 if let video = model.video {
                     PlayerLayerView(player: video.player, gravity: .resize)
@@ -85,9 +84,15 @@ struct StoryCanvas: View {
             guard model.mode == .normal else { return }
             model.addText(at: CGPoint(x: p.x / k, y: p.y / k))
         }
-        .onTapGesture {
+        .onTapGesture(coordinateSpace: .local) { p in
+            // Clicking a shared post's card switches its look, as tapping it does on the phone.
+            if model.reshare != nil, model.mode == .normal, model.selection == nil,
+               bgRect.contains(CGPoint(x: p.x / k, y: p.y / k)) {
+                model.toggleCardStyle()
+                return
+            }
             model.selection = nil
-            if model.mode == .filters || model.mode == .stickers { model.setMode(.normal) }
+            if model.mode == .filters || model.mode == .stickers || model.mode == .background { model.setMode(.normal) }
         }
         .gesture(DragGesture(minimumDistance: 2)
             .onChanged { v in
@@ -97,6 +102,23 @@ struct StoryCanvas: View {
                                              height: base.offset.height + v.translation.height / k))
             }
             .onEnded { _ in commitBackground() })
+    }
+
+    @ViewBuilder
+    private var backdrop: some View {
+        switch model.doc.background {
+        case .color(let c):
+            Color(cgColor: c.cg)
+        case .blur:
+            if let image = model.backdropPreview {
+                Image(decorative: image, scale: 1).resizable().interpolation(.medium)
+            } else {
+                Color(cgColor: model.gradient.top.cg)
+            }
+        case .gradient:
+            LinearGradient(colors: [Color(cgColor: model.gradient.top.cg), Color(cgColor: model.gradient.bottom.cg)],
+                           startPoint: .top, endPoint: .bottom)
+        }
     }
 
     private func commitBackground() {

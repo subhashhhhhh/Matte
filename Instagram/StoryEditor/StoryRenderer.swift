@@ -298,6 +298,39 @@ nonisolated enum StoryRenderer {
         return (average(rows: 0..<n / 2), average(rows: n / 2..<n))
     }
 
+    /// What fills the canvas behind the picture (1080×1920, Core Image coordinates).
+    static func backdrop(source: CIImage, doc: StoryDoc, gradient: (top: StoryColor, bottom: StoryColor)) -> CIImage {
+        let canvasRect = CGRect(origin: .zero, size: canvas)
+        switch doc.background {
+        case .color(let c):
+            return CIImage(color: CIColor(cgColor: c.cg)).cropped(to: canvasRect)
+        case .blur:
+            // The middle of the picture (a shared post's photo, not its white card edges),
+            // filling the canvas, heavily blurred and a little darker, as the phone app does.
+            let e = source.extent
+            let inner = e.insetBy(dx: e.width * 0.2, dy: e.height * 0.2)
+            let fill = max(canvas.width / max(inner.width, 1), canvas.height / max(inner.height, 1))
+            let blur = CIFilter.gaussianBlur()
+            blur.inputImage = doc.filter.apply(source).cropped(to: inner).clampedToExtent()
+                .transformed(by: CGAffineTransform(translationX: -inner.midX, y: -inner.midY)
+                    .concatenating(CGAffineTransform(scaleX: fill, y: fill))
+                    .concatenating(CGAffineTransform(translationX: canvas.width / 2, y: canvas.height / 2)))
+            blur.radius = 70
+            let dim = CIFilter.colorControls()
+            dim.inputImage = blur.outputImage
+            dim.brightness = -0.06
+            dim.saturation = 1.1
+            return (dim.outputImage ?? CIImage(color: .black)).cropped(to: canvasRect)
+        case .gradient:
+            let fill = CIFilter.linearGradient()
+            fill.point0 = CGPoint(x: 0, y: canvas.height)
+            fill.point1 = .zero
+            fill.color0 = CIColor(cgColor: gradient.top.cg)
+            fill.color1 = CIColor(cgColor: gradient.bottom.cg)
+            return (fill.outputImage ?? CIImage(color: .black)).cropped(to: canvasRect)
+        }
+    }
+
     /// The finished frame: gradient, the picture placed and filtered, then the overlay —
     /// one Core Image recipe for the photo export and each video frame.
     static func compose(source: CIImage, doc: StoryDoc, gradient: (top: StoryColor, bottom: StoryColor), overlay: CIImage?) -> CIImage {
@@ -309,12 +342,7 @@ nonisolated enum StoryRenderer {
                 .concatenating(CGAffineTransform(scaleX: bg.width / e.width, y: bg.height / e.height))
                 // Core Image is y-up.
                 .concatenating(CGAffineTransform(translationX: bg.minX, y: canvas.height - bg.maxY)))
-        let fill = CIFilter.linearGradient()
-        fill.point0 = CGPoint(x: 0, y: canvas.height)
-        fill.point1 = .zero
-        fill.color0 = CIColor(cgColor: gradient.top.cg)
-        fill.color1 = CIColor(cgColor: gradient.bottom.cg)
-        var out = placed.composited(over: (fill.outputImage ?? CIImage(color: .black)).cropped(to: canvasRect))
+        var out = placed.composited(over: backdrop(source: source, doc: doc, gradient: gradient))
         if let overlay { out = overlay.composited(over: out) }
         return out.cropped(to: canvasRect)
     }
