@@ -66,6 +66,9 @@ final class LoopingVideo {
     @ObservationIgnored private var endObserver: NSObjectProtocol?
 
     init(url: URL, muted: Bool = false, loops: Bool = true) {
+        #if DEBUG
+        if !muted { FileHandle.standardError.write(Data("VIDEO new player\n".utf8)) }
+        #endif
         let item = AVPlayerItem(asset: AVURLAsset(url: url))
         item.preferredForwardBufferDuration = 6
         player = AVQueuePlayer()
@@ -131,4 +134,59 @@ final class LoopingVideo {
 final class SoundSetting {
     static let shared = SoundSetting()
     var muted = false { didSet { PostMusic.shared.setMuted(muted) } }
+}
+
+/// Hands a playing video from one view to the next without stopping it: the full-size post and
+/// the mini player (either way), or the Reels page and the mini player. While a handover is
+/// expected (`expect()`), the arriving view claims the player the leaving view is still showing
+/// (or one the Reels page offered), and the leaving view lets go of it without stopping it.
+@MainActor
+final class VideoHandoff {
+    static let shared = VideoHandoff()
+    /// Players on screen now, by post pk.
+    private var live: [String: LoopingVideo] = [:]
+    /// Players offered by a view that's already gone (the Reels page), let go of if unclaimed.
+    private var offered: [String: (video: LoopingVideo, expiry: Task<Void, Never>)] = [:]
+    /// Players claimed away from the view showing them: that view must not stop them.
+    private var handedOff = Set<ObjectIdentifier>()
+    private var expectingUntil = Date.distantPast
+
+    /// A handover is about to happen (a post shrinking into the mini player, or growing back).
+    func expect() { expectingUntil = .now.addingTimeInterval(1.2) }
+    var isExpecting: Bool { Date.now < expectingUntil }
+
+    func register(_ video: LoopingVideo, key: String) { live[key] = video }
+
+    /// The view showing `video` is leaving. True when the player was handed over (keep it going).
+    func leave(_ video: LoopingVideo, key: String) -> Bool {
+        if handedOff.remove(ObjectIdentifier(video)) != nil { return true }
+        if live[key] === video { live[key] = nil }
+        return false
+    }
+
+    /// Offers a player whose view is gone (the Reels page) to the next view of `key`.
+    func offer(_ video: LoopingVideo, key: String) {
+        guard isExpecting else { video.tearDown(); return }
+        offered[key]?.expiry.cancel()
+        let expiry = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled, let self, self.offered[key]?.video === video else { return }
+            self.offered[key] = nil
+            video.tearDown()
+        }
+        offered[key] = (video, expiry)
+    }
+
+    /// The playing player for `key` during a handover (it carries on where it was).
+    func claim(_ key: String) -> LoopingVideo? {
+        guard isExpecting else { return nil }
+        if let entry = offered.removeValue(forKey: key) {
+            entry.expiry.cancel()
+            live[key] = entry.video
+            return entry.video
+        }
+        guard let video = live[key] else { return nil }
+        handedOff.insert(ObjectIdentifier(video))
+        return video
+    }
 }

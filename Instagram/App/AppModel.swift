@@ -102,9 +102,14 @@ final class AppModel {
     /// Opens the mini player's post full size again.
     func expandMini() {
         guard let mini = miniPost else { return }
+        VideoHandoff.shared.expect()
+        openedPostFromMini = true
         miniPost = nil
         openedPost = mini.model
     }
+
+    /// The opened post grew out of the mini player: it appears at once (no fade), already in place.
+    var openedPostFromMini = false
     /// Shown as a small banner (errors, "copied").
     var toast: String?
     /// The ⌘K quick switcher.
@@ -226,6 +231,12 @@ final class AppModel {
                 if let user = presentedPost?.model.media?.user {
                     FileHandle.standardError.write(Data("MINI open profile\n".utf8))
                     openProfile(user)
+                    // `-IGMiniExpand YES`: open it full size again 5 s later.
+                    if UserDefaults.standard.bool(forKey: "IGMiniExpand") {
+                        try? await Task.sleep(for: .seconds(5))
+                        FileHandle.standardError.write(Data("MINI expand\n".utf8))
+                        expandMini()
+                    }
                 }
             }
         }
@@ -313,6 +324,8 @@ final class AppModel {
         guard let client else { return }
         // The open post or reel shrinks into the corner and keeps playing.
         if let p = presentedPost, p.model.media != nil {
+            VideoHandoff.shared.expect()
+            if destination == .reels { reels?.handOffCurrent() }
             presentedPost = nil
             miniPost = MiniPost(model: p.model, from: p.frame)
             p.close()

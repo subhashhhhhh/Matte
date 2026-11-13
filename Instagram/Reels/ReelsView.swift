@@ -19,7 +19,19 @@ final class ReelsModel {
     private(set) var isLoading = false
     private(set) var loadFailed = false
     var isVisible = false {
-        didSet { isVisible ? current?.play() : current?.pause() }
+        didSet {
+            if isVisible, current == nil, reel != nil { startCurrent() }
+            isVisible ? current?.play() : current?.pause()
+        }
+    }
+
+    /// The playing reel goes to the mini player as it is (`VideoHandoff`); coming back to Reels
+    /// starts it again here.
+    func handOffCurrent() {
+        guard let video = current, let pk = currentPk, VideoHandoff.shared.isExpecting else { return }
+        VideoHandoff.shared.offer(video, key: pk)
+        current = nil
+        currentPk = nil
     }
 
     /// The current reel's caption and comments, for the side panel (loaded only if it's shown).

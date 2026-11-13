@@ -81,9 +81,9 @@ struct RootView: View {
         .overlay {
             if let post = app.openedPost {
                 PostLightbox(model: post, canPrevious: false, canNext: false, step: { _ in },
-                             close: { app.openedPost = nil })
+                             close: { app.openedPost = nil; app.openedPostFromMini = false })
                     .environment(\.onScreen, app.storyEditor == nil && app.creating == nil)
-                    .transition(.opacity)
+                    .transition(app.openedPostFromMini ? .asymmetric(insertion: .identity, removal: .opacity) : .opacity)
             }
         }
         .animation(.easeOut(duration: 0.16), value: app.openedPost == nil)

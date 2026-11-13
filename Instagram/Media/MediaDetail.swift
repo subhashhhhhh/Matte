@@ -268,7 +268,8 @@ struct MediaStage: View {
         ZStack {
             Color.black
             if current.isVideo, let url = current.video(minWidth: 720) {
-                StageVideo(url: url, cover: current.image(minWidth: 720), initialCover: page == 0 ? initialImage : nil)
+                StageVideo(url: url, cover: current.image(minWidth: 720), initialCover: page == 0 ? initialImage : nil,
+                           key: current.pk)
                     .id(current.pk + url.absoluteString)
             } else {
                 RemoteImage(url: current.image(minWidth: 1080), contentMode: .fit, initial: page == 0 ? initialImage : nil)
@@ -345,10 +346,27 @@ struct StageVideo: View {
     let url: URL
     var cover: URL?
     var initialCover: CGImage? = nil
+    /// The post's pk: a video handed over under it (`VideoHandoff`) is taken instead of a new one.
+    var key: String? = nil
     @State private var video: LoopingVideo?
     @State private var sound = SoundSetting.shared
     @Environment(\.onScreen) private var onScreen
     @State private var resumeOnReturn = false
+
+    private func attach() {
+        guard video == nil else { return }
+        if let key, let handed = VideoHandoff.shared.claim(key) {
+            // The same player, mid-play: no restart, no gap.
+            handed.isMuted = sound.muted
+            if onScreen { if !handed.isPlaying { handed.play() } } else { handed.pause(); resumeOnReturn = true }
+            video = handed
+            return
+        }
+        let v = LoopingVideo(url: url, muted: sound.muted)
+        if onScreen { v.play() } else { resumeOnReturn = true }
+        video = v
+        if let key { VideoHandoff.shared.register(v, key: key) }
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -366,12 +384,13 @@ struct StageVideo: View {
             }
         }
         .overlay(alignment: .topTrailing) { MuteButton().padding(10) }
-        .onAppear {
-            let v = LoopingVideo(url: url, muted: sound.muted)
-            if onScreen { v.play() } else { resumeOnReturn = true }
-            video = v
-        }
+        .onAppear { attach() }
         .onDisappear {
+            if let key, let video, VideoHandoff.shared.leave(video, key: key) {
+                // Handed to the mini player (or back): it plays on there.
+                self.video = nil
+                return
+            }
             video?.tearDown()
             video = nil
             MemoryRelief.soon()
@@ -379,7 +398,8 @@ struct StageVideo: View {
         .onChange(of: sound.muted) { video?.isMuted = sound.muted }
         // Off screen (another page, a profile, the story editor…): pause; back: carry on.
         .onChange(of: onScreen) {
-            if !onScreen { resumeOnReturn = video?.isPlaying == true; video?.pause() }
+            // Not while it's being handed to the mini player (or back): it keeps playing.
+            if !onScreen { if !VideoHandoff.shared.isExpecting { resumeOnReturn = video?.isPlaying == true; video?.pause() } }
             else if resumeOnReturn { video?.play() }
         }
     }

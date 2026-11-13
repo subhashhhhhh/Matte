@@ -10,6 +10,8 @@ struct MiniPlayer: View {
     @State private var corner = Corner.bottomTrailing
     @State private var drag: CGSize = .zero
     @State private var hovering = false
+    /// Growing back to full size (then the post's viewer takes over in the same place).
+    @State private var expanding = false
 
     enum Corner: CaseIterable { case topLeading, topTrailing, bottomLeading, bottomTrailing }
 
@@ -20,11 +22,28 @@ struct MiniPlayer: View {
         GeometryReader { geo in
             if let media = mini.model.media {
                 let target = rect(corner, in: geo.size, aspect: media.aspect)
-                let r = docked ? target : mini.from
-                MediaStage(media: media, cornerRadius: docked ? 14 : 0, chrome: false)
+                let full = PostLightbox.stageRect(in: geo.size, media: media)
+                let r = expanding ? full : docked ? target : mini.from
+                // The viewer's backdrop, darkening as it grows (the viewer has the same one).
+                Color.black.opacity(expanding ? 0.82 : 0)
+                    .allowsHitTesting(false)
+                MediaStage(media: media, cornerRadius: docked && !expanding ? 14 : 0, chrome: false)
                     .frame(width: r.width, height: r.height)
+                    .overlay(alignment: .topLeading) {
+                        if hovering, docked, !expanding {
+                            Button { expand() } label: {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                    .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                                    .frame(width: 26, height: 26).background(Circle().fill(.black.opacity(0.6)))
+                            }
+                            .buttonStyle(.pressable)
+                            .help("Open full size")
+                            .padding(8)
+                            .transition(.opacity)
+                        }
+                    }
                     .overlay(alignment: .topTrailing) {
-                        if hovering, docked {
+                        if hovering, docked, !expanding {
                             Button { close() } label: {
                                 Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
                                     .frame(width: 26, height: 26).background(Circle().fill(.black.opacity(0.6)))
@@ -35,19 +54,19 @@ struct MiniPlayer: View {
                         }
                     }
                     .overlay(alignment: .bottomLeading) {
-                        if hovering, docked, let user = media.user {
+                        if hovering, docked, !expanding, let user = media.user {
                             Text(user.username).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
                                 .shadow(color: .black.opacity(0.6), radius: 3)
                                 .padding(10)
                                 .transition(.opacity)
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: docked ? 14 : 0, style: .continuous))
-                    .shadow(color: .black.opacity(docked ? 0.45 : 0), radius: 24, y: 10)
-                    .scaleEffect(hovering && drag == .zero ? 1.03 : 1)
+                    .clipShape(RoundedRectangle(cornerRadius: docked && !expanding ? 14 : 0, style: .continuous))
+                    .shadow(color: .black.opacity(docked && !expanding ? 0.45 : 0), radius: 24, y: 10)
+                    .scaleEffect(hovering && drag == .zero && !expanding ? 1.03 : 1)
                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .onHover { inside in withAnimation(.easeOut(duration: 0.15)) { hovering = inside } }
-                    .onTapGesture { app.expandMini() }
+                    .onTapGesture { expand() }
                     .gesture(DragGesture(minimumDistance: 4)
                         .onChanged { drag = $0.translation }
                         .onEnded { v in
@@ -64,6 +83,15 @@ struct MiniPlayer: View {
             }
         }
         .onKeyPress(.escape) { close(); return .handled }
+    }
+
+    /// Grows back to where the post's viewer shows it, then hands over (same player, no gap).
+    private func expand() {
+        guard !expanding else { return }
+        hovering = false
+        withAnimation(Self.dock, completionCriteria: .logicallyComplete) { expanding = true } completion: {
+            app.expandMini()
+        }
     }
 
     private func close() {

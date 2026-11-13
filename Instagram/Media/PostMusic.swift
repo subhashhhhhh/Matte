@@ -45,7 +45,7 @@ final class PostMusic {
 
     /// Plays the poster's part of the song, over and over, while any holder wants it.
     func play(_ track: MusicTrack, for pk: String, holder: UUID) {
-        if playingPk == pk { holders.insert(holder); return }
+        if playingPk == pk { pendingStop?.cancel(); holders.insert(holder); return }
         stop()
         holders = [holder]
         let item = AVPlayerItem(url: track.url)
@@ -68,10 +68,20 @@ final class PostMusic {
         #endif
     }
 
-    /// The holder is done with it; the song stops when nobody holds it.
+    @ObservationIgnored private var pendingStop: Task<Void, Never>?
+
+    /// The holder is done with it; the song stops when nobody holds it. During a handover
+    /// (the post shrinking into the mini player or growing back) it waits a moment for the
+    /// next view to take it, so it never stops.
     func release(_ holder: UUID) {
         guard holders.remove(holder) != nil, holders.isEmpty else { return }
-        stop()
+        guard VideoHandoff.shared.isExpecting else { stop(); return }
+        pendingStop?.cancel()
+        pendingStop = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled, let self, self.holders.isEmpty else { return }
+            self.stop()
+        }
     }
 
     func stop() {
