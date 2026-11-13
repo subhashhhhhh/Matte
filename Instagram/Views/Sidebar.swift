@@ -43,6 +43,7 @@ struct Sidebar: View {
             .keyboardShortcut("n")
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { app.createItemFrame = $0 }
             Spacer(minLength: 0)
+            SettingsItem(collapsed: collapsed)
             AccountCard(collapsed: collapsed)
         }
         .padding(collapsed ? 8 : 10)
@@ -245,5 +246,41 @@ private struct AccountCard: View {
         Button("Settings…") { app.showSettings = true }
         Divider()
         Button(app.me.map { "Sign Out of @\($0.username)" } ?? "Sign Out") { app.signOut() }
+    }
+}
+
+/// Settings (⌘,), just above your account.
+private struct SettingsItem: View {
+    let collapsed: Bool
+    @Environment(AppModel.self) private var app
+    @State private var hovering = false
+
+    var body: some View {
+        Button { app.showSettings = true } label: {
+            Group {
+                if collapsed {
+                    VStack(spacing: 4) {
+                        Image(systemName: "gearshape").font(.system(size: 18, weight: .regular)).frame(height: 22)
+                        Text("Settings").font(.system(size: 10, weight: .medium)).lineLimit(1)
+                    }
+                    .frame(width: 64, height: 54)
+                } else {
+                    HStack(spacing: 12) {
+                        Image(systemName: "gearshape").font(.system(size: 17, weight: .regular)).frame(width: 24)
+                        Text("Settings").font(.system(size: 14)).foregroundStyle(.primary.opacity(0.85))
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 38)
+                }
+            }
+            .foregroundStyle(app.showSettings ? .primary : .secondary)
+            .background(RoundedRectangle(cornerRadius: collapsed ? 12 : 10, style: .continuous)
+                .fill(app.showSettings ? Theme.selected : hovering ? Theme.hover : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Settings (⌘,)")
     }
 }

@@ -35,22 +35,22 @@ struct FeedView: View {
         flight.open(posts[i], to: PostLightbox.stageRect(in: flight.hostSize, media: posts[i])) {}
         model.open(at: i)
     }
-    /// The stories column folded to a strip of avatars (remembered).
-    @AppStorage("storiesCollapsed") private var storiesCollapsed = false
 
     var body: some View {
         GeometryReader { geo in
             // Wide windows: stories as a column on the left, posts in as many columns as fit.
             let storiesColumn = geo.size.width >= 1000 && (!model.tray.isEmpty || app.me != nil)
-            let storiesWidth: CGFloat = storiesCollapsed ? 76 : 250
+            let storiesWidth: CGFloat = 76
             let gridWidth = geo.size.width - (storiesColumn ? storiesWidth : 0) - 48
             let columns = max(1, min(4, Int((gridWidth + 16) / (300 + 16))))
             let columnWidth = min(420, (gridWidth - CGFloat(columns - 1) * 16) / CGFloat(columns))
             HStack(spacing: 0) {
                 if storiesColumn {
-                    StoriesColumn(reels: model.tray, me: app.me, collapsed: $storiesCollapsed,
+                    StoriesColumn(reels: model.tray, me: app.me,
                                   add: { app.openStoryEditor() }) { app.openStories(model.tray, at: $0) }
                         .frame(width: storiesWidth)
+                        // Its hover labels reach out over the feed.
+                        .zIndex(1)
                     Rectangle().fill(Theme.hairline).frame(width: 1)
                 }
                 ScrollView {
@@ -310,127 +310,90 @@ struct PostLightbox: View {
 // MARK: - Stories column
 
 /// Stories as a list down the left of Home: unseen first, with how long ago each was posted.
+/// The stories as a strip of avatars beside the feed (unseen first). Resting on one shows who
+/// it is and how long ago they posted, in a label reaching out over the feed.
 private struct StoriesColumn: View {
     let reels: [StoryReel]
     let me: User?
-    @Binding var collapsed: Bool
     let add: () -> Void
     let open: (Int) -> Void
+    /// The avatar under the pointer (-1: your own) and where each one is.
+    @State private var hovered: Int?
+    @State private var frames: [Int: CGRect] = [:]
 
     private var mine: Int? { me.flatMap { me in reels.firstIndex { $0.user.id == me.id } } }
 
     var body: some View {
-        VStack(alignment: collapsed ? .center : .leading, spacing: 0) {
-            HStack {
-                if !collapsed {
-                    Text("Stories").font(.system(size: 15, weight: .bold))
-                    Spacer()
-                    let unseen = reels.filter { !$0.seen }.count
-                    if unseen > 0 {
-                        Text("\(unseen) new").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
-                    }
-                }
-                ChromeButton(collapsed ? "Show stories" : "Hide stories",
-                             symbol: collapsed ? "chevron.right.2" : "chevron.left.2") {
-                    withAnimation(.smooth(duration: 0.25)) { collapsed.toggle() }
-                }
-            }
-            .padding(.horizontal, collapsed ? 0 : 16)
-            .frame(maxWidth: .infinity, alignment: collapsed ? .center : .leading)
-            .frame(height: 52)
-            ScrollView {
-                LazyVStack(spacing: collapsed ? 10 : 2) {
-                    if let me {
-                        let reel = mine.map { reels[$0] }
-                        Group {
-                            if collapsed {
-                                YourStoryAvatar(user: me, reel: reel, size: 44, add: add)
-                                    .help(reel == nil ? "Add to your story" : "Your story")
-                            } else {
-                                YourStoryRow(user: me, reel: reel, add: add)
-                            }
-                        }
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                if let me {
+                    let reel = mine.map { reels[$0] }
+                    YourStoryAvatar(user: me, reel: reel, size: 44, add: add)
                         .contentShape(Rectangle())
                         .onTapGesture { if let mine { open(mine) } else { add() } }
                         .contextMenu { Button("Add to Your Story", action: add) }
-                    }
-                    ForEach(order, id: \.self) { i in
-                        Group {
-                            if collapsed {
-                                StoryRing(seen: reels[i].seen, lineWidth: 2) { Avatar(url: reels[i].user.avatar, size: 44) }
-                                    .help(reels[i].user.username)
-                            } else {
-                                StoryRow(reel: reels[i])
-                            }
-                        }
+                        .modifier(Tracked(index: -1, hovered: $hovered, frames: $frames))
+                }
+                ForEach(order, id: \.self) { i in
+                    StoryRing(seen: reels[i].seen, lineWidth: 2) { Avatar(url: reels[i].user.avatar, size: 44) }
                         .contentShape(Rectangle())
                         .onTapGesture { open(i) }
-                    }
+                        .modifier(Tracked(index: i, hovered: $hovered, frames: $frames))
                 }
-                .padding(.horizontal, collapsed ? 0 : 8)
-                .padding(.vertical, collapsed ? 4 : 0)
-                .padding(.bottom, 12)
             }
-            .scrollIndicators(.never)
+            .padding(.vertical, 16)
         }
+        .scrollIndicators(.never)
+        .coordinateSpace(.named("storiesColumn"))
+        .overlay(alignment: .topLeading) {
+            if let hovered, let frame = frames[hovered] {
+                label(hovered)
+                    .fixedSize()
+                    .offset(x: frame.maxX + 10, y: frame.midY - 19)
+                    .transition(.opacity.combined(with: .offset(x: -4)))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: hovered)
+    }
+
+    /// "username · 3h", or for your own "Your story" / "Add to your story".
+    private func label(_ i: Int) -> some View {
+        let reel = i >= 0 ? reels[i] : mine.map { reels[$0] }
+        let name = i >= 0 ? reels[i].user.username : "Your story"
+        let age = reel?.latest?.shortAge ?? (i < 0 ? "Add to your story" : nil)
+        return HStack(spacing: 6) {
+            Text(name).font(.system(size: 12.5, weight: .semibold))
+            if let age { Text(age).font(.system(size: 12)).foregroundStyle(.secondary) }
+        }
+        .padding(.horizontal, 11)
+        .frame(height: 30)
+        .background(Capsule().fill(Theme.background))
+        .overlay(Capsule().strokeBorder(Theme.panelStroke))
+        .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
+        .padding(.vertical, 4)
     }
 
     /// Indices with unseen reels first, keeping the tray's own order within each group (your
-    /// own is shown on its own row first).
+    /// own is shown first on its own).
     private var order: [Int] {
         let others = reels.indices.filter { $0 != mine }
         return others.filter { !reels[$0].seen } + others.filter { reels[$0].seen }
     }
 }
 
-private struct StoryRow: View {
-    let reel: StoryReel
-    @State private var hovering = false
+/// Reports an avatar's place in the column and whether the pointer is on it.
+private struct Tracked: ViewModifier {
+    let index: Int
+    @Binding var hovered: Int?
+    @Binding var frames: [Int: CGRect]
 
-    var body: some View {
-        HStack(spacing: 10) {
-            StoryRing(seen: reel.seen, lineWidth: 2) { Avatar(url: reel.user.avatar, size: 38) }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(reel.user.username)
-                    .font(.system(size: 13, weight: reel.seen ? .regular : .semibold))
-                    .foregroundStyle(reel.seen ? .secondary : .primary)
-                    .lineLimit(1)
-                if let t = reel.latest {
-                    Text(t.shortAge).font(.system(size: 11)).foregroundStyle(.secondary)
-                }
+    func body(content: Content) -> some View {
+        content
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("storiesColumn")) } action: { frames[index] = $0 }
+            .onHover { inside in
+                if inside { hovered = index } else if hovered == index { hovered = nil }
             }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(hovering ? Theme.hover : .clear))
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-    }
-}
-
-/// Your own row: "Your story" with a "+" to add to it (Instagram's first tray entry).
-private struct YourStoryRow: View {
-    let user: User
-    let reel: StoryReel?
-    let add: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        HStack(spacing: 10) {
-            YourStoryAvatar(user: user, reel: reel, size: 38, add: add)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Your story").font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                Text(reel == nil ? "Add to your story" : reel?.latest?.shortAge ?? "Click to view")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(hovering ? Theme.hover : .clear))
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
     }
 }
 

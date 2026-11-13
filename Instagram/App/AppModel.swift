@@ -212,8 +212,9 @@ final class AppModel {
     }
     /// The pages the sidebar shows (a professional account adds the Planner and Replies).
     var destinations: [Destination] { Destination.allCases.filter { managerMode || !$0.managerOnly } }
-    /// The sidebar is a narrow rail of icons (⌘S), remembered across launches.
-    var isSidebarCollapsed = UserDefaults.standard.bool(forKey: "sidebarCollapsed") {
+    /// The sidebar is a narrow rail of icons (⌘S), remembered across launches; collapsed until
+    /// you first expand it.
+    var isSidebarCollapsed = UserDefaults.standard.object(forKey: "sidebarCollapsed") as? Bool ?? true {
         didSet { UserDefaults.standard.set(isSidebarCollapsed, forKey: "sidebarCollapsed") }
     }
     /// Where the sidebar's Create item is (window coordinates): the create menu opens beside it.
