@@ -82,6 +82,7 @@ struct RootView: View {
             if let post = app.openedPost {
                 PostLightbox(model: post, canPrevious: false, canNext: false, step: { _ in },
                              close: { app.openedPost = nil })
+                    .environment(\.onScreen, app.storyEditor == nil && app.creating == nil)
                     .transition(.opacity)
             }
         }
@@ -125,31 +126,47 @@ struct RootView: View {
         }
     }
 
+    /// Something covers every page: a story, the story editor, an opened post, the create sheet.
+    private var overlayCovers: Bool {
+        app.stories != nil || app.storyEditor != nil || app.openedPost != nil || app.creating != nil || app.activity?.opened != nil
+    }
+
+    /// Whether the page for `d` is the one you're looking at (sound plays only there).
+    private func onScreen(_ d: Destination) -> Bool {
+        app.destination == d && app.profiles.isEmpty && !overlayCovers
+    }
+
     @ViewBuilder
     private var content: some View {
         // Pages stay alive while hidden, so each keeps its scroll position and state;
-        // only the visible one does any work (Reels pauses when hidden).
+        // only the visible one does any work or plays anything (`onScreen`).
         ZStack {
             if let feed = app.feed, app.visited.contains(.home) {
                 FeedView(model: feed).pageVisibility(app.destination == .home)
+                    .environment(\.onScreen, onScreen(.home))
             }
             if let explore = app.explore, app.visited.contains(.explore) {
                 ExploreView(model: explore).pageVisibility(app.destination == .explore)
+                    .environment(\.onScreen, onScreen(.explore))
             }
             if let reels = app.reels, app.destination == .reels, app.profiles.isEmpty {
                 ReelsView(model: reels)
+                    .environment(\.onScreen, !overlayCovers)
                     .transition(.opacity.combined(with: .offset(y: Motion.reduced ? 0 : 10)))
             }
             if let inbox = app.inbox, app.visited.contains(.messages) {
                 MessagesView(model: inbox).pageVisibility(app.destination == .messages)
+                    .environment(\.onScreen, onScreen(.messages))
             }
             if let planner = app.planner, app.managerMode, app.visited.contains(.planner) {
                 PlannerView(model: planner).pageVisibility(app.destination == .planner)
+                    .environment(\.onScreen, onScreen(.planner))
             }
             // A profile opened from anywhere covers the page until you go back.
             if let page = app.profiles.last {
                 StackPageView(page: page)
                     .id(page.id)
+                    .environment(\.onScreen, !overlayCovers)
                     .background(Theme.background)
                     .transition(.push)
             }
@@ -164,6 +181,7 @@ struct RootView: View {
             if let activity = app.activity, let opened = activity.opened {
                 PostLightbox(model: opened, canPrevious: false, canNext: false, step: { _ in },
                              close: { activity.opened = nil })
+                    .environment(\.onScreen, app.stories == nil && app.storyEditor == nil && app.openedPost == nil && app.creating == nil)
                     .transition(.opacity)
             }
         }

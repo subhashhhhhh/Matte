@@ -257,6 +257,7 @@ struct MediaStage: View {
     @State private var track: MusicTrack?
     @State private var holder = UUID()
     @State private var music = PostMusic.shared
+    @Environment(\.onScreen) private var onScreen
 
     private var items: [Media] { media.children.isEmpty ? [media] : media.children }
 
@@ -316,9 +317,13 @@ struct MediaStage: View {
             guard !media.isVideo, media.expiresAt == nil else { return }
             guard let found = await PostMusic.shared.track(for: media, client: app.client), !Task.isCancelled else { return }
             track = found
-            PostMusic.shared.play(found, for: media.pk, holder: holder)
+            if onScreen { PostMusic.shared.play(found, for: media.pk, holder: holder) }
         }
         .onDisappear { PostMusic.shared.release(holder) }
+        .onChange(of: onScreen) {
+            if !onScreen { PostMusic.shared.release(holder) }
+            else if let track { PostMusic.shared.play(track, for: media.pk, holder: holder) }
+        }
     }
 
     private func pageArrow(_ symbol: String, action: @escaping () -> Void) -> some View {
@@ -340,6 +345,8 @@ struct StageVideo: View {
     var initialCover: CGImage? = nil
     @State private var video: LoopingVideo?
     @State private var sound = SoundSetting.shared
+    @Environment(\.onScreen) private var onScreen
+    @State private var resumeOnReturn = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -359,7 +366,7 @@ struct StageVideo: View {
         .overlay(alignment: .topTrailing) { MuteButton().padding(10) }
         .onAppear {
             let v = LoopingVideo(url: url, muted: sound.muted)
-            v.play()
+            if onScreen { v.play() } else { resumeOnReturn = true }
             video = v
         }
         .onDisappear {
@@ -368,6 +375,11 @@ struct StageVideo: View {
             MemoryRelief.soon()
         }
         .onChange(of: sound.muted) { video?.isMuted = sound.muted }
+        // Off screen (another page, a profile, the story editor…): pause; back: carry on.
+        .onChange(of: onScreen) {
+            if !onScreen { resumeOnReturn = video?.isPlaying == true; video?.pause() }
+            else if resumeOnReturn { video?.play() }
+        }
     }
 }
 

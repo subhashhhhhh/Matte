@@ -124,6 +124,7 @@ final class ReelsModel {
 }
 
 struct ReelsView: View {
+    @Environment(\.onScreen) private var onScreen
     let model: ReelsModel
     @Environment(AppModel.self) private var app
     @State private var sound = SoundSetting.shared
@@ -176,8 +177,9 @@ struct ReelsView: View {
         .onKeyPress(.leftArrow) { model.current?.seek(fraction: max(0, (model.current?.progress ?? 0) - 0.1)); return .handled }
         .onChange(of: sound.muted) { model.current?.isMuted = sound.muted }
         .task { await model.loadIfNeeded() }
-        .onAppear { model.isVisible = true; focused = true }
+        .onAppear { model.isVisible = onScreen; focused = true }
         .onDisappear { model.isVisible = false }
+        .onChange(of: onScreen) { model.isVisible = onScreen }
     }
 
     @ViewBuilder

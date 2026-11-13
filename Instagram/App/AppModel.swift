@@ -182,6 +182,18 @@ final class AppModel {
                 }
             }
         }
+        // `-IGSwitchTo messages`: go to that page 12 s after launch and back 6 s later (playback tests).
+        if let raw = UserDefaults.standard.string(forKey: "IGSwitchTo"), let to = Destination(rawValue: raw) {
+            Task {
+                try? await Task.sleep(for: .seconds(12))
+                let from = destination
+                FileHandle.standardError.write(Data("SWITCH to \(raw)\n".utf8))
+                destination = to
+                try? await Task.sleep(for: .seconds(6))
+                FileHandle.standardError.write(Data("SWITCH back\n".utf8))
+                destination = from
+            }
+        }
         // `-IGShowSwitcher YES`: open the ⌘K switcher at launch.
         showSwitcher = UserDefaults.standard.bool(forKey: "IGShowSwitcher")
         // `-IGOpenSettings YES`: open Settings at launch.

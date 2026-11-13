@@ -18,6 +18,7 @@ struct PostTile: View {
     @State private var musicTask: Task<Void, Never>?
     @State private var holder = UUID()
     @State private var music = PostMusic.shared
+    @Environment(\.onScreen) private var onScreen
 
     /// Instagram's own limits: no taller than 4:5, no wider than 1.91:1.
     static func mediaAspect(_ post: Media) -> CGFloat { min(1.91, max(0.8, post.aspect)) }
@@ -48,6 +49,7 @@ struct PostTile: View {
         .contextMenu { PostMenu(media: post, open: open) }
         .onAppear { if track == nil { track = PostMusic.shared.cached(post.pk) } }
         .onDisappear { musicTask?.cancel(); PostMusic.shared.release(holder) }
+        .onChange(of: onScreen) { if !onScreen { musicTask?.cancel(); PostMusic.shared.release(holder) } }
         .onHover { inside in
             hovering = inside
             hoverTask?.cancel()
@@ -93,7 +95,7 @@ struct PostTile: View {
             let found = await PostMusic.shared.track(for: post, client: app.client)
             guard !Task.isCancelled else { return }
             track = found
-            if let found, hovering { PostMusic.shared.play(found, for: post.pk, holder: holder) }
+            if let found, hovering, onScreen { PostMusic.shared.play(found, for: post.pk, holder: holder) }
         }
     }
 

@@ -63,6 +63,9 @@ final class PostMusic {
         p.play()
         player = p
         playingPk = pk
+        #if DEBUG
+        FileHandle.standardError.write(Data("MUSIC play \(pk)\n".utf8))
+        #endif
     }
 
     /// The holder is done with it; the song stops when nobody holds it.
@@ -72,6 +75,9 @@ final class PostMusic {
     }
 
     func stop() {
+        #if DEBUG
+        if playingPk != nil { FileHandle.standardError.write(Data("MUSIC stop\n".utf8)) }
+        #endif
         holders = []
         player?.pause()
         player = nil

@@ -89,8 +89,18 @@ final class LoopingVideo {
         }
     }
 
-    func play() { player.play(); isPlaying = true }
-    func pause() { player.pause(); isPlaying = false }
+    func play() {
+        player.play(); isPlaying = true
+        #if DEBUG
+        if !player.isMuted { FileHandle.standardError.write(Data("VIDEO play (sound)\n".utf8)) }
+        #endif
+    }
+    func pause() {
+        player.pause(); isPlaying = false
+        #if DEBUG
+        FileHandle.standardError.write(Data("VIDEO pause\n".utf8))
+        #endif
+    }
     func toggle() { isPlaying ? pause() : play() }
     func restart() { player.seek(to: .zero); play() }
     var isMuted: Bool {

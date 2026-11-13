@@ -165,6 +165,7 @@ struct MessageBody: View {
 }
 
 struct AttachmentView: View {
+    @Environment(\.onScreen) private var onScreen
     let attachment: DMAttachment
     @State private var video: LoopingVideo?
     @Environment(\.openInViewer) private var openInViewer
@@ -214,6 +215,7 @@ struct AttachmentView: View {
             if autoplay, video == nil { let v = LoopingVideo(url: url, muted: true); v.play(); video = v }
         }
         .onDisappear { video?.tearDown(); video = nil }
+        .onChange(of: onScreen) { if !onScreen { video?.pause() } }
     }
 }
 
@@ -222,6 +224,7 @@ struct VoiceNote: View {
     let url: URL
     let durationMs: Int?
     @State private var video: LoopingVideo?
+    @Environment(\.onScreen) private var onScreen
 
     var body: some View {
         HStack(spacing: 10) {
@@ -251,6 +254,7 @@ struct VoiceNote: View {
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
         .onDisappear { video?.tearDown(); video = nil }
+        .onChange(of: onScreen) { if !onScreen { video?.pause() } }
     }
 }
 

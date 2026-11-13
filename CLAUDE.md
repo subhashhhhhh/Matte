@@ -117,6 +117,15 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
   `story_link_stickers` / `story_hashtags`; a post sticker's pk comes from its `media_code`): `-IGStickerTest bubble|open`
   starts the story at the first item with one and clicks it. `-IGAddToStory YES` opens "Add to story" for the first feed post.
 
+## Playback
+
+Pages stay alive while hidden, so anything with sound follows `EnvironmentValues.onScreen` (set in
+`RootView`: the shown page, not covered by a profile, story, story editor, opened post or the create
+sheet): videos (`StageVideo`, Reels, DM videos and voice notes) pause when it turns false and resume
+after; post songs (`PostMusic`, one player, shared by holders) are released. Debug builds log
+`MUSIC play/stop` and `VIDEO play/pause` to stderr; `-IGSwitchTo <page>` switches page 12 s after
+launch and back 6 s later.
+
 ## Real-time DMs
 
 `Instagram/DMs/Realtime/`: `DGWFrames` (DGW framing, protobuf `LSResponse`, Thrift compact),

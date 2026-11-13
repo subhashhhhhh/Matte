@@ -183,6 +183,10 @@ final class PhotoFlight {
 }
 
 extension EnvironmentValues {
+    /// The view's page is what you're looking at: not a hidden page (Matte keeps them alive),
+    /// not covered by a profile, a story, the story editor or an opened post. Anything that
+    /// plays sound pauses when this turns false and carries on when it's back.
+    @Entry var onScreen: Bool = true
     @Entry var photoFlight: PhotoFlight? = nil
     /// Starts loading a hovered post's comments (set by the page that owns the posts).
     @Entry var prewarmPost: ((Media) -> Void)? = nil
