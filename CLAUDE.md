@@ -126,6 +126,12 @@ after; post songs (`PostMusic`, one player, shared by holders) are released. Deb
 `MUSIC play/stop` and `VIDEO play/pause` to stderr; `-IGSwitchTo <page>` switches page 12 s after
 launch and back 6 s later.
 
+Mini player (`Views/MiniPlayer.swift`): the post or reel open in a viewer (`AppModel.presentedPost`, registered
+by `PostLightbox` and the Reels page while on screen) shrinks into the corner whenever you leave it (a profile,
+another tab, Back); clicking it goes back to that page/profile stack and grows it into place. Players are handed
+over, never restarted (`VideoHandoff` for videos, `PostMusic` holders for songs). Debug: `-IGMiniTest YES
+[-IGMiniExpand YES]`, `-IGSwitchTo <page> [-IGMiniBack YES]`.
+
 ## Real-time DMs
 
 `Instagram/DMs/Realtime/`: `DGWFrames` (DGW framing, protobuf `LSResponse`, Thrift compact),

@@ -22,22 +22,22 @@ struct MiniPlayer: View {
         GeometryReader { geo in
             if let media = mini.model.media {
                 let target = rect(corner, in: geo.size, aspect: media.aspect)
-                let full = PostLightbox.stageRect(in: geo.size, media: media)
-                let r = expanding ? full : docked ? target : mini.from
+                // Going back: to where it was on the page you came from.
+                let r = expanding ? mini.from : docked ? target : mini.from
                 // The viewer's backdrop, darkening as it grows (the viewer has the same one).
-                Color.black.opacity(expanding ? 0.82 : 0)
+                Color.black.opacity(expanding && !mini.origin.isReelsPage ? 0.82 : 0)
                     .allowsHitTesting(false)
                 MediaStage(media: media, cornerRadius: docked && !expanding ? 14 : 0, chrome: false)
                     .frame(width: r.width, height: r.height)
                     .overlay(alignment: .topLeading) {
                         if hovering, docked, !expanding {
                             Button { expand() } label: {
-                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                Image(systemName: "arrow.uturn.backward")
                                     .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
                                     .frame(width: 26, height: 26).background(Circle().fill(.black.opacity(0.6)))
                             }
                             .buttonStyle(.pressable)
-                            .help("Open full size")
+                            .help("Go back")
                             .padding(8)
                             .transition(.opacity)
                         }
@@ -77,7 +77,7 @@ struct MiniPlayer: View {
                             }
                         })
                     .position(x: r.midX + drag.width, y: r.midY + drag.height)
-                    .help("Click to open again · drag to move")
+                    .help("Click to go back · drag to move")
                     // Next frame, so it's drawn where the post was before it moves.
                     .onAppear { DispatchQueue.main.async { withAnimation(Self.dock) { docked = true } } }
             }
@@ -85,12 +85,14 @@ struct MiniPlayer: View {
         .onKeyPress(.escape) { close(); return .handled }
     }
 
-    /// Grows back to where the post's viewer shows it, then hands over (same player, no gap).
+    /// Goes back: the page you came from returns behind it, it grows back into its place
+    /// there, then the post's viewer (or the Reels player) takes over: same player, no gap.
     private func expand() {
         guard !expanding else { return }
         hovering = false
+        app.beginReturnFromMini()
         withAnimation(Self.dock, completionCriteria: .logicallyComplete) { expanding = true } completion: {
-            app.expandMini()
+            app.finishReturnFromMini()
         }
     }
 

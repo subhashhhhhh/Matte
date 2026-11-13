@@ -62,6 +62,11 @@ final class AppModel {
     /// Opens where you left it (Home the first time).
     var destination: Destination = Destination(rawValue: UserDefaults.standard.string(forKey: "lastPage") ?? "") ?? .home {
         didSet {
+            // Leaving with a post or reel open (another tab, or the same tab closing a profile):
+            // it shrinks into the mini player, as opening a profile does.
+            if !restoringMini, destination != oldValue || !profiles.isEmpty {
+                shrinkOpenPost(from: .init(destination: oldValue, profiles: profiles))
+            }
             visited.insert(destination)
             profiles = []
             UserDefaults.standard.set(destination.rawValue, forKey: "lastPage")
@@ -90,22 +95,68 @@ final class AppModel {
     }
     var presentedPost: PresentedPost?
 
-    /// A post or reel kept playing small in the corner while you look at a profile.
+    /// A post or reel kept playing small in the corner after you left it (a profile, another tab).
     struct MiniPost: Identifiable {
         let id = UUID()
         let model: MediaDetailModel
-        /// Where it was when it shrank (it flies from there).
+        /// Where it was when it shrank (it flies from there, and back).
         let from: CGRect
+        /// Where you were: going back returns there.
+        let origin: Origin
+
+        struct Origin {
+            var destination: Destination
+            var profiles: [StackPage]
+            /// The Reels page itself (going back plays it there, not in a viewer).
+            var isReelsPage: Bool { destination == .reels && profiles.isEmpty }
+        }
     }
     var miniPost: MiniPost?
+    @ObservationIgnored private var restoringMini = false
 
-    /// Opens the mini player's post full size again.
-    func expandMini() {
+    /// The open post or reel shrinks into the mini player (you're leaving `origin`).
+    private func shrinkOpenPost(from origin: MiniPost.Origin) {
+        guard let p = presentedPost, p.model.media != nil else { return }
+        VideoHandoff.shared.expect()
+        if origin.isReelsPage { reels?.handOffCurrent() }
+        presentedPost = nil
+        miniPost = MiniPost(model: p.model, from: p.frame, origin: origin)
+        p.close()
+        #if DEBUG
+        FileHandle.standardError.write(Data("MINI shrink from \(origin.destination) +\(origin.profiles.count) profiles\n".utf8))
+        #endif
+    }
+
+    /// Back to where the mini player's post was: that page (and the profiles you had open), the
+    /// post open there again, still playing (a reel from the Reels page plays on in Reels).
+    func returnFromMini() {
+        beginReturnFromMini()
+        finishReturnFromMini()
+    }
+
+    /// Step 1: the page you were on comes back behind the mini player (it then grows into place).
+    func beginReturnFromMini() {
         guard let mini = miniPost else { return }
         VideoHandoff.shared.expect()
-        openedPostFromMini = true
+        restoringMini = true
+        activity?.isOpen = false
+        destination = mini.origin.destination
+        profiles = mini.origin.profiles
+        restoringMini = false
+    }
+
+    /// Step 2: it's in place: the post's viewer takes over (a reel plays on in Reels).
+    func finishReturnFromMini() {
+        guard let mini = miniPost else { return }
+        VideoHandoff.shared.expect()
         miniPost = nil
-        openedPost = mini.model
+        if !mini.origin.isReelsPage {
+            openedPostFromMini = true
+            openedPost = mini.model
+        }
+        #if DEBUG
+        FileHandle.standardError.write(Data("MINI back to \(destination) +\(profiles.count) profiles, post open: \(openedPost != nil)\n".utf8))
+        #endif
     }
 
     /// The opened post grew out of the mini player: it appears at once (no fade), already in place.
@@ -220,6 +271,11 @@ final class AppModel {
                 FileHandle.standardError.write(Data("SWITCH to \(raw)\n".utf8))
                 destination = to
                 try? await Task.sleep(for: .seconds(6))
+                // `-IGMiniBack YES`: go back through the mini player instead of the tab.
+                if UserDefaults.standard.bool(forKey: "IGMiniBack"), miniPost != nil {
+                    returnFromMini()
+                    return
+                }
                 FileHandle.standardError.write(Data("SWITCH back\n".utf8))
                 destination = from
             }
@@ -235,7 +291,7 @@ final class AppModel {
                     if UserDefaults.standard.bool(forKey: "IGMiniExpand") {
                         try? await Task.sleep(for: .seconds(5))
                         FileHandle.standardError.write(Data("MINI expand\n".utf8))
-                        expandMini()
+                        returnFromMini()
                     }
                 }
             }
@@ -323,13 +379,7 @@ final class AppModel {
     func openProfile(_ user: User) {
         guard let client else { return }
         // The open post or reel shrinks into the corner and keeps playing.
-        if let p = presentedPost, p.model.media != nil {
-            VideoHandoff.shared.expect()
-            if destination == .reels { reels?.handOffCurrent() }
-            presentedPost = nil
-            miniPost = MiniPost(model: p.model, from: p.frame)
-            p.close()
-        }
+        shrinkOpenPost(from: .init(destination: destination, profiles: profiles))
         activity?.isOpen = false
         activity?.opened = nil
         stories?.close()
@@ -373,6 +423,7 @@ final class AppModel {
 
     func closeProfile() {
         guard !profiles.isEmpty else { return }
+        shrinkOpenPost(from: .init(destination: destination, profiles: profiles))
         profiles.removeLast()
         MemoryRelief.soon()
     }

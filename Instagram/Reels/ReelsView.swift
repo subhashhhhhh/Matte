@@ -108,7 +108,10 @@ final class ReelsModel {
         let covers = items.dropFirst(index + 1).prefix(3).compactMap { $0.image(minWidth: 720) }
         Task { await ImagePipeline.shared.prefetch(covers) }
         current?.tearDown()
-        if let up = upcoming, up.pk == reel.pk {
+        if let handed = VideoHandoff.shared.claim(reel.pk) {
+            // Back from the mini player: the same reel, still playing.
+            current = handed
+        } else if let up = upcoming, up.pk == reel.pk {
             current = up.video
             upcoming = nil
         } else {
