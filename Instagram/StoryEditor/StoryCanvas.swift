@@ -75,8 +75,10 @@ struct StoryCanvas: View {
                 }
             }
             .frame(width: r.width * k, height: r.height * k)
+            .clipShape(RoundedRectangle(cornerRadius: (model.doc.frame?.radius ?? 0) * k, style: .continuous))
             .position(x: r.midX * k, y: r.midY * k)
             .allowsHitTesting(false)
+            frameLabels
         }
         .frame(width: size.width, height: size.height)
         .contentShape(Rectangle())
@@ -102,6 +104,32 @@ struct StoryCanvas: View {
                                              height: base.offset.height + v.translation.height / k))
             }
             .onEnded { _ in commitBackground() })
+    }
+
+    /// A shared reel's author and length, where the export draws them (moving with the picture).
+    @ViewBuilder
+    private var frameLabels: some View {
+        if let frame = model.doc.frame, frame.hasLabels {
+            var d = model.doc
+            let _ = bgLive.map { d.bgScale = $0.scale; d.bgOffset = $0.offset }
+            let a = frame.labelAnchors(in: d)
+            let font = Font.custom("HelveticaNeue-Bold", size: StoryPictureFrame.labelSize * k)
+            ZStack(alignment: .topLeading) {
+                if let t = frame.leading {
+                    Text(t).font(font).foregroundStyle(.white).shadow(color: .black.opacity(0.55), radius: 5 * k + 1)
+                        .fixedSize()
+                        .offset(x: a.leading.x * k, y: a.leading.y * k)
+                }
+                if let t = frame.trailing {
+                    Text(t).font(font).foregroundStyle(.white).shadow(color: .black.opacity(0.55), radius: 5 * k + 1)
+                        .fixedSize()
+                        .frame(width: a.trailing.x * k, alignment: .trailing)
+                        .offset(y: a.trailing.y * k)
+                }
+            }
+            .frame(width: size.width, height: size.height, alignment: .topLeading)
+            .allowsHitTesting(false)
+        }
     }
 
     @ViewBuilder

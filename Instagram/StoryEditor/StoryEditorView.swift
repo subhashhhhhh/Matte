@@ -412,7 +412,7 @@ private struct BottomPanel: View {
 
     private var hint: String {
         if model.reshare != nil, model.selection == nil {
-            return "Click the post to change its look · Drag or scroll to move it · Double-click to add text"
+            return "Click the \(model.isReelReshare ? "reel" : "post") to change its look · Drag or scroll to move it · Double-click to add text"
         }
         return model.selection != nil
             ? "Drag to move · Corner handle or pinch to resize and turn · Delete to remove"
@@ -544,7 +544,7 @@ private struct TrimBar: View {
             HStack {
                 Text(Self.time(model.doc.trimStart)).monospacedDigit()
                 Spacer()
-                Text("\(Self.time(model.doc.trimEnd - model.doc.trimStart)) of up to 0:60")
+                Text("\(Self.time(model.doc.trimEnd - model.doc.trimStart)) of up to \(Self.time(CreateMedia.maxStorySeconds))")
                     .foregroundStyle(.white.opacity(0.8))
                 Spacer()
                 Text(Self.time(model.doc.trimEnd)).monospacedDigit()

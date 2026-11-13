@@ -155,11 +155,13 @@ final class AppModel {
             destination = d
         }
         // `-IGAddToStory YES`: "Add to story" for the first photo post in the feed (share only with a dry run).
-        if UserDefaults.standard.bool(forKey: "IGAddToStory") {
+        if let addMode = UserDefaults.standard.string(forKey: "IGAddToStory") {
             Task {
                 for _ in 0..<60 {
                     try? await Task.sleep(for: .milliseconds(500))
-                    if let post = feed?.posts.first(where: { !$0.isVideo }) {
+                    // `-IGAddToStory reel`: the first reel instead.
+                    let wantReel = addMode == "reel"
+                    if let post = feed?.posts.first(where: { wantReel ? $0.productType == "clips" : !$0.isVideo }) {
                         addToStory(post)
                         // `-IGReshareLook photo` / `-IGStoryMode background`: set up the editor for screenshots.
                         let d = UserDefaults.standard

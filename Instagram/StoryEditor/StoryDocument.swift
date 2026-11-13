@@ -16,12 +16,14 @@ nonisolated struct StoryDoc: Equatable, Sendable {
     var filter: StoryFilter = .normal
     /// What fills the canvas around the picture.
     var background: StoryBackground = .gradient
+    /// A shared reel's look: rounded corners and the author/duration labels with the picture.
+    var frame: StoryPictureFrame?
     /// Video only: the part that's kept (seconds) and whether its sound is.
     var trimStart: Double = 0
     var trimEnd: Double = 0
     var muted = false
 
-    var isBlank: Bool { items.isEmpty && strokes.isEmpty }
+    var isBlank: Bool { items.isEmpty && strokes.isEmpty && (frame?.hasLabels != true) }
 
     /// Where the background sits in the canvas for a picture of `aspect` (width / height).
     func bgRect(aspect: CGFloat) -> CGRect {
@@ -31,6 +33,32 @@ nonisolated struct StoryDoc: Equatable, Sendable {
         w *= bgScale; h *= bgScale
         return CGRect(x: c.width / 2 + bgOffset.width - w / 2, y: c.height / 2 + bgOffset.height - h / 2, width: w, height: h)
     }
+}
+
+/// How a shared reel's video is framed, as the phone app shows it: full screen with the
+/// author's name at the top, or a rounded card with the name and the length inside it.
+nonisolated struct StoryPictureFrame: Equatable, Sendable {
+    /// Corner radius in canvas units (0 = square).
+    var radius: CGFloat = 0
+    var leading: String?
+    var trailing: String?
+    /// Labels inside the picture's top edge (card), or at the top of the story (full screen).
+    var inside = false
+    /// The picture's width / height (for placing the labels without the picture at hand).
+    var aspect: CGFloat = 9.0 / 16
+
+    var hasLabels: Bool { leading != nil || trailing != nil }
+
+    /// Where the labels go, in canvas units: (leading's top-left, trailing's top-right).
+    func labelAnchors(in doc: StoryDoc) -> (leading: CGPoint, trailing: CGPoint) {
+        if inside {
+            let r = doc.bgRect(aspect: aspect)
+            return (CGPoint(x: r.minX + 40, y: r.minY + 40), CGPoint(x: r.maxX - 40, y: r.minY + 40))
+        }
+        return (CGPoint(x: 64, y: 150), CGPoint(x: StoryDoc.size.width - 64, y: 150))
+    }
+
+    static let labelSize: CGFloat = 40
 }
 
 /// What fills the story around the picture: two colours from it (as Instagram fills a photo

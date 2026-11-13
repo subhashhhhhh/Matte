@@ -254,7 +254,31 @@ nonisolated enum StoryRenderer {
             ctx.restoreGState()
         }
         for item in doc.items { place(item, in: ctx, ppu: 1) }
+        if let frame = doc.frame, frame.hasLabels {
+            let a = frame.labelAnchors(in: doc)
+            if let t = frame.leading { label(t, at: a.leading, alignRight: false, in: ctx) }
+            if let t = frame.trailing { label(t, at: a.trailing, alignRight: true, in: ctx) }
+        }
         return ctx.makeImage()
+    }
+
+    /// A white label with a soft shadow (a shared reel's author and length), top-left at `p`
+    /// (top-right when `alignRight`), in a y-down canvas context.
+    private static func label(_ text: String, at p: CGPoint, alignRight: Bool, in ctx: CGContext) {
+        let size = StoryPictureFrame.labelSize
+        let font = CTFontCreateWithName("HelveticaNeue-Bold" as CFString, size, nil)
+        let attrs: [NSAttributedString.Key: Any] = [NSAttributedString.Key(kCTFontAttributeName as String): font,
+                                                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1)]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attrs))
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        let x = alignRight ? p.x - CGFloat(width) : p.x
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -2), blur: 10, color: CGColor(gray: 0, alpha: 0.55))
+        ctx.translateBy(x: x, y: p.y + size)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.textPosition = .zero
+        CTLineDraw(line, ctx)
+        ctx.restoreGState()
     }
 
     static func context(width: Int, height: Int) -> CGContext? {
@@ -342,7 +366,21 @@ nonisolated enum StoryRenderer {
                 .concatenating(CGAffineTransform(scaleX: bg.width / e.width, y: bg.height / e.height))
                 // Core Image is y-up.
                 .concatenating(CGAffineTransform(translationX: bg.minX, y: canvas.height - bg.maxY)))
-        var out = placed.composited(over: backdrop(source: source, doc: doc, gradient: gradient))
+        var shown = placed
+        if let radius = doc.frame?.radius, radius > 0 {
+            // Rounded corners (a shared reel's card): mask the placed picture.
+            let rect = CGRect(x: bg.minX, y: canvas.height - bg.maxY, width: bg.width, height: bg.height)
+            let shape = CIFilter.roundedRectangleGenerator()
+            shape.extent = rect
+            shape.radius = Float(radius)
+            shape.color = .white
+            let blend = CIFilter.blendWithMask()
+            blend.inputImage = placed
+            blend.backgroundImage = CIImage.empty()
+            blend.maskImage = shape.outputImage
+            shown = blend.outputImage ?? placed
+        }
+        var out = shown.composited(over: backdrop(source: source, doc: doc, gradient: gradient))
         if let overlay { out = overlay.composited(over: out) }
         return out.cropped(to: canvasRect)
     }

@@ -154,6 +154,10 @@ final class StoryEditorModel {
     func loadReshare(_ media: Media) async {
         loading = true
         reshareMedia = media
+        if media.productType == "clips" || (media.isVideo && media.children.isEmpty) {
+            await loadReelReshare(media)
+            return
+        }
         cardStyle = .full
         guard let file = await PostStoryCard.render(media, style: .full) else {
             loading = false
@@ -173,9 +177,70 @@ final class StoryEditorModel {
         reshare = StoryReshare(mediaPk: media.pk, ownerId: media.user?.id ?? "")
     }
 
-    /// Switches a shared post between the full card and the picture alone (clicking the card).
-    /// Keeps where it is, its size and everything else on the story.
+    /// A shared reel, as the phone app does it: its video fills the story with the author's
+    /// name at the top; clicking it makes it a rounded card with the name and length inside.
+    private func loadReelReshare(_ media: Media) async {
+        var full = media
+        if full.video(minWidth: 720) == nil, let fetched = try? await client.mediaInfo(pk: media.pk) { full = fetched }
+        guard let url = full.video(minWidth: 720) else {
+            loading = false
+            notice = "Couldn't load this reel."
+            return
+        }
+        do {
+            let (temp, _) = try await URLSession.shared.download(from: url)
+            let file = CreateMedia.folder.appending(path: "reshare-\(UUID().uuidString).mp4")
+            try FileManager.default.moveItem(at: temp, to: file)
+            await load(file)
+        } catch {
+            loading = false
+            notice = "Couldn't load this reel."
+            return
+        }
+        guard let source else { return }
+        let seconds = Double(source.durationMs ?? 0) / 1000
+        reelLabels = (media.user?.username ?? "", String(format: "%d:%02d", Int(seconds) / 60, Int(seconds) % 60))
+        cardStyle = .photo
+        applyReelLook(.full, to: &doc)
+        // The phone app's dark backdrop behind a reel card.
+        doc.background = .color(StoryColor(hex: 0x161616))
+        original = doc
+        reshare = StoryReshare(mediaPk: media.pk, ownerId: media.user?.id ?? "")
+    }
+
+    /// The reel's author and length, for its labels.
+    @ObservationIgnored private var reelLabels: (name: String, length: String)?
+    var isReelReshare: Bool { reelLabels != nil }
+
+    /// Full screen (`.full`: fills the story, name at the top) or card (`.photo`: rounded, a
+    /// little smaller, name and length inside).
+    private func applyReelLook(_ look: PostStoryCard.Style, to d: inout StoryDoc) {
+        guard let source, let labels = reelLabels else { return }
+        let a = source.aspect
+        d.bgOffset = .zero
+        switch look {
+        case .full:
+            // Cover the story (a 9:16 reel exactly fills it).
+            let fit = StoryDoc().bgRect(aspect: a)
+            d.bgScale = max(StoryDoc.size.width / fit.width, StoryDoc.size.height / fit.height)
+            d.frame = StoryPictureFrame(radius: 0, leading: labels.name, trailing: nil, inside: false, aspect: a)
+        case .photo:
+            d.bgScale = 0.8
+            d.frame = StoryPictureFrame(radius: 44, leading: labels.name, trailing: labels.length, inside: true, aspect: a)
+        }
+        cardStyle = look
+    }
+
+    /// Switches a shared post between the full card and the picture alone (clicking the card),
+    /// or a shared reel between full screen and its card. Keeps where it is, its size and
+    /// everything else on the story.
     func toggleCardStyle() {
+        if isReelReshare {
+            // From the document, so it stays right after undo.
+            let next: PostStoryCard.Style = doc.frame?.inside == true ? .full : .photo
+            commit { applyReelLook(next, to: &$0) }
+            return
+        }
         guard let media = reshareMedia, !isBusy, !loading else { return }
         let next: PostStoryCard.Style = cardStyle == .full ? .photo : .full
         loading = true
