@@ -173,14 +173,39 @@ extension IGClient {
         try Self.dryRun("phone/configure_to_story", request: r)
         #endif
         // Its own session: nothing from this answer touches the web login's cookies.
-        let (data, response) = try await URLSession(configuration: .ephemeral).data(for: r)
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await URLSession(configuration: .ephemeral).data(for: r)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Timed out or the connection dropped: Instagram may have posted it already.
+            throw PhoneStoryOutcomeUnknown()
+        }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let answer = (try? JSON(data: data)) ?? .null
-        guard status == 200, answer["status"].string == "ok" else {
-            let message = answer["message"].string ?? answer["error_title"].string ?? "HTTP \(status)"
+        if status == 200, answer["status"].string == "ok" { return Parser.media(answer["media"]) }
+        // A clear "no" from Instagram (its JSON `status: fail`, or a 4xx): nothing was posted.
+        if answer["status"].string == "fail" || (400..<500).contains(status) {
             // Kept as Instagram worded it, so "Transcode not finished yet." is retried.
-            throw IGError.api(message.localizedCaseInsensitiveContains("transcode") ? message : "Phone publish refused: \(message)")
+            throw PhoneStoryRefused(message: answer["message"].string ?? answer["error_title"].string ?? "HTTP \(status)")
         }
-        return Parser.media(answer["media"])
+        // A server error or an answer we can't read: it may or may not be posted.
+        throw PhoneStoryOutcomeUnknown()
+    }
+}
+
+/// Instagram answered the phone publish with a refusal: nothing was posted (safe to publish
+/// another way).
+nonisolated struct PhoneStoryRefused: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
+/// The phone publish got no clear answer (timeout, dropped connection, server error): the story
+/// may already be up, so it's neither retried nor published another way.
+nonisolated struct PhoneStoryOutcomeUnknown: LocalizedError {
+    var errorDescription: String? {
+        "Couldn't tell whether Instagram posted your story. Check your profile before trying again."
     }
 }

@@ -400,12 +400,11 @@ final class CreateModel {
                     reshare: reshare) { [weak self] in
                     Task { @MainActor in self?.status = "Instagram is processing the video…" }
                 }
-            } catch {
-                if error is CancellationError { throw error }
-                #if DEBUG
-                if case IGError.http(-1, _) = error { throw error }  // dry run
-                #endif
-                log.error("Phone story publish failed: \(error.localizedDescription, privacy: .public)")
+            } catch let refused as PhoneStoryRefused {
+                // Only a clear refusal falls back to the website (nothing was posted). A timeout
+                // or dropped connection may have posted it already: that error goes to the user
+                // instead of risking the same story twice.
+                log.error("Phone story publish refused: \(refused.message, privacy: .public)")
                 app?.show("Posting without the tappable post (Instagram refused it)")
             }
         }
