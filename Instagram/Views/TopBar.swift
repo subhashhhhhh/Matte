@@ -7,7 +7,7 @@ struct TopBar: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            ChromeButton(app.isSidebarCollapsed ? "Expand Sidebar (⌃⌘S)" : "Collapse Sidebar (⌃⌘S)", symbol: "sidebar.left") {
+            ChromeButton(app.isSidebarCollapsed ? "Expand Sidebar (⌘S)" : "Collapse Sidebar (⌘S)", symbol: "sidebar.left") {
                 app.toggleSidebar()
             }
             if !app.profiles.isEmpty {

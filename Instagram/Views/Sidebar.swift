@@ -12,7 +12,7 @@ enum SidebarMetrics {
 }
 
 /// The destinations, Create and your account in a floating panel, as in Velvet and Twitter
-/// (Instagram's own icons). Collapsed (⌃⌘S, or the button in the top bar), it becomes a narrow
+/// (Instagram's own icons). Collapsed (⌘S, or the button in the top bar), it becomes a narrow
 /// rail of icons with short labels.
 struct Sidebar: View {
     @Environment(AppModel.self) private var app

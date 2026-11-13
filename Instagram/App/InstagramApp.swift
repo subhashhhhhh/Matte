@@ -20,16 +20,16 @@ struct InstagramApp: App {
                 .tint(Theme.accent)
                 .frame(minWidth: 860, minHeight: 560)
         }
-        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
         .defaultSize(width: 1180, height: 860)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") { app.showSettings = true }
                     .keyboardShortcut(",")
             }
-            CommandGroup(before: .toolbar) {
+            CommandGroup(replacing: .sidebar) {
                 Button(app.isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar") { app.toggleSidebar() }
-                    .keyboardShortcut("s", modifiers: [.control, .command])
+                    .keyboardShortcut("s")
             }
         }
     }

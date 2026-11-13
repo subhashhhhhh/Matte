@@ -128,6 +128,22 @@ struct RootView: View {
         .background(Theme.background)
         .coordinateSpace(.named("root"))
         .ignoresSafeArea()
+        // As in Velvet and Twitter: an empty, invisible system toolbar (unified style) only so
+        // macOS puts the window buttons lower and further in, inside the sidebar panel. Matte
+        // draws its own top bar under it.
+        .toolbar {
+            if #available(macOS 26.0, *) {
+                ToolbarItem(placement: .navigation) { Color.clear.frame(width: 1, height: 1) }
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .navigation) { Color.clear.frame(width: 1, height: 1) }
+            }
+        }
+        .toolbar(removing: .title)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        // In fullscreen the toolbar (and its window buttons) comes down with the menu bar only
+        // when the pointer is at the top of the screen.
+        .windowToolbarFullScreenVisibility(.onHover)
         .sheet(isPresented: $app.showSignIn) {
             SignInView(onComplete: { app.completeSignIn($0) }, onCancel: { app.showSignIn = false })
         }

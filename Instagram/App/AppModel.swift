@@ -210,7 +210,7 @@ final class AppModel {
     }
     /// The pages the sidebar shows (a professional account adds the Planner and Replies).
     var destinations: [Destination] { Destination.allCases.filter { managerMode || !$0.managerOnly } }
-    /// The sidebar is a narrow rail of icons (⌃⌘S), remembered across launches.
+    /// The sidebar is a narrow rail of icons (⌘S), remembered across launches.
     var isSidebarCollapsed = UserDefaults.standard.bool(forKey: "sidebarCollapsed") {
         didSet { UserDefaults.standard.set(isSidebarCollapsed, forKey: "sidebarCollapsed") }
     }
