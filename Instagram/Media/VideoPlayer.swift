@@ -167,7 +167,11 @@ final class VideoHandoff {
     /// Offers a player whose view is gone (the Reels page) to the next view of `key`.
     func offer(_ video: LoopingVideo, key: String) {
         guard isExpecting else { video.tearDown(); return }
-        offered[key]?.expiry.cancel()
+        if let previous = offered[key] {
+            previous.expiry.cancel()
+            // Replaced before anyone took it: stop it (nothing else holds it, so it would play on).
+            if previous.video !== video { previous.video.tearDown() }
+        }
         let expiry = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled, let self, self.offered[key]?.video === video else { return }
