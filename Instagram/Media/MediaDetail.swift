@@ -263,6 +263,7 @@ struct MediaStage: View {
     private var pageBinding: Binding<Int> { Binding { page } set: { page = $0 } }
     /// The photo it opened on: the flight's decoded photo (`initialImage`) is that one.
     @State private var startPage: Int
+    @State private var likeBurst = 0
 
     init(media: Media, cornerRadius: CGFloat = 12, initialImage: CGImage? = nil, chrome: Bool = true) {
         self.media = media
@@ -306,6 +307,7 @@ struct MediaStage: View {
                 .allowsHitTesting(false)
             }
         }
+        .overlay { HeartBurst(trigger: likeBurst) }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay(alignment: .topLeading) {
             if let track, chrome {
@@ -342,17 +344,34 @@ struct MediaStage: View {
 
     /// One photo or video of the post. Only the one showing plays: the photos beside it (kept
     /// by the swipe) show their cover.
+    private var doubleTap: (() -> Void)? {
+        guard chrome, media.expiresAt == nil else { return nil }
+        return { likeFromDoubleTap() }
+    }
+
     @ViewBuilder
     private func item(_ i: Int) -> some View {
         let current = items[i]
         let initial = i == startPage ? initialImage : nil
         if current.isVideo, i == page, let url = current.video(minWidth: 720) {
-            StageVideo(url: url, cover: current.image(minWidth: 720), initialCover: initial, key: current.pk)
+            StageVideo(url: url, cover: current.image(minWidth: 720), initialCover: initial, key: current.pk,
+                       onDoubleTap: doubleTap)
                 .id(current.pk + url.absoluteString)
+        } else if chrome, media.expiresAt == nil {
+            RemoteImage(url: current.image(minWidth: 1080), contentMode: .fit, initial: initial)
+                .id(current.pk)
+                .contentShape(Rectangle())
+                .doubleTapToLike(like: likeFromDoubleTap)
         } else {
             RemoteImage(url: current.image(minWidth: 1080), contentMode: .fit, initial: initial)
                 .id(current.pk)
         }
+    }
+
+    /// Double-click on the post: likes it (never unlikes), with the heart.
+    private func likeFromDoubleTap() {
+        app.actions?.like(media)
+        likeBurst += 1
     }
 
     private func pageArrow(_ symbol: String, action: @escaping () -> Void) -> some View {
@@ -374,6 +393,8 @@ struct StageVideo: View {
     var initialCover: CGImage? = nil
     /// The post's pk: a video handed over under it (`VideoHandoff`) is taken instead of a new one.
     var key: String? = nil
+    /// Double-click likes the post (a single click still pauses, a moment later).
+    var onDoubleTap: (() -> Void)? = nil
     @State private var video: LoopingVideo?
     @State private var sound = SoundSetting.shared
     @Environment(\.onScreen) private var onScreen
@@ -400,7 +421,7 @@ struct StageVideo: View {
             if let video {
                 PlayerLayerView(player: video.player, gravity: .resizeAspect)
                     .contentShape(Rectangle())
-                    .onTapGesture { video.toggle() }
+                    .modifier(PauseOrLike(toggle: video.toggle, like: onDoubleTap))
                 if !video.isPlaying {
                     Image(systemName: "play.fill").font(.system(size: 30)).foregroundStyle(.white.opacity(0.85))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -695,5 +716,15 @@ struct CommentComposer: View {
             }
             if model.replyingTo != nil { focused = true }
         }
+    }
+}
+
+/// A click pauses the video; with a like action, a double-click likes instead.
+private struct PauseOrLike: ViewModifier {
+    let toggle: () -> Void
+    let like: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let like { content.doubleTapToLike(single: toggle, like: like) } else { content.onTapGesture(perform: toggle) }
     }
 }

@@ -145,6 +145,7 @@ struct ReelsView: View {
     @State private var sound = SoundSetting.shared
     @FocusState private var focused: Bool
     @State private var playerFrame: CGRect = .zero
+    @State private var likeBurst = 0
 
     var body: some View {
         GeometryReader { geo in
@@ -214,7 +215,10 @@ struct ReelsView: View {
                     RemoteImage(url: reel.image(minWidth: 720), contentMode: .fit)
                     if let v = model.current, model.currentPk == reel.pk {
                         PlayerLayerView(player: v.player, gravity: .resizeAspect)
-                            .onTapGesture { v.toggle() }
+                            .doubleTapToLike(single: { v.toggle() }) {
+                                app.actions?.like(reel)
+                                likeBurst += 1
+                            }
                         if !v.isPlaying {
                             Image(systemName: "play.fill").font(.system(size: 30)).foregroundStyle(.white.opacity(0.85))
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -229,6 +233,7 @@ struct ReelsView: View {
             }
         }
         .animation(Motion.page, value: model.index)
+        .overlay { HeartBurst(trigger: likeBurst) }
         .frame(width: max(width, 200), height: max(height, 300))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu { if let reel = model.reel { PostMenu(media: reel) } }

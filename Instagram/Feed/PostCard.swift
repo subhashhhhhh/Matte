@@ -21,6 +21,7 @@ struct PostTile: View {
     @Environment(\.onScreen) private var onScreen
     /// The carousel photo showing (shared with the opened post).
     @State private var pages = CarouselPages.shared
+    @State private var likeBurst = 0
 
     /// Instagram's own limits: no taller than 4:5, no wider than 1.91:1.
     static func mediaAspect(_ post: Media) -> CGFloat { min(1.91, max(0.8, post.aspect)) }
@@ -52,7 +53,11 @@ struct PostTile: View {
         .shadow(color: .black.opacity(hovering ? 0.18 : 0), radius: hovering ? 14 : 0, y: hovering ? 6 : 0)
         .animation(.easeOut(duration: 0.25), value: hovering)
         .contentShape(Rectangle())
-        .onTapGesture(perform: open)
+        // Click opens the post; a quick double-click likes it instead.
+        .doubleTapToLike(single: open) {
+            app.actions?.like(post)
+            likeBurst += 1
+        }
         .contextMenu { PostMenu(media: post, open: open) }
         .onAppear { if track == nil { track = PostMusic.shared.cached(post.pk) } }
         .onDisappear { musicTask?.cancel(); PostMusic.shared.release(holder) }
@@ -136,6 +141,7 @@ struct PostTile: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .photoFlightTile(post, radius: 10)
         .overlay { if post.children.count > 1 { carouselChrome } }
+        .overlay { HeartBurst(trigger: likeBurst, size: min(90, w * 0.3)) }
         .overlay(alignment: .bottomLeading) { RepostBubbles(media: post, compact: true) }
         .overlay(alignment: .topTrailing) {
             if post.children.count > 1 {

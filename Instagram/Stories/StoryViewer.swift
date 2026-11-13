@@ -231,6 +231,12 @@ final class StoryViewerModel {
     }
     #endif
 
+    /// Double-click on the story: likes it (never unlikes); the heart pops either way.
+    func likeFromDoubleTap() {
+        guard item != nil, canReply else { return }
+        if isLiked { likeBurst += 1 } else { toggleLike() }
+    }
+
     func toggleLike() {
         guard let item, canReply else { return }
         let now = !isLiked
@@ -609,8 +615,10 @@ struct StoryViewer: View {
             }
             // Tap halves: back and forward, as on the phone.
             HStack(spacing: 0) {
-                Color.clear.contentShape(Rectangle()).onTapGesture { model.previous() }
-                Color.clear.contentShape(Rectangle()).onTapGesture { model.next() }
+                Color.clear.contentShape(Rectangle())
+                    .doubleTapToLike(single: { model.previous() }, like: { model.likeFromDoubleTap() })
+                Color.clear.contentShape(Rectangle())
+                    .doubleTapToLike(single: { model.next() }, like: { model.likeFromDoubleTap() })
             }
             if let item = model.item, !item.storyStickers.isEmpty {
                 StoryStickerLayer(model: model, stickers: item.storyStickers, size: CGSize(width: width, height: height))
@@ -884,44 +892,6 @@ private struct StoryViewersSheet: View {
     }
 }
 
-
-/// A big heart that pops over the story and fades when you like it, so the like is unmistakable.
-private struct HeartBurst: View {
-    let trigger: Int
-    @State private var shown = false
-
-    var body: some View {
-        IGGlyph(icon: .heartFilled, size: 110)
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.35), radius: 18)
-            .keyframeAnimator(initialValue: BurstFrame(), trigger: trigger) { view, f in
-                view.scaleEffect(f.scale).opacity(f.opacity).rotationEffect(.degrees(f.tilt))
-            } keyframes: { _ in
-                KeyframeTrack(\.scale) {
-                    SpringKeyframe(1.15, duration: 0.22, spring: .bouncy)
-                    SpringKeyframe(1.0, duration: 0.18)
-                    CubicKeyframe(1.0, duration: 0.25)
-                    CubicKeyframe(1.3, duration: 0.25)
-                }
-                KeyframeTrack(\.opacity) {
-                    LinearKeyframe(1, duration: 0.08)
-                    LinearKeyframe(1, duration: 0.57)
-                    CubicKeyframe(0, duration: 0.25)
-                }
-                KeyframeTrack(\.tilt) {
-                    SpringKeyframe(-8, duration: 0.2)
-                    SpringKeyframe(0, duration: 0.3)
-                }
-            }
-            .allowsHitTesting(false)
-    }
-
-    struct BurstFrame {
-        var scale: CGFloat = 0.2
-        var opacity: Double = 0
-        var tilt: Double = 0
-    }
-}
 
 /// Right-click on a story: like, send, link, and saving it (a video story also as a photo of
 /// the frame it's paused on).
