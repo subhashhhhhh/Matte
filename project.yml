@@ -21,7 +21,7 @@ targets:
         # The code module keeps its name (tests `@testable import Instagram`).
         PRODUCT_MODULE_NAME: Instagram
         PRODUCT_BUNDLE_IDENTIFIER: com.subhash.Matte
-        MARKETING_VERSION: "0.1"
+        MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         GENERATE_INFOPLIST_FILE: YES

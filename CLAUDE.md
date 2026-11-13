@@ -1,33 +1,29 @@
-# Instagram — a native macOS Instagram client
+# Matte — a native macOS Instagram client
 
-SwiftUI app that talks to instagram.com's own web API with the signed-in user's session
-cookies. Sign-in is a one-time WKWebView sheet on Instagram's login page; after that
-everything is native. Main uses: **DMs and Reels**, plus feed and stories. The goal is low
-memory (the website uses 4–5 GB on an 8 GB Mac).
+Matte is a SwiftUI app that talks to instagram.com's own web API with the signed-in user's
+session cookies. Sign-in is a one-time WKWebView sheet on Instagram's login page; after that
+everything is native. It's built for the desktop (a feed in columns, real-time DMs, Reels, stories,
+posting, a story editor) and to stay light: instagram.com in a browser takes 4–5 GB.
 
-## Build, test, install
+Matte isn't affiliated with Instagram or Meta. It only does what the website does, as the website
+does it.
 
-- The Xcode project is generated: edit `project.yml`, run `xcodegen generate`.
-- macOS 15, Swift 6, **MainActor default isolation**. Types that cross actors are
+## Build and run
+
+- The Xcode project is generated: edit `project.yml`, run `xcodegen generate` (Homebrew: `brew install xcodegen`).
+- macOS 15+, Xcode 27, Swift 6 with **MainActor default isolation**. Types that cross actors are
   `nonisolated`; `IGClient`, `IGSession`, `ImagePipeline` are actors.
-- Debug build: `xcodebuild -project Instagram.xcodeproj -scheme Instagram -configuration Debug -derivedDataPath <scratchpad>/dd CURRENT_PROJECT_VERSION=$(git rev-list --count HEAD) build`
-  (a fresh build number each time: macOS caches app icons by version, and a reused "1" keeps showing an old icon in the Dock).
-- The app is **Matte** (`PRODUCT_NAME`, Matte.app); the code module stays `Instagram`.
-- Install: **Debug only** (Release builds take too long): build Debug as above, quit the running app
-  (bundle id `com.subhash.Matte`; `com.subhash.Instagram` before 1.0, migrated by `IdentityMigration`), `ditto <…>/Debug/Matte.app "/Applications/Matte Debug.app"`, open it.
-  The user's second Mac (`ssh server-lan`, macOS 15) gets the same build: zip with `ditto -c -k --keepParent`, scp, unzip into
-  `/Applications/Matte Debug.app` there (quit it first, reopen if it was running).
-  Debug-only test guards skip copies running from `/Applications/` (that copy marks stories seen).
-- Tests: `xcodebuild test -project Instagram.xcodeproj -scheme Instagram -derivedDataPath <scratchpad>/dd-test`.
-  Read the whole result, including the trailing summary.
-- **Commit and push after every working step** (private repo, `main`). The Mac shuts down
-  without warning.
-
-## Working with the test author
-
-`InstagramTests/` belongs to a separate agent that writes tests (see its README). Fix the app
-code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
-`Instagram.xcodeproj`, `project.yml` and this file** — never `git add -A`.
+- The app is **Matte** (`PRODUCT_NAME`, bundle id `com.subhash.Matte`); the code module and scheme are still
+  called `Instagram`. Before 1.0 the bundle id was `com.subhash.Instagram`; `IdentityMigration` moves that
+  identity's logins and settings over on first launch.
+- Debug build: `xcodebuild -project Instagram.xcodeproj -scheme Instagram -configuration Debug -derivedDataPath build
+  CURRENT_PROJECT_VERSION=$(git rev-list --count HEAD) build` (a fresh build number each time: macOS caches app icons by version).
+- Tests (Swift Testing, hosted in the app): `xcodebuild test -project Instagram.xcodeproj -scheme Instagram`.
+  Read the whole result, including the summary at the end.
+- Releases (maintainer): `scripts/release.sh [--publish]` builds Apple silicon and Intel DMGs and zips signed with the
+  "Matte Self-Signed" certificate (docs/signing.md), and with `--publish` creates the GitHub release, writes
+  `updates/latest.json` (the in-app updater's feed) and updates the Homebrew cask (`packaging/matte.rb`). Release notes
+  live in `docs/releases/<version>.md`.
 
 ## Layout
 
@@ -37,7 +33,7 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `Instagram/Auth/` — `IGSession` (cookies, `csrftoken`, `ds_user_id`), `SignInView`, `AccountStore`
   (several accounts: the current one is `session.json`, the others are parked in `accounts/<id>.json`,
   `accounts.json` lists names/avatars; switching parks the current one and rebuilds every model).
-- Settings (⌘,, `Views/SettingsView.swift`, an in-window card): the accounts. **Manager tools**
+- **Manager tools**
   (`AppModel.managerMode`) follow the account type, no switch: on for a professional (business/creator) account
   (`Parser.isProfessional`: `is_professional_account` / `account_type` 2|3 in the profile query, remembered as
   `AccountSummary.professional`). Manager-only features (planner, scheduling, replies, insights) appear only then.
@@ -59,13 +55,13 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `Instagram/Images/` — `ImagePipeline` (downsampled decode, cost-limited cache), `RemoteImage`.
 - `Instagram/App/` — `AppModel`, `MemoryRelief`, `ResponseCache`, debug tools.
 - `ResponseCache`: last good first pages (feed per source, tray, reels, Explore, inbox, 20 recent
-  profiles) as Codable models in `~/Library/Caches/com.subhash.Instagram/data/<ds_user_id>/`.
+  profiles) as Codable models in `~/Library/Caches/com.subhash.Matte/data/<ds_user_id>/`.
   Models show them as `stale` (no cursor: paging refetches page 1 first), refresh replaces them
   unless the user scrolled or opened a post. Off in tests; sign-out wipes it. A model field added
   without a default-tolerant decoder makes old files a miss (once), never a failure.
 - `docs/dm-protocol.md` — DM protocol spec written from mautrix-instagram
   (`references/meta`, not tracked; `git clone https://github.com/mautrix/meta references/meta`).
-- On disk: `~/Library/Application Support/com.subhash.Instagram/` — `session.json` (0600),
+- On disk: `~/Library/Application Support/com.subhash.Matte/` — `session.json` (0600),
   `operations.json` (doc ids).
 
 ## How the API layer works
@@ -159,11 +155,13 @@ messaging id.
 
 ## Rules
 
-- **Probes are read-only.** Never like, follow, send, mark seen, etc. on the user's account
-  to test something; ask the user to try write actions themselves.
-- Never commit or print personal data (cookies, tokens, usernames, probe dumps). Keep probe
-  output in the scratchpad.
-- **Design is fully custom — never stock Apple UI.** Use `Views/Theme.swift` components.
-  `~/Developer/Velvet` (YouTube) and `~/Developer/Twitter` are the design references.
-- Memory: decode images at display size via `ImagePipeline`, don't hold big JSON trees,
-  call `MemoryRelief.soon()` after large parses, never grow collections from untrusted indices.
+- **Probes are read-only.** Never like, follow, send, mark seen, etc. on a real account to test something; ask the
+  person to try write actions themselves. Every write Matte makes was recorded from instagram.com first
+  (`-IGCapture … -IGCaptureInteractive YES`) and is checked with the dry run (`-IGDryRunWrites`); don't guess mutations.
+- Never commit or print personal data (cookies, tokens, usernames, user ids, probe dumps). Keep probe output out of
+  the repository.
+- **Design is fully custom; no stock Apple controls.** Use `Views/Theme.swift` components (and `Darkroom` colours on
+  the welcome screen). The design follows Velvet (github.com/subhashhhhhh/Velvet).
+- Memory: decode images at display size via `ImagePipeline`, don't hold big JSON trees, call `MemoryRelief.soon()`
+  after large parses, never grow collections from untrusted indices.
+- Write for people: plain words in UI text, comments and commit messages.

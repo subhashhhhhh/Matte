@@ -5,3 +5,8 @@ build/
 references/
 *.xcuserstate
 *.profraw
+
+# Release builds (scripts/release.sh)
+dist/
+# Personal notes for this checkout's agents
+CLAUDE.local.md
