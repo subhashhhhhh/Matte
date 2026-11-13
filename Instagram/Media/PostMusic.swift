@@ -1,8 +1,10 @@
 import SwiftUI
 import AVFoundation
 
-/// Songs on photo posts. The feed doesn't say which posts have one: a post's own info does,
-/// so it's asked once per post when you rest on it or open it, and remembered.
+/// Songs on photo posts. The feed doesn't say which posts have one (neither does
+/// instagram.com's): a post's own info does, so it's asked once per post (a feed card asks once
+/// it has been on screen for a moment, two at a time; resting on it or opening it asks at once)
+/// and remembered, songless or not.
 @Observable
 final class PostMusic {
     static let shared = PostMusic()
@@ -14,6 +16,7 @@ final class PostMusic {
     @ObservationIgnored private var known: [String: MusicTrack?] = [:]
     @ObservationIgnored private var order: [String] = []
     @ObservationIgnored private var asking: [String: Task<MusicTrack?, Never>] = [:]
+    @ObservationIgnored private var inFlight = 0
 
     /// The post's song, asking Instagram once (nil: none).
     func track(for media: Media, client: IGClient?) async -> MusicTrack? {
@@ -22,7 +25,13 @@ final class PostMusic {
         if let hit = known[media.pk] { return hit }
         guard let client else { return nil }
         if let running = asking[media.pk] { return await running.value }
-        let task = Task { (try? await client.mediaInfo(pk: media.pk))?.music }
+        let task = Task { () -> MusicTrack? in
+            // Two at a time: a screenful of cards shouldn't fire a burst of requests.
+            while self.inFlight >= 2 { try? await Task.sleep(for: .milliseconds(120)) }
+            self.inFlight += 1
+            defer { self.inFlight -= 1 }
+            return (try? await client.mediaInfo(pk: media.pk))?.music
+        }
         asking[media.pk] = task
         let found = await task.value
         asking[media.pk] = nil

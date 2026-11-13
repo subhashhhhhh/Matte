@@ -154,6 +154,10 @@ final class FeedModel {
     private func adopt(_ fresh: [Media]) -> Bool {
         defer { stale = false }
         if !posts.isEmpty, scrolledAway || opened != nil {
+            // Kept in place, but brought up to date (a cached post may lack what's new, e.g. its
+            // song's name).
+            let byPk = Dictionary(fresh.map { ($0.pk, $0) }, uniquingKeysWith: { a, _ in a })
+            posts = posts.map { byPk[$0.pk] ?? $0 }
             let known = Set(posts.map(\.pk))
             posts += fresh.filter { !known.contains($0.pk) }
             return false

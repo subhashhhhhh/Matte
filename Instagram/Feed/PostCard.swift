@@ -60,6 +60,15 @@ struct PostTile: View {
         }
         .contextMenu { PostMenu(media: post, open: open) }
         .onAppear { if track == nil { track = PostMusic.shared.cached(post.pk) } }
+        // A photo post's song, named on the card without hovering: asked once the card has
+        // stayed on screen a moment (not while scrolling past).
+        .task(id: post.pk) {
+            guard track == nil, !post.isVideo else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            let found = await PostMusic.shared.track(for: post, client: app.client)
+            if !Task.isCancelled, track == nil { track = found }
+        }
         .onDisappear { musicTask?.cancel(); PostMusic.shared.release(holder) }
         .onChange(of: onScreen) { if !onScreen { musicTask?.cancel(); PostMusic.shared.release(holder) } }
         // Paged onto a video while resting on the card: preview it (and stop on a photo).
@@ -90,14 +99,10 @@ struct PostTile: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 AuthorLine(media: post, avatarSize: 24, fontSize: 12.5)
-                // Named by the feed straight away; the audio is asked for when you rest on it.
                 if let track {
                     MusicLine(track: track, fontSize: 11, playing: music.playingPk == post.pk)
                         .padding(.leading, 32)
                         .transition(.opacity)
-                } else if let song = post.songName {
-                    MusicLine(title: song.title, artist: song.artist, fontSize: 11)
-                        .padding(.leading, 32)
                 }
             }
             Spacer(minLength: 0)
