@@ -16,7 +16,7 @@ import { downloads, brew, version, checksums } from '../data';
       <a class="choice" href={d.url}>
         <span class="name">{d.name}</span>
         <span class="hint">{d.hint}</span>
-        <span class="btn btn-primary">Download .dmg</span>
+        <span class="btn btn-primary">Download .dmg · {d.mb} MB</span>
       </a>
     ))}
   </div>
