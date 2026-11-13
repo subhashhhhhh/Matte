@@ -48,7 +48,7 @@ struct CreateSheet: View {
             Spacer()
             Text(title).font(.system(size: 15, weight: .bold))
             Spacer()
-            Button(model.isScheduling ? "Schedule" : "Share") { model.share() }
+            Button(model.isScheduling ? "Schedule" : "Share") { app.shareInBackground() }
                 .buttonStyle(.prominentCompact)
                 .disabled(!model.canShare)
                 .keyboardShortcut(.return, modifiers: .command)

@@ -78,6 +78,9 @@ struct RootView: View {
                     .zIndex(30)
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if !app.uploads.isEmpty, app.storyEditor == nil { UploadsCorner() }
+        }
         .overlay(alignment: .bottom) {
             if let toast = app.toast {
                 Text(toast)

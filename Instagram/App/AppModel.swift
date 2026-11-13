@@ -90,6 +90,8 @@ final class AppModel {
     private(set) var creating: CreateModel?
     /// The story editor, when open.
     private(set) var storyEditor: StoryEditorModel?
+    /// Posts, reels and stories sharing in the background (the corner rings).
+    var uploads: [UploadJob] = []
     /// The sidebar "+" menu (Post, Reel, Story).
     var showCreateMenu = false
     /// Files dropped on the window that could be a reel or a story: asks which.
@@ -405,7 +407,29 @@ final class AppModel {
     }
 
     /// A post or story is uploading: switching would cancel it.
-    var isPublishing: Bool { creating?.isSharing == true || storyEditor?.sharer?.isSharing == true }
+    var isPublishing: Bool {
+        creating?.isSharing == true || storyEditor?.sharer?.isSharing == true || uploads.contains { $0.state == .working }
+    }
+
+    /// A failed background post, back in the sheet to change something.
+    func reopenCreate(_ model: CreateModel) {
+        guard creating == nil, storyEditor == nil else { return }
+        creating = model
+    }
+
+    /// Share pressed in the create sheet: the sheet closes and the post shares in the corner.
+    func shareInBackground() {
+        guard let model = creating, let client, model.canShare else { return }
+        creating = nil
+        uploads.append(UploadJob(sheet: model, app: self, client: client))
+    }
+
+    /// Share pressed in the story editor: the editor closes, the story exports and uploads in the corner.
+    func shareStoryInBackground(source: CreateSource, doc: StoryDoc, gradient: StoryExport.Gradient) {
+        guard let client else { return }
+        uploads.append(UploadJob(story: source, doc: doc, gradient: gradient, app: self, client: client))
+        closeStoryEditor()
+    }
 
     /// Signs out of an account that isn't the current one.
     func removeAccount(_ id: String) {
@@ -469,6 +493,8 @@ final class AppModel {
         openedMedia = nil
         creating?.cancel()
         creating = nil
+        for job in uploads { job.cancelQuietly() }
+        uploads = []
         storyEditor?.tearDown()
         storyEditor = nil
         showCreateMenu = false

@@ -405,48 +405,15 @@ final class StoryEditorModel {
 
     // MARK: Sharing
 
-    /// Flattens the canvas (unless it's unchanged since the last try) and shares it.
+    /// Hands the canvas to a background upload and closes: it's flattened and shared in the
+    /// corner while you carry on (`UploadJob`).
     func share() {
         guard let source, !isBusy else { return }
         if editingText != nil { finishText() }
         mode = .normal
         selection = nil
-        if let sharer, let exported, exported.doc == doc, case .failed = sharer.phase {
-            sharer.share()  // Try Again: keeps the file and any finished upload.
-            return
-        }
-        let doc = doc, gradient = gradient
-        export = .rendering(0)
         video?.pause()
-        let report: @Sendable (Double) -> Void = { [weak self] p in
-            Task { @MainActor in if case .rendering = self?.export { self?.export = .rendering(p) } }
-        }
-        exportTask = Task {
-            do {
-                let media: PreparedMedia
-                if source.isVideo {
-                    media = try await StoryExport.video(source, doc: doc, gradient: gradient, progress: report)
-                } else {
-                    media = try await StoryExport.photo(source, doc: doc, gradient: gradient)
-                }
-                try Task.checkCancellation()
-                #if DEBUG
-                DebugStoryEditor.keep(media)
-                #endif
-                exported = (doc, media)
-                export = .idle
-                let sharer = CreateModel(app: app, client: client)
-                sharer.onShared = { [weak app] in app?.closeStoryEditor() }
-                self.sharer = sharer
-                sharer.shareFinishedStory(media, isVideo: source.isVideo)
-            } catch is CancellationError {
-                export = .idle
-            } catch {
-                log.error("Story export failed: \(error.localizedDescription, privacy: .public)")
-                export = .failed(error.localizedDescription)
-            }
-            MemoryRelief.soon()
-        }
+        app?.shareStoryInBackground(source: source, doc: doc, gradient: gradient)
     }
 
     func cancelShare() {
@@ -482,9 +449,12 @@ final class StoryEditorModel {
 
     /// Debug dry runs: shares and waits for the outcome.
     func shareAndWait() async {
-        share()
-        await exportTask?.value
-        await sharer?.waitForShare()
+        // The same background upload, without an app (the create probe).
+        guard let source else { return }
+        let job = UploadJob(story: source, doc: doc, gradient: gradient, app: nil, client: client)
+        await job.waitUntilDone()
+        sharer = job.sharer
+        if job.sharer == nil, case .failed(let m) = job.state { export = .failed(m) }
     }
     #endif
 }
