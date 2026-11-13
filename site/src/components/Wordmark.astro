@@ -1,0 +1,26 @@
+---
+// "Matte" in the app's script (Snell Roundhand, which only Apple systems have), drawn once
+// per theme by docs/graphics/render.jsx so that every browser shows the same letters.
+interface Props {
+  height: number;
+}
+const { height } = Astro.props;
+// The rendered images are 3× and trimmed to the ink; this is their shape.
+const ratio = 3.866;
+---
+
+<span class="wordmark" style={`height:${height}px;width:${Math.round(height * ratio)}px`}>
+  <img class="only-dark" src="/wordmark-dark.png" alt="Matte" height={height} width={Math.round(height * ratio)} />
+  <img class="only-light" src="/wordmark-light.png" alt="Matte" height={height} width={Math.round(height * ratio)} />
+</span>
+
+<style>
+  .wordmark {
+    display: inline-block;
+  }
+
+  .wordmark img {
+    width: 100%;
+    height: 100%;
+  }
+</style>

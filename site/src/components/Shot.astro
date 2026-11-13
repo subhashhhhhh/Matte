@@ -1,0 +1,24 @@
+---
+// One of the app's windows (docs/graphics/render.jsx draws them), in the page's theme.
+interface Props {
+  name: 'home' | 'messages' | 'reels' | 'planner';
+  alt: string;
+  eager?: boolean;
+}
+const { name, alt, eager } = Astro.props;
+// The shots are 2× of these sizes, with room around the window for its shadow.
+const size = name === 'home' ? { width: 1480, height: 1100 } : { width: 1440, height: 1100 };
+const loading = eager ? 'eager' : 'lazy';
+---
+
+<div class="shot">
+  <img class="only-dark" src={`/shots/${name}-dark.webp`} alt={alt} {...size} loading={loading} decoding="async" />
+  <img class="only-light" src={`/shots/${name}-light.webp`} alt={alt} {...size} loading={loading} decoding="async" />
+</div>
+
+<style>
+  .shot img {
+    width: 100%;
+    height: auto;
+  }
+</style>

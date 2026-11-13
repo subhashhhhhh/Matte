@@ -1,0 +1,68 @@
+---
+import Wordmark from './Wordmark.astro';
+import { repo, version } from '../data';
+---
+
+<footer class="foot">
+  <div class="wrap inner">
+    <div class="brand">
+      <Wordmark height={30} />
+      <p>Your Instagram, on the big screen. Free and open source, for macOS 15 and later.</p>
+    </div>
+    <nav aria-label="More">
+      <a href="/download">Download</a>
+      <a href="/changelog">Changelog · {version}</a>
+      <a href="/privacy">Privacy</a>
+      <a href={repo} rel="noopener">GitHub</a>
+    </nav>
+  </div>
+  <div class="wrap small">
+    <p>Matte is not affiliated with, endorsed by or sponsored by Instagram or Meta. Instagram is a trademark of Meta Platforms, Inc.</p>
+    <p>MIT licence</p>
+  </div>
+</footer>
+
+<style>
+  .foot {
+    margin-top: 40px;
+    border-top: 1px solid var(--line);
+    padding: 56px 0 40px;
+  }
+
+  .inner {
+    display: flex;
+    justify-content: space-between;
+    gap: 40px;
+    flex-wrap: wrap;
+  }
+
+  .brand p {
+    margin-top: 14px;
+    max-width: 340px;
+    font-size: 15px;
+    color: var(--ink-2);
+  }
+
+  nav {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 12px 48px;
+    align-content: start;
+    font-size: 15px;
+    color: var(--ink-2);
+  }
+
+  nav a:hover {
+    color: var(--ink);
+  }
+
+  .small {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-top: 48px;
+    font-size: 13px;
+    color: var(--ink-3);
+  }
+</style>

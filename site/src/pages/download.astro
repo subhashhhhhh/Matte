@@ -1,0 +1,95 @@
+---
+import Doc from '../layouts/Doc.astro';
+import Command from '../components/Command.astro';
+import { downloads, brew, version, checksums } from '../data';
+---
+
+<Doc
+  title="Download Matte for Mac"
+  description="Download Matte, the free Instagram app for your Mac. For Apple silicon and Intel, on macOS 15 or later."
+  eyebrow={`Version ${version}`}
+  heading="Download Matte"
+  intro="Free, for Macs with Apple silicon or Intel on macOS 15 (Sequoia) or later. You’ll need an Instagram account."
+>
+  <div class="choices">
+    {downloads.map((d) => (
+      <a class="choice" href={d.url}>
+        <span class="name">{d.name}</span>
+        <span class="hint">{d.hint}</span>
+        <span class="btn btn-primary">Download .dmg</span>
+      </a>
+    ))}
+  </div>
+  <p class="which">Not sure which? Open the Apple menu › <strong>About This Mac</strong>. If you see <strong>Chip</strong>, choose Apple silicon. If you see <strong>Processor</strong>, choose Intel.</p>
+
+  <h2>Or install with Homebrew</h2>
+  <p>One command in Terminal. Homebrew picks the right version for your Mac, and you can skip the first-open steps below.</p>
+  <div class="brew"><Command command={brew} /></div>
+
+  <h2>Opening Matte for the first time</h2>
+  <ol>
+    <li>Open the disk image and drag <strong>Matte</strong> to <strong>Applications</strong>.</li>
+    <li>Open Matte. macOS stops it the first time, because Apple’s notarization needs a paid developer account that Matte doesn’t have.</li>
+    <li>Open <strong>System Settings › Privacy &amp; Security</strong>, scroll to <strong>Security</strong> and click <strong>Open Anyway</strong>. You only do this once.</li>
+  </ol>
+  <p>Prefer Terminal? This does the same:</p>
+  <div class="brew"><Command command="xattr -cr /Applications/Matte.app" /></div>
+
+  <h2>Updates</h2>
+  <p>Matte checks for a new version once a day. When there is one, <strong>Settings › About</strong> shows what’s new and an <strong>Install and Relaunch</strong> button. Before installing, Matte checks that the download is complete and signed the same way as the app you have.</p>
+  <p>Want to check a download yourself? Here are the <a href={checksums}>SHA-256 checksums</a>.</p>
+</Doc>
+
+<style>
+  .choices {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .choice {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 30px;
+    border-radius: 26px;
+    background: var(--card);
+    box-shadow: inset 0 0 0 1px var(--line), var(--shadow);
+    transition: transform 240ms var(--ease);
+  }
+
+  .choice:hover {
+    transform: translateY(-2px);
+  }
+
+  .name {
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+  }
+
+  .hint {
+    color: var(--ink-2);
+    font-size: 15px;
+  }
+
+  .choice .btn {
+    align-self: flex-start;
+    margin-top: 18px;
+  }
+
+  .which {
+    margin-top: 22px;
+    font-size: 15px;
+  }
+
+  .brew {
+    margin: 16px 0;
+  }
+
+  @media (max-width: 700px) {
+    .choices {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

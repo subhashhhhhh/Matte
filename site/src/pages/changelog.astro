@@ -1,0 +1,45 @@
+---
+import fs from 'node:fs';
+import path from 'node:path';
+import { marked } from 'marked';
+import Doc from '../layouts/Doc.astro';
+import { versions } from '../data';
+
+// Each release's notes are docs/releases/<version>.md; the site is rebuilt on every push,
+// so a new release shows here with no change to the site.
+const notesDir = path.resolve(process.cwd(), '../docs/releases');
+const releases = await Promise.all(
+  versions.map(async (version) => {
+    const text = fs.readFileSync(path.join(notesDir, `${version}.md`), 'utf8');
+    const body = text.replace(/^# .*\n+/, '').trim();
+    return { version, html: await marked.parse(body) };
+  }),
+);
+---
+
+<Doc
+  title="Changelog — Matte"
+  description="What changed in each version of Matte, newest first."
+  eyebrow="Changelog"
+  heading="What’s new in Matte"
+  intro="Every release, newest first. Matte checks for updates once a day and tells you in Settings › About."
+>
+  {releases.map((r) => (
+    <article class="release">
+      <h2>Version {r.version}</h2>
+      <div set:html={r.html} />
+    </article>
+  ))}
+</Doc>
+
+<style>
+  .release + .release {
+    margin-top: 40px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+
+  .release h2 {
+    margin-top: 0 !important;
+  }
+</style>

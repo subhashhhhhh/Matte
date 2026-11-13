@@ -1,0 +1,34 @@
+---
+import Doc from '../layouts/Doc.astro';
+---
+
+<Doc
+  title="Privacy — Matte"
+  description="What Matte keeps on your Mac, what it sends and to whom. No analytics, no tracking, no servers of its own."
+  eyebrow="Privacy"
+  heading="What Matte keeps and what it sends"
+  intro="Short version: Matte has no servers, no analytics and no tracking. It talks to Instagram, and to GitHub to check for updates."
+>
+  <h2>Signing in</h2>
+  <p>You sign in on Instagram’s own login page, in a window inside Matte. Matte never sees or stores your password.</p>
+  <p>After you sign in, Matte keeps your session in a file in <code>~/Library/Application Support/com.subhash.Matte</code>. Only your macOS user can read it, though other apps you run can too, and your backups include it. Signing out removes it.</p>
+
+  <h2>Who Matte talks to</h2>
+  <table>
+    <thead>
+      <tr><th>Service</th><th>What Matte sends</th><th>Why</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Instagram (instagram.com and its image and video servers)</td><td>Your session, and what you do in the app</td><td>Everything you see and do</td></tr>
+      <tr><td>GitHub</td><td>No personal data</td><td>The daily update check and the update download</td></tr>
+    </tbody>
+  </table>
+  <p>That’s the whole list. No analytics, no telemetry, no crash reports.</p>
+
+  <h2>Before you use Matte</h2>
+  <div class="note">
+    <p><strong>Matte is an unofficial app.</strong> Instagram’s terms don’t allow unofficial apps, so Instagram could limit or block an account that uses one.</p>
+    <p>Matte keeps that risk low: it sends the same requests instagram.com does, at the pace a person uses it. One feature works differently: when you add a post or reel to your story, Matte shares it the way Instagram’s Android app does, so the post sticker can be tapped.</p>
+    <p>You use Matte at your own risk.</p>
+  </div>
+</Doc>

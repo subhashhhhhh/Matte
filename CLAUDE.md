@@ -52,6 +52,10 @@ does it.
   `pref.*`): appearance, open-on page, starting feed, hide suggested, start muted, hover previews, mini player,
   notifications, Dock badge, ghost mode (no story seen / read receipts / typing), download place, storage, accounts, about.
   `-IGSettingsSection <name>` opens a section; `-IGRenderSettings <dir>` renders every section (light and dark) without a window.
+- `site/` — the website (matte.subhashh.tech): Astro, static, light (the icon's paper) and dark themes, served by a
+  Cloudflare Worker (`site/wrangler.jsonc`). Version and changelog come from `docs/releases/*.md` at build time.
+  `cd site && npm install && npm run build`. Its window screenshots and the README images are drawn in React
+  (`docs/graphics/app.jsx`, made-up accounts) and rendered by `docs/graphics/render.jsx` (`npm run render` there; macOS).
 - `Instagram/Images/` — `ImagePipeline` (downsampled decode, cost-limited cache), `RemoteImage`.
 - `Instagram/App/` — `AppModel`, `MemoryRelief`, `ResponseCache`, debug tools.
 - `ResponseCache`: last good first pages (feed per source, tray, reels, Explore, inbox, 20 recent
