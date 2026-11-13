@@ -13,7 +13,13 @@ final class PostActions {
         var saved: Bool
         var reposted = false
         var repostCount: Int?
+        /// Your collections it's in.
+        var collections: Set<String> = []
     }
+
+    /// Your collections, for the save button's list (loaded when first needed).
+    private(set) var collections: [SavedCollection]?
+    @ObservationIgnored private var collectionsTask: Task<Void, Never>?
 
     private(set) var overrides: [String: State] = [:]
     /// Your repost's note id per media pk, once known (removing a repost takes it).
@@ -32,7 +38,8 @@ final class PostActions {
 
     func state(_ m: Media) -> State {
         overrides[m.pk] ?? State(liked: m.hasLiked, likeCount: m.likeCount, saved: m.hasSaved,
-                                 reposted: myNote(in: m) != nil, repostCount: m.repostCount)
+                                 reposted: myNote(in: m) != nil, repostCount: m.repostCount,
+                                 collections: Set(m.savedCollectionIds ?? []))
     }
 
     private func myNote(in m: Media) -> String? {
@@ -57,10 +64,69 @@ final class PostActions {
     /// Likes (never unlikes): for double-click, as double-tap does on the phone.
     func like(_ m: Media) { if !state(m).liked { toggleLike(m) } }
 
+    func loadCollections(force: Bool = false) {
+        guard force || (collections == nil && collectionsTask == nil) else { return }
+        collectionsTask = Task {
+            defer { collectionsTask = nil }
+            do { collections = try await client.collectionPicker() } catch {
+                if collections == nil { app?.report(error) }
+            }
+        }
+    }
+
+    /// Puts the post in a collection or takes it out (the save button's list). Adding saves it
+    /// first if it isn't, as instagram.com does; taking it out leaves it saved.
+    func toggleCollection(_ id: String, media m: Media) {
+        let old = state(m)
+        var new = old
+        let adding = !old.collections.contains(id)
+        if adding { new.collections.insert(id); new.saved = true } else { new.collections.remove(id) }
+        overrides[m.pk] = new
+        let name = collections?.first { $0.id == id }?.name ?? "collection"
+        Task {
+            do {
+                if adding {
+                    if !old.saved { try await client.setSaved(true, media: m) }
+                    try await client.addToCollection(id, media: m)
+                    app?.show("Saved to \(name)")
+                } else {
+                    try await client.removeFromCollection(id, media: m)
+                    app?.show("Removed from \(name)")
+                }
+            } catch {
+                overrides[m.pk] = old
+                app?.report(error)
+            }
+        }
+    }
+
+    /// A new collection with the post in it (and the post saved), as instagram.com makes one.
+    func createCollection(named title: String, with m: Media) {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        let old = state(m)
+        Task {
+            do {
+                let id = try await client.createCollection(named: title, with: m)
+                if !old.saved { try await client.setSaved(true, media: m) }
+                var new = state(m)
+                new.saved = true
+                new.collections.insert(id)
+                overrides[m.pk] = new
+                collections = [SavedCollection(id: id, name: title, cover: m.image(minWidth: 120))] + (collections ?? [])
+                app?.show("Saved to \(title)")
+            } catch {
+                app?.report(error)
+            }
+        }
+    }
+
     func toggleSave(_ m: Media) {
         let old = state(m)
         var new = old
         new.saved.toggle()
+        // Unsaving takes it out of every collection too.
+        if !new.saved { new.collections = [] }
         overrides[m.pk] = new
         Task {
             do {
@@ -295,9 +361,7 @@ struct PostActionBar: View {
                 }
                 iconButton(.share, help: "Send to…") { actions.send(media) }
                 Spacer(minLength: 0)
-                iconButton(state.saved ? .saveFilled : .save, help: state.saved ? "Remove from saved" : "Save") {
-                    actions.toggleSave(media)
-                }
+                SaveButton(media: media, size: size)
             }
         }
     }

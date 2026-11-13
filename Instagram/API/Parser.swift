@@ -146,6 +146,8 @@ nonisolated enum Parser {
         if !grid.isEmpty { m.pinnedOnGrid = grid }
         let reels = j["clips_tab_pinned_user_ids"].array.compactMap(idString)
         if !reels.isEmpty { m.pinnedOnReels = reels }
+        let inCollections = j["saved_collection_ids"].array.compactMap(idString)
+        if !inCollections.isEmpty { m.savedCollectionIds = inCollections }
         m.children = j["carousel_media"].array.compactMap(media)
         if m.kind == .carousel, m.images.isEmpty, let first = m.children.first {
             m.images = first.images

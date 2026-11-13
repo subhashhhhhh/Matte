@@ -277,9 +277,7 @@ struct ReelsView: View {
                     countLabel(state.repostCount)
                 }
                 glyphButton(.share, help: "Send to…") { actions.send(reel) }
-                glyphButton(state.saved ? .saveFilled : .save, help: state.saved ? "Remove from saved" : "Save") {
-                    actions.toggleSave(reel)
-                }
+                SaveButton(media: reel, size: 26)
                 Menu { PostMenu(media: reel) } label: {
                     Image(systemName: "ellipsis").font(.system(size: 20, weight: .semibold)).frame(width: 36, height: 30)
                 }

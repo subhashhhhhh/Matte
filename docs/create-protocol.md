@@ -146,3 +146,18 @@ Background sharing: Share in the sheet or the story editor closes it and hands t
   song plays in the editor; shared as a video (`StoryExport.photoWithMusic`: the flattened photo as a
   still H.264 video for the poster's part of the song, up to 60 s, with that part as AAC audio).
   Sound off shares the photo alone.
+
+
+## Collections (recorded 2026-11-13)
+
+The save button's hover list, as instagram.com does it (GraphQL, `input` = `actor_id`, `client_mutation_id` plus):
+
+- List: `PolarisSavedCollectionPickerQuery` (`first: 20`), then `PolarisSavedCollectionPickerPaginationQuery`
+  (`after`, `first`); `viewer.media_collections.edges[].node` has `collection_id`, `collection_name`, `cover_media`.
+- Which collections a post is in: the post's own `saved_collection_ids` (null when not saved).
+- Pick a collection on an unsaved post: `usePolarisSaveMediaSaveMutation`, then
+  `usePolarisMediaSaveToCollectionAddMediaMutation` (`collection_id`, `media_id`).
+- Take it out: `PolarisAPIEditCollectionRemoveMediaMutation` (`collection_id`, `media_id`); it stays saved.
+- New collection: `PolarisAPICreateCollectionMutation` (`added_media_ids: [pk]`, `name`), then the save mutation.
+- Also seen: `PolarisAPIDeleteCollectionMutation` (`collection_id`), `PolarisAPIUnsavePostMutation` (Saved page).
+  Renaming hung on the website itself, so it isn't recorded.

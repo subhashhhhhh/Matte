@@ -145,6 +145,8 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     /// Reels tab (`clips_tab_pinned_user_ids`): a collab post can be pinned on one author's page only.
     var pinnedOnGrid: [String]?
     var pinnedOnReels: [String]?
+    /// Your collections it's in (`saved_collection_ids`; only on posts you saved).
+    var savedCollectionIds: [String]?
 
     /// A shortcode's media pk (the code is the pk in Instagram's URL-safe base 64; longer
     /// codes of private posts carry extra characters after the first 11).
