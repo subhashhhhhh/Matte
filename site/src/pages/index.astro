@@ -56,9 +56,12 @@ const more = [
           <Command command={brew} />
         </div>
         <p class="meta" data-hero-fade>Free · macOS 15 or later · Apple silicon and Intel</p>
+        <p class="phone-note" data-hero-fade>Matte runs on Macs: open this page on your Mac to download it.</p>
       </div>
       <div class="wrap hero-shot" data-hero-window>
+        <div class="crop" style="--w:150;--x:37.5;--y:0;--ar:1.06">
         <Shot name="home" eager hero alt="Matte’s home feed: posts in three columns, stories down the side, a reel playing in the corner and a message arriving" />
+        </div>
       </div>
     </section>
 
@@ -80,7 +83,7 @@ const more = [
         <h2 data-title>Answer DMs without reaching for your phone</h2>
         <p class="lede">Messages pop up on your Mac while you work. Reply with a real keyboard, send photos and videos straight from your computer, and keep the chats that matter pinned at the top.</p>
       </div>
-      <div class="media" data-rise>
+      <div class="media crop" data-rise style="--w:167;--x:55;--y:3.8;--ar:1">
         <Shot name="messages" alt="A conversation in Matte with a shared reel, a voice note and a reaction, and a new message notification" />
       </div>
     </section>
@@ -91,7 +94,7 @@ const more = [
         <h2 data-title>Reels on a screen big enough to enjoy them</h2>
         <p class="lede">Watch with the comments right beside the video. Go check something else and the reel keeps playing in the corner.</p>
       </div>
-      <div class="media">
+      <div class="media crop" style="--w:150;--x:40.5;--y:9.2;--ar:1.18">
         <!-- The reel leaves its place in the Reels window for the corner while Home comes to the
              front (site.ts). The layers are the same size, so they stack exactly. -->
         <div class="pip" data-pip-scene>
@@ -116,7 +119,7 @@ const more = [
         <h2 data-title>Post on time, even on your busiest days</h2>
         <p class="lede">Line up a month of posts and reels, and Instagram publishes each one on time, even with your Mac closed. Then answer every comment still waiting for you, from one list.</p>
       </div>
-      <div class="media" data-rise>
+      <div class="media crop" data-rise style="--w:210;--x:31.5;--y:20.9;--ar:1.27">
         <Shot name="planner" alt="Matte’s planner: a month of scheduled posts and reels, with the upcoming ones listed beside it" />
       </div>
     </section>
@@ -426,11 +429,10 @@ const more = [
     opacity: 1;
   }
 
+  /* On a phone it would sit on the words you're reading. */
   @media (max-width: 700px) {
     .dock {
-      width: 88px;
-      right: 16px;
-      bottom: 16px;
+      display: none;
     }
   }
 
@@ -598,6 +600,73 @@ const more = [
 
   .final .lede {
     margin-top: 20px;
+  }
+
+  .phone-note {
+    display: none;
+  }
+
+  /* Phones: each window shows the part that matters at a size you can read, instead of the
+     whole window shrunk down. --w is the shot's width as a % of the frame, --x and --y move
+     it (in % of the frame's width), --ar is the frame's shape. */
+  @media (max-width: 700px) {
+    .crop {
+      position: relative;
+      overflow: hidden;
+      aspect-ratio: var(--ar);
+      margin: 0;
+      border-radius: 16px;
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .media.crop {
+      margin: 0;
+    }
+
+    .crop > :global(*) {
+      width: calc(var(--w) * 1%);
+      max-width: none;
+      margin-left: calc(var(--x) * -1%);
+      margin-top: calc(var(--y) * -1%);
+    }
+
+    .hero {
+      padding-top: 112px;
+    }
+
+    .hero-shot {
+      margin-top: 32px;
+      margin-bottom: 0;
+    }
+
+    .phone-note {
+      display: block;
+      margin-top: 8px;
+      font-size: 14px;
+      color: var(--ink-2);
+    }
+
+    .reasons {
+      padding-top: 56px;
+      padding-bottom: 32px;
+    }
+
+    .feature,
+    .feature.flip,
+    .ghost {
+      gap: 24px;
+      padding-top: 40px;
+      padding-bottom: 40px;
+    }
+
+    .more {
+      padding-top: 40px;
+      padding-bottom: 56px;
+    }
+
+    .final {
+      padding: 72px 0 64px;
+    }
   }
 
   @media (max-width: 900px) {

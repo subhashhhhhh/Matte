@@ -58,6 +58,8 @@
 }
 
 html {
+  /* Nothing may make the page wider than the screen (a phone would zoom out to fit it). */
+  overflow-x: clip;
   background: var(--bg);
   transition: background-color 300ms var(--ease);
   -webkit-text-size-adjust: 100%;
