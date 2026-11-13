@@ -10,12 +10,17 @@ struct MessagesView: View {
     @State private var viewerItemId: String?
     @State private var composing = false
     @State private var newMessageQuery = ""
+    /// The window has room for the shared column.
+    @State private var paneFitsNow = false
+    /// The shared column was opened just to show an item (it folds away again when it closes).
+    @State private var paneOpenedForViewer = false
 
     var body: some View {
         GeometryReader { geo in
             let paneFits = geo.size.width >= 1080
             let paneWidth = min(520, max(340, geo.size.width * 0.3))
             let listWidth: CGFloat = geo.size.width >= 1300 ? 330 : 290
+            let _ = syncPaneFits(paneFits)
             HStack(spacing: 0) {
                 ThreadList(model: model, composing: $composing)
                     .frame(width: listWidth)
@@ -42,7 +47,11 @@ struct MessagesView: View {
                 }
             }
             .environment(\.openInViewer, openRequest)
-            .environment(\.sharedPaneToggle, paneFits ? { withAnimation(.smooth(duration: 0.25)) { showPane.toggle() } } : nil)
+            .environment(\.sharedPaneToggle, paneFits ? {
+                // Your choice now: it stays as you leave it.
+                paneOpenedForViewer = false
+                withAnimation(.smooth(duration: 0.25)) { showPane.toggle() }
+            } : nil)
             .environment(\.sharedPaneShown, paneFits && showPane)
         }
         .animation(.smooth(duration: 0.25), value: viewer?.id)
@@ -81,6 +90,12 @@ struct MessagesView: View {
                 if let path = UserDefaults.standard.string(forKey: "IGStageFile") {
                     try? await Task.sleep(for: .seconds(1))
                     model.conversation?.stage(files: [URL(fileURLWithPath: path)])
+                }
+                // `-IGOpenShared N`: open the Nth shared item (newest first) in the side pane.
+                if UserDefaults.standard.object(forKey: "IGOpenShared") != nil {
+                    for _ in 0..<20 where items.isEmpty { try? await Task.sleep(for: .milliseconds(300)) }
+                    let k = UserDefaults.standard.integer(forKey: "IGOpenShared")
+                    if items.indices.contains(k) { open(items[k]) }
                 }
                 // `-IGForwardLast YES`: open "Forward to…" for the newest forwardable message (nothing is sent).
                 if UserDefaults.standard.bool(forKey: "IGForwardLast"), let c = model.conversation {
@@ -121,14 +136,29 @@ struct MessagesView: View {
     private var items: [SharedItem] { SharedItem.items(in: model.conversation?.messages ?? []) }
 
     private func open(_ item: SharedItem) {
+        showPaneForViewer()
         viewerItemId = item.id
         viewer = makeViewer(item.request)
     }
 
     private func openRequest(_ request: ViewerRequest) {
         if let item = items.first(where: { $0.request == request }) { open(item); return }
+        showPaneForViewer()
         viewerItemId = nil
         viewer = makeViewer(request)
+    }
+
+    /// With room for it, an opened item shows in the shared column beside the chat (opening the
+    /// column if it was folded away), never over the chat.
+    private func showPaneForViewer() {
+        guard paneFitsNow, !showPane else { return }
+        paneOpenedForViewer = true
+        withAnimation(.smooth(duration: 0.25)) { showPane = true }
+    }
+
+    private func syncPaneFits(_ fits: Bool) {
+        guard fits != paneFitsNow else { return }
+        DispatchQueue.main.async { paneFitsNow = fits }
     }
 
     private func makeViewer(_ request: ViewerRequest) -> MediaDetailModel? {
@@ -147,6 +177,10 @@ struct MessagesView: View {
     private func closeViewer() {
         viewer = nil
         viewerItemId = nil
+        if paneOpenedForViewer {
+            paneOpenedForViewer = false
+            withAnimation(.smooth(duration: 0.25)) { showPane = false }
+        }
     }
 }
 
