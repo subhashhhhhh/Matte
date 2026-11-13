@@ -16,6 +16,16 @@ final class CarouselPages {
 }
 
 extension Media {
+    /// Only a preview: a grid listed it without what it takes to show it (a profile's Reels tab
+    /// sends videos without their video; Tagged sends carousels whose videos have none).
+    var needsFullInfo: Bool {
+        switch kind {
+        case .video: videos.isEmpty
+        case .carousel: children.isEmpty || children.contains { $0.kind == .video && $0.videos.isEmpty }
+        case .image: images.isEmpty
+        }
+    }
+
     /// The carousel photo showing now (`CarouselPages`), or the post itself.
     var shownItem: Media {
         guard !children.isEmpty else { return self }

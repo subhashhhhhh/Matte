@@ -45,10 +45,10 @@ final class MediaBrowser {
         guard items.indices.contains(index) else { return }
         playing = nil
         openedIndex = index
-        // Grids like a profile's Reels tab list videos by cover only: fetch the full post.
+        // Grids like a profile's Reels tab list videos by cover only: the viewer shows the cover
+        // and fetches the whole post (`MediaDetailModel.start`).
         let item = items[index]
-        let complete = !(item.kind == .video && item.videos.isEmpty)
-        opened = MediaDetailModel.cached(pk: item.pk, media: complete ? item : nil, client: client)
+        opened = MediaDetailModel.cached(pk: item.pk, media: item, client: client)
         if items.count - index < 4 { nearEnd?() }
     }
 

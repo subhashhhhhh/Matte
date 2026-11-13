@@ -51,10 +51,17 @@ final class MediaDetailModel: Identifiable {
     func start() async {
         guard !started, let client else { return }
         started = true
-        if media == nil || (media?.kind != .carousel && media?.images.isEmpty == true) {
+        if media == nil || media?.needsFullInfo == true {
+            // A grid's preview (a reel without its video, a carousel without its photos) stays on
+            // screen while the whole post loads, so the photo flight lands on something.
+            let shown = media
             loadingMedia = true
-            do { media = try await client.mediaInfo(pk: pk) } catch {
-                if !(error is CancellationError) { failed = true }
+            do {
+                var full = try await client.mediaInfo(pk: pk)
+                if full.suggested == nil { full.suggested = shown?.suggested }
+                media = full
+            } catch {
+                if !(error is CancellationError), shown == nil { failed = true }
             }
             loadingMedia = false
         }

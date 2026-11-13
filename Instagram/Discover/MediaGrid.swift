@@ -54,7 +54,8 @@ struct GridTile: View {
         Color.clear
             .aspectRatio(3.0 / 4, contentMode: .fit)
             .overlay {
-                RemoteImage(url: media.image(minWidth: 480), contentMode: .fill)
+                // Cropped to 3:4: a wide photo needs a wider file, or the crop is blurry.
+                RemoteImage(url: media.image(minWidth: 640 * max(1, media.aspect * 4 / 3)), contentMode: .fill)
                     .scaleEffect(hovering && !Motion.reduced ? 1.04 : 1)
                 if isPreviewing, let url = previewVideo { HoverPreview(url: url, sound: false) }
             }

@@ -70,8 +70,17 @@ nonisolated enum Parser {
         return out
     }
 
+    /// "<pk>_<owner id>" → pk; nil for anything else.
+    static func pkFromMediaId(_ id: String) -> String? {
+        let parts = id.split(separator: "_")
+        guard parts.count == 2, parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }) else { return nil }
+        return String(parts[0])
+    }
+
     static func media(_ j: JSON) -> Media? {
-        guard let pk = j["pk"].string ?? j["pk"].int.map(String.init) else { return nil }
+        // Some lists (a profile's Tagged tab) give carousel photos only an `id` ("<pk>_<owner>").
+        guard let pk = j["pk"].string ?? j["pk"].int.map(String.init)
+                ?? j["id"].string.flatMap(Self.pkFromMediaId) else { return nil }
         let type = j["media_type"].int ?? 1
         var m = Media(id: j["id"].string ?? pk, pk: pk, code: j["code"].string,
                       kind: Media.Kind(rawValue: type) ?? .image)
