@@ -171,6 +171,15 @@ struct RootView: View {
                     .transition(.push)
             }
         }
+        .coordinateSpace(.named("pageArea"))
+        // The post or reel you left for a profile, small in the corner (under any opened post).
+        .overlay {
+            if let mini = app.miniPost {
+                MiniPlayer(mini: mini)
+                    .id(mini.id)
+                    .environment(\.onScreen, !overlayCovers && app.presentedPost == nil)
+            }
+        }
         .overlay(alignment: .trailing) {
             if let activity = app.activity, activity.isOpen {
                 ActivityPanel(model: activity)

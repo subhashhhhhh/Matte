@@ -80,6 +80,31 @@ final class AppModel {
     var openedMedia: Media?
     /// A post opened from somewhere without a grid (a story's post sticker): shown over everything.
     var openedPost: MediaDetailModel?
+
+    /// The post or reel open in a viewer right now, where it sits (in the page area), and how to
+    /// close that viewer: going to a profile shrinks it into the mini player instead.
+    struct PresentedPost {
+        let model: MediaDetailModel
+        var frame: CGRect
+        let close: () -> Void
+    }
+    var presentedPost: PresentedPost?
+
+    /// A post or reel kept playing small in the corner while you look at a profile.
+    struct MiniPost: Identifiable {
+        let id = UUID()
+        let model: MediaDetailModel
+        /// Where it was when it shrank (it flies from there).
+        let from: CGRect
+    }
+    var miniPost: MiniPost?
+
+    /// Opens the mini player's post full size again.
+    func expandMini() {
+        guard let mini = miniPost else { return }
+        miniPost = nil
+        openedPost = mini.model
+    }
     /// Shown as a small banner (errors, "copied").
     var toast: String?
     /// The ⌘K quick switcher.
@@ -194,6 +219,16 @@ final class AppModel {
                 destination = from
             }
         }
+        // `-IGMiniTest YES`: 10 s after launch, open the open post's author (the mini player).
+        if UserDefaults.standard.bool(forKey: "IGMiniTest") {
+            Task {
+                try? await Task.sleep(for: .seconds(10))
+                if let user = presentedPost?.model.media?.user {
+                    FileHandle.standardError.write(Data("MINI open profile\n".utf8))
+                    openProfile(user)
+                }
+            }
+        }
         // `-IGShowSwitcher YES`: open the ⌘K switcher at launch.
         showSwitcher = UserDefaults.standard.bool(forKey: "IGShowSwitcher")
         // `-IGOpenSettings YES`: open Settings at launch.
@@ -276,6 +311,12 @@ final class AppModel {
 
     func openProfile(_ user: User) {
         guard let client else { return }
+        // The open post or reel shrinks into the corner and keeps playing.
+        if let p = presentedPost, p.model.media != nil {
+            presentedPost = nil
+            miniPost = MiniPost(model: p.model, from: p.frame)
+            p.close()
+        }
         activity?.isOpen = false
         activity?.opened = nil
         stories?.close()

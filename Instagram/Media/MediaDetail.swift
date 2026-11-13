@@ -252,6 +252,8 @@ struct MediaStage: View {
     var cornerRadius: CGFloat = 12
     /// The first photo, already decoded (handed over by the photo flight), so it shows at once.
     var initialImage: CGImage? = nil
+    /// Arrows, the song chip: off in the mini player (it's too small; the song still plays).
+    var chrome = true
     @State private var page = 0
     @Environment(AppModel.self) private var app
     @State private var track: MusicTrack?
@@ -272,7 +274,7 @@ struct MediaStage: View {
                 RemoteImage(url: current.image(minWidth: 1080), contentMode: .fit, initial: page == 0 ? initialImage : nil)
                     .id(current.pk)
             }
-            if items.count > 1 {
+            if items.count > 1, chrome {
                 HStack {
                     if page > 0 { pageArrow("chevron.left") { page -= 1 } }
                     Spacer()
@@ -293,7 +295,7 @@ struct MediaStage: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay(alignment: .topLeading) {
-            if let track {
+            if let track, chrome {
                 HStack(spacing: 8) {
                     MusicLine(track: track, fontSize: 12, playing: music.playingPk == media.pk)
                         .foregroundStyle(.white)

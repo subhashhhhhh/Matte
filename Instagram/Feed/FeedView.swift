@@ -182,6 +182,8 @@ private struct Masonry: View {
 /// comments beside it. ←/→ step through the feed, Esc closes.
 struct PostLightbox: View {
     @Environment(\.photoFlight) private var flight
+    @Environment(AppModel.self) private var app
+    @Environment(\.onScreen) private var onScreen
     let model: MediaDetailModel
     let canPrevious: Bool
     let canNext: Bool
@@ -214,6 +216,16 @@ struct PostLightbox: View {
         close()
     }
 
+    /// This viewer holds the open post (a profile opened from it shrinks it into the corner).
+    private func register(_ stage: CGRect) {
+        if onScreen {
+            app.presentedPost = AppModel.PresentedPost(model: model, frame: stage, close: close)
+        } else if app.presentedPost?.model === model {
+            // A viewer on a hidden or covered page isn't the open one.
+            app.presentedPost = nil
+        }
+    }
+
     var body: some View {
         GeometryReader { geo in
             let media = model.media
@@ -221,6 +233,11 @@ struct PostLightbox: View {
             let stage = layout.stage
             ZStack {
                 Color.black.opacity(0.82).onTapGesture { dismiss(in: geo.size) }
+                    .onAppear { register(stage) }
+                    .onChange(of: stage) { register(stage) }
+                    .onChange(of: model.pk) { register(stage) }
+                    .onChange(of: onScreen) { register(stage) }
+                    .onDisappear { if app.presentedPost?.model === model { app.presentedPost = nil } }
                 HStack(spacing: 0) {
                     if let media {
                         MediaStage(media: media, cornerRadius: 0, initialImage: flight?.handoff(for: media.pk))

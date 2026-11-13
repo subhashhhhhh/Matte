@@ -129,6 +129,7 @@ struct ReelsView: View {
     @Environment(AppModel.self) private var app
     @State private var sound = SoundSetting.shared
     @FocusState private var focused: Bool
+    @State private var playerFrame: CGRect = .zero
 
     var body: some View {
         GeometryReader { geo in
@@ -183,6 +184,11 @@ struct ReelsView: View {
     }
 
     @ViewBuilder
+    private func registerReel() {
+        guard let detail = model.detail, model.reel != nil else { return }
+        app.presentedPost = AppModel.PresentedPost(model: detail, frame: playerFrame, close: {})
+    }
+
     private func player(width: CGFloat, height: CGFloat, captionInPanel: Bool) -> some View {
         ZStack {
             Color.black
@@ -211,6 +217,10 @@ struct ReelsView: View {
         .frame(width: max(width, 200), height: max(height, 300))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contextMenu { if let reel = model.reel { PostMenu(media: reel) } }
+        // The reel playing here is the open one: a profile opened from it shrinks it into the corner.
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("pageArea")) } action: { playerFrame = $0; registerReel() }
+        .onChange(of: model.currentPk) { registerReel() }
+        .onDisappear { if app.presentedPost?.model === model.detail { app.presentedPost = nil } }
         .overlay(alignment: .topTrailing) { MuteButton().padding(12) }
         .overlay(alignment: .topLeading) { if let reel = model.reel { RepostBubbles(media: reel, compact: true).id(reel.pk) } }
     }
