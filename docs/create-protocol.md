@@ -131,3 +131,15 @@ the Send to… sheet. Debug: `-IGAddToStory YES [-IGStoryShare YES -IGDryRunWrit
 
 Background sharing: Share in the sheet or the story editor closes it and hands the work to an
 `UploadJob` (`Create/Uploads.swift`), shown as a ring in the window's bottom-right corner.
+
+### Reels and songs (Matte, 2026-11-13)
+
+- A shared reel: its video (downloaded, `media/<pk>/info/` if the feed item has none) is the editor's
+  video; full screen with the author at the top, or (click) a rounded card with author and length
+  (`StoryDoc.frame`: radius + labels, drawn by the export and the canvas alike). Published through
+  the phone endpoint's video form (`configure_to_story/?video=1`, instagrapi `video_configure_to_story`),
+  retried while "Transcode not finished yet.".
+- A shared photo post with a song (`music_metadata.music_info`, only in the post's own info): the
+  song plays in the editor; shared as a video (`StoryExport.photoWithMusic`: the flattened photo as a
+  still H.264 video for the poster's part of the song, up to 60 s, with that part as AAC audio).
+  Sound off shares the photo alone.

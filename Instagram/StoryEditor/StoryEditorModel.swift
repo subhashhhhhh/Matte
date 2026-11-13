@@ -173,9 +173,23 @@ final class StoryEditorModel {
             gradient = StoryRenderer.gradient(from: middle)
         }
         doc.background = .blur
+        // The post's song comes along, as on the phone (Sound turns it off).
+        doc.music = await PostMusic.shared.track(for: media, client: client)
         original = doc
         reshare = StoryReshare(mediaPk: media.pk, ownerId: media.user?.id ?? "")
+        playMusic()
     }
+
+    @ObservationIgnored private let musicHolder = UUID()
+
+    /// Plays the story's song while editing (not when its sound is off).
+    private func playMusic() {
+        guard let music = doc.music, let reshare = reshareMedia else { return }
+        if doc.muted { PostMusic.shared.release(musicHolder) } else { PostMusic.shared.play(music, for: "story-" + reshare.pk, holder: musicHolder) }
+    }
+
+    /// The story has sound to switch: a video's, or a shared post's song.
+    var hasSound: Bool { isVideo || doc.music != nil }
 
     /// A shared reel, as the phone app does it: its video fills the story with the author's
     /// name at the top; clicking it makes it a rounded card with the name and length inside.
@@ -296,6 +310,7 @@ final class StoryEditorModel {
     }
 
     func tearDown() {
+        PostMusic.shared.release(musicHolder)
         exportTask?.cancel()
         filterTask?.cancel()
         if sharer?.isSharing == true { sharer?.cancel() }
@@ -554,6 +569,7 @@ final class StoryEditorModel {
 
     func toggleSound() {
         commit { $0.muted.toggle() }
+        playMusic()
     }
 
     // MARK: Sharing

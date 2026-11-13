@@ -159,9 +159,11 @@ final class AppModel {
             Task {
                 for _ in 0..<60 {
                     try? await Task.sleep(for: .milliseconds(500))
-                    // `-IGAddToStory reel`: the first reel instead.
+                    // `-IGAddToStory reel`: the first reel instead; `-IGAddToStory <pk>`: that post.
                     let wantReel = addMode == "reel"
-                    if let post = feed?.posts.first(where: { wantReel ? $0.productType == "clips" : !$0.isVideo }) {
+                    var chosen = feed?.posts.first(where: { wantReel ? $0.productType == "clips" : !$0.isVideo })
+                    if addMode.allSatisfy(\.isNumber), let client { chosen = try? await client.mediaInfo(pk: addMode) }
+                    if let post = chosen {
                         addToStory(post)
                         // `-IGReshareLook photo` / `-IGStoryMode background`: set up the editor for screenshots.
                         let d = UserDefaults.standard

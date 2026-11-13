@@ -18,6 +18,8 @@ nonisolated struct StoryDoc: Equatable, Sendable {
     var background: StoryBackground = .gradient
     /// A shared reel's look: rounded corners and the author/duration labels with the picture.
     var frame: StoryPictureFrame?
+    /// A shared photo post's song: the story is shared as a video with it (unless `muted`).
+    var music: MusicTrack?
     /// Video only: the part that's kept (seconds) and whether its sound is.
     var trimStart: Double = 0
     var trimEnd: Double = 0

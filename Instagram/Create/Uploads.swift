@@ -104,9 +104,15 @@ final class UploadJob: Identifiable {
                 let report: @Sendable (Double) -> Void = { [weak self] p in
                     Task { @MainActor in if self?.exportProgress != nil { self?.exportProgress = p } }
                 }
-                let media = try await story.source.isVideo
-                    ? StoryExport.video(story.source, doc: story.doc, gradient: story.gradient, progress: report)
-                    : StoryExport.photo(story.source, doc: story.doc, gradient: story.gradient)
+                let media: PreparedMedia
+                if story.source.isVideo {
+                    media = try await StoryExport.video(story.source, doc: story.doc, gradient: story.gradient, progress: report)
+                } else if let music = story.doc.music, !story.doc.muted {
+                    // A shared post with its song: a video story.
+                    media = try await StoryExport.photoWithMusic(story.source, doc: story.doc, gradient: story.gradient, music: music)
+                } else {
+                    media = try await StoryExport.photo(story.source, doc: story.doc, gradient: story.gradient)
+                }
                 try Task.checkCancellation()
                 #if DEBUG
                 DebugStoryEditor.keep(media)
@@ -116,7 +122,7 @@ final class UploadJob: Identifiable {
                 let model = CreateModel(app: app, client: client)
                 attach(model)
                 sharer = model
-                model.shareFinishedStory(media, isVideo: story.source.isVideo, reshare: story.reshare)
+                model.shareFinishedStory(media, isVideo: story.source.isVideo || media.durationMs != nil, reshare: story.reshare)
                 watch()
             } catch is CancellationError {
             } catch {

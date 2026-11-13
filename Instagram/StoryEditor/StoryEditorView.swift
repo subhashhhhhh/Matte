@@ -207,9 +207,9 @@ private struct RightColumn: View {
                 RoundTool(symbol: "face.smiling", label: "Stickers", active: model.mode == .stickers) { model.toggle(.stickers) }
                 RoundTool(symbol: "scribble.variable", label: "Draw", active: false) { model.toggle(.draw) }
                 RoundTool(symbol: "camera.filters", label: "Filters", active: model.mode == .filters) { model.toggle(.filters) }
-                RoundTool(symbol: "circle.lefthalf.filled", label: "Background", active: model.mode == .background) { model.toggle(.background) }
                     .help("Filters (← → to change)")
-                if model.isVideo {
+                RoundTool(symbol: "circle.lefthalf.filled", label: "Background", active: model.mode == .background) { model.toggle(.background) }
+                if model.hasSound {
                     RoundTool(symbol: model.doc.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                               label: model.doc.muted ? "Sound off" : "Sound on", active: model.doc.muted) { model.toggleSound() }
                 }
@@ -401,6 +401,12 @@ private struct BottomPanel: View {
             } else {
                 if let video = model.video {
                     TrimBar(model: model, video: video)
+                }
+                if let music = model.doc.music {
+                    MusicLine(track: music, fontSize: 12.5, playing: !model.doc.muted)
+                        .foregroundStyle(.white.opacity(model.doc.muted ? 0.4 : 0.85))
+                        .strikethrough(model.doc.muted)
+                        .help(model.doc.muted ? "The song is off: shared as a photo" : "Shared as a video with this song")
                 }
                 Text(hint).font(.system(size: 12)).foregroundStyle(.white.opacity(0.45))
             }
