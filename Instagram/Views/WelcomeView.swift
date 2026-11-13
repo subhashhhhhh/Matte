@@ -162,7 +162,7 @@ private struct Safelight: View {
 }
 
 /// Fine, still film grain over everything (made once, tiled).
-private struct FilmGrain: View {
+struct FilmGrain: View {
     private static let tile: CGImage? = {
         let context = CIContext(options: [.useSoftwareRenderer: false])
         let noise = CIFilter.randomGenerator().outputImage?

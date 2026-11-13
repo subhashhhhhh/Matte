@@ -4,6 +4,11 @@ options:
   deploymentTarget:
     macOS: "15.0"
   createIntermediateGroups: true
+  # AppIcon.icon (Icon Composer: paper in light mode, darkroom in dark) is one file for actool.
+  fileTypes:
+    icon:
+      file: true
+      buildPhase: resources
 targets:
   Instagram:
     type: application

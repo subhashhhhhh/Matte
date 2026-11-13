@@ -10,6 +10,7 @@ struct InstagramApp: App {
         Task { await DebugCreate.makeTestMediaIfAsked() }
         Task { @MainActor in DebugCapture.runIfAsked() }
         IconSheet.renderIfAsked()
+        IconArt.renderIfAsked()
         // `-IGRenderWelcome <file.png>`: draws the signed-out screen (1180×780, dark) to a PNG
         // without showing a window, and quits.
         if let out = UserDefaults.standard.string(forKey: "IGRenderWelcome") {
