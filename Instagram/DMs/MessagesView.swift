@@ -375,6 +375,9 @@ struct ConversationView: View {
     /// scroll to the bottom. Loading content never turns it off.
     @State private var following = true
     @State private var programmaticScroll = Date.distantPast
+    /// You're scrolling (finger on the trackpad, the wheel turning, or its momentum): the chat
+    /// never moves itself then.
+    @State private var userScrolling = false
     /// Set once the chat has opened at the newest message.
     @State private var settled = false
 
@@ -441,14 +444,32 @@ struct ConversationView: View {
                     let resized = new.content != old.content || new.container != old.container || new.width != old.width
                     if resized {
                         // Content above or below changed size (rows measured, older messages
-                        // loaded, the shared column toggled): keep following if we were.
-                        if following || !settled {
+                        // loaded, the shared column toggled): keep following if we were. Never
+                        // while you're scrolling: rows being measured as you scroll up would
+                        // snap you back to the bottom, again and again.
+                        if (following || !settled), !userScrolling {
                             programmaticScroll = .now
                             proxy.scrollTo("bottom", anchor: .bottom)
                         }
-                    } else if Date.now.timeIntervalSince(programmaticScroll) > 0.4 {
+                    } else if userScrolling || Date.now.timeIntervalSince(programmaticScroll) > 0.4 {
                         // Only the position moved, and not by us: that's you scrolling.
                         following = new.offset + new.container >= new.content - 60
+                    }
+                }
+                // Your scrolling decides: starting to scroll stops following; stopping at the
+                // bottom starts it again.
+                .onScrollPhaseChange { _, phase, context in
+                    let g = context.geometry
+                    let atEnd = g.contentOffset.y + g.containerSize.height >= g.contentSize.height - 60
+                    switch phase {
+                    case .interacting, .decelerating:
+                        if !userScrolling { userScrolling = true }
+                        if !atEnd { following = false }
+                    case .idle:
+                        userScrolling = false
+                        following = atEnd
+                    default:
+                        break
                     }
                 }
                 // Follow new messages only when you're already at the bottom, or when it's yours.
