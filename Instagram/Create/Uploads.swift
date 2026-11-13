@@ -213,7 +213,10 @@ private struct UploadBadge: View {
             }
             HStack(spacing: 6) {
                 if failed {
-                    Button("Try Again") { job.retry() }.buttonStyle(.prominentCompact)
+                    // Not when the story may already be up: trying again could post it twice.
+                    if job.status != PhoneStoryOutcomeUnknown().errorDescription {
+                        Button("Try Again") { job.retry() }.buttonStyle(.prominentCompact)
+                    }
                     if job.canReopen { Button("Edit") { job.reopen() }.buttonStyle(SecondaryPillStyle()) }
                     Button("Discard") { job.discard() }.buttonStyle(SecondaryPillStyle())
                 } else if !done {
