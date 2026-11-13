@@ -141,6 +141,10 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     /// People tagged in the photo (`usertags.in`), where they were tagged. Optional so cached
     /// posts from before still decode.
     var userTags: [UserTag]?
+    /// Profiles that pinned it to the top of their grid (`timeline_pinned_user_ids`) or of their
+    /// Reels tab (`clips_tab_pinned_user_ids`): a collab post can be pinned on one author's page only.
+    var pinnedOnGrid: [String]?
+    var pinnedOnReels: [String]?
 
     /// A shortcode's media pk (the code is the pk in Instagram's URL-safe base 64; longer
     /// codes of private posts carry extra characters after the first 11).

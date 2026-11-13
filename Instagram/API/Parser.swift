@@ -142,6 +142,10 @@ nonisolated enum Parser {
             return UserTag(user: u, x: min(1, max(0, x)), y: min(1, max(0, y)))
         }
         if !tags.isEmpty { m.userTags = tags }
+        let grid = j["timeline_pinned_user_ids"].array.compactMap(idString)
+        if !grid.isEmpty { m.pinnedOnGrid = grid }
+        let reels = j["clips_tab_pinned_user_ids"].array.compactMap(idString)
+        if !reels.isEmpty { m.pinnedOnReels = reels }
         m.children = j["carousel_media"].array.compactMap(media)
         if m.kind == .carousel, m.images.isEmpty, let first = m.children.first {
             m.images = first.images

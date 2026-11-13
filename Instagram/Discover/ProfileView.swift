@@ -32,7 +32,8 @@ struct ProfileView: View {
                             .frame(maxWidth: 1200)
                     }
                     // Always 3 across: accounts design their grids for it (multi-post pictures).
-                    FeedGrid(feed: model.activeFeed, empty: emptyText, columns: 3)
+                    FeedGrid(feed: model.activeFeed, empty: emptyText, columns: 3,
+                             pinnedFor: model.tab == .posts || model.tab == .reels ? (user.id, model.tab == .reels) : nil)
                         .frame(maxWidth: 1200)
                         .id(model.tab.rawValue + (model.collectionId ?? ""))
                 }
@@ -339,6 +340,7 @@ struct FeedGrid: View {
     var empty: (symbol: String, title: String)
     var minTile: CGFloat = 200
     var columns: Int? = nil
+    var pinnedFor: (owner: String, reels: Bool)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -352,7 +354,7 @@ struct FeedGrid: View {
                     EmptyState(symbol: empty.symbol, title: empty.title).frame(height: 260)
                 }
             } else {
-                MediaGrid(browser: feed.browser, minTile: minTile, columns: columns)
+                MediaGrid(browser: feed.browser, minTile: minTile, columns: columns, pinnedFor: pinnedFor)
                 if feed.isLoading { Spinner().padding(20) }
             }
         }

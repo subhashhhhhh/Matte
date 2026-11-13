@@ -20,12 +20,19 @@ struct MediaGrid: View {
     /// A fixed number of columns (profiles: 3, as accounts design their grids for); otherwise as
     /// many as fit `minTile`.
     var columns: Int? = nil
+    /// A profile tab: its owner, and whether it's the Reels tab (each has its own pinned posts).
+    var pinnedFor: (owner: String, reels: Bool)? = nil
+
+    private func isPinned(_ m: Media) -> Bool {
+        guard let pinnedFor else { return false }
+        return ((pinnedFor.reels ? m.pinnedOnReels : m.pinnedOnGrid) ?? []).contains(pinnedFor.owner)
+    }
 
     var body: some View {
         LazyVGrid(columns: columns.map { Array(repeating: GridItem(.flexible(), spacing: 4), count: $0) }
                   ?? [GridItem(.adaptive(minimum: minTile), spacing: 4)], spacing: 4) {
             ForEach(Array(browser.items.enumerated()), id: \.element.pk) { i, media in
-                GridTile(media: media, isPreviewing: browser.playing == media.pk) { on in
+                GridTile(media: media, isPreviewing: browser.playing == media.pk, pinned: isPinned(media)) { on in
                     if on { browser.playing = media.pk } else if browser.playing == media.pk { browser.playing = nil }
                 }
                 .onTapGesture { openPost(i) }
@@ -41,6 +48,8 @@ struct MediaGrid: View {
 struct GridTile: View {
     let media: Media
     var isPreviewing: Bool
+    /// Pinned to the top of the profile: the pin replaces the carousel/reel mark, as on Instagram.
+    var pinned = false
     var setPreviewing: (Bool) -> Void
     @State private var hovering = false
     @State private var hoverTask: Task<Void, Never>?
@@ -64,7 +73,9 @@ struct GridTile: View {
             .photoFlightTile(media)
             .overlay(alignment: .topTrailing) {
                 Group {
-                    if media.children.count > 1 {
+                    if pinned {
+                        Image(systemName: "pin.fill").rotationEffect(.degrees(45))
+                    } else if media.children.count > 1 {
                         Image(systemName: "square.on.square.fill")
                     } else if media.productType == "clips" {
                         IGGlyph(icon: .reelsFilled, size: 16)
