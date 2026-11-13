@@ -46,6 +46,13 @@ final class StoryViewerModel {
            let first = reel.items.firstIndex(where: { ($0.takenAt ?? .distantFuture) > marker }) {
             itemIndex = first
         }
+        #if DEBUG
+        // `-IGStickerTest bubble|open`: start at the first item with a tappable sticker.
+        if UserDefaults.standard.string(forKey: "IGStickerTest") != nil,
+           let i = reel.items.firstIndex(where: { !$0.storyStickers.isEmpty }) {
+            itemIndex = i
+        }
+        #endif
         startItem()
     }
 
@@ -983,6 +990,17 @@ private struct StoryStickerLayer: View {
         .frame(width: size.width, height: size.height, alignment: .topLeading)
         .animation(.easeOut(duration: 0.15), value: selected)
         .onDisappear { if selected != nil { model.covered = false } }
+        #if DEBUG
+        .task {
+            guard let mode = UserDefaults.standard.string(forKey: "IGStickerTest") else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            select(0)
+            if mode == "open" {
+                try? await Task.sleep(for: .seconds(1))
+                open(stickers[0])
+            }
+        }
+        #endif
     }
 
     private func rect(_ s: StorySticker) -> CGRect {

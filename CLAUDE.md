@@ -113,6 +113,9 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
   `-IGStoryClose YES` presses Close; `-IGStoryExport <dir>` writes the flattened file (+ `export.json`) and quits; `-IGStoryKeep <dir>` copies what's
   shared; `-IGStorySelfTest YES` checks edits/undo and quits; `-IGStoryShare YES` only with `-IGDryRunWrites`.
   `-IGShowCreateMenu YES` opens the "+" menu, `-IGDropTest video|photo` acts as a dropped test file.
+- Story stickers (`Media.storyStickers`, parsed from `story_feed_media` / `story_bloks_stickers` mentions /
+  `story_link_stickers` / `story_hashtags`; a post sticker's pk comes from its `media_code`): `-IGStickerTest bubble|open`
+  starts the story at the first item with one and clicks it. `-IGAddToStory YES` opens "Add to story" for the first feed post.
 
 ## Real-time DMs
 
