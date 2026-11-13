@@ -534,7 +534,8 @@ final class ConversationModel {
     func jump(to id: String) async {
         var pages = 0
         while !messages.contains(where: { $0.id == id }), hasOlder, pages < 15 {
-            await loadOlder()
+            // A page that fails stops the search (it was already reported).
+            guard await loadOlder() else { return }
             pages += 1
         }
         guard messages.contains(where: { $0.id == id }) else {
@@ -604,8 +605,11 @@ final class ConversationModel {
         return t
     }
 
-    func loadOlder() async {
-        guard hasOlder, let olderCursor, !loadingOlder else { return }
+    /// Loads the page before the oldest message. False when it couldn't (nothing older, already
+    /// loading, or the request failed).
+    @discardableResult
+    func loadOlder() async -> Bool {
+        guard hasOlder, let olderCursor, !loadingOlder else { return false }
         loadingOlder = true
         defer { loadingOlder = false }
         do {
@@ -614,8 +618,10 @@ final class ConversationModel {
             messages.insert(contentsOf: page.items.reversed().filter { !known.contains($0.id) }, at: 0)
             self.olderCursor = page.cursor
             hasOlder = page.hasMore
+            return true
         } catch {
             inbox?.report(error)
+            return false
         }
     }
 
