@@ -215,6 +215,35 @@ extension IGClient {
         }
     }
 
+    /// Pins a chat to the top of the inbox, or unpins it (recorded: `pin` true; unpinning sends false).
+    func setThreadPinned(_ pin: Bool, thread id: String) async throws {
+        _ = try await dmQuery("useIGDPinThreadMutation", variables: ["thread_fbid": .string(id), "pin": .bool(pin)])
+    }
+
+    /// Mutes a chat for `seconds` (3600, 28800, 86400 as the web app offers; -1 until you
+    /// change it; 0 unmutes). Returns whether it's muted now.
+    @discardableResult
+    func setThreadMuted(seconds: Int, thread id: String) async throws -> Bool {
+        let data = try await dmQuery("useIGDMuteThreadMutation", variables: [
+            "thread_fbid": .string(id), "mute_seconds": .integer(Int64(seconds)), "offline_threading_id": .string(OfflineThreadingId.next()),
+        ])
+        return data["xig_direct_mute_thread_with_fbid"]["is_muted"].bool ?? (seconds != 0)
+    }
+
+    /// Sets someone's nickname in a chat (takes the chat's long id). Returns the chat's
+    /// nicknames afterwards, by user id.
+    func setNickname(_ nickname: String, userId: String, longThreadId: String) async throws -> [String: String] {
+        let data = try await dmQuery("useIGDEditNicknameMutation", variables: [
+            "metadata": ["ig_thread_igid": .string(longThreadId)],
+            "data": ["nickname": .string(nickname), "user_igid": .string(userId)],
+        ])
+        var out: [String: String] = [:]
+        for n in data["xig_direct_change_nickname_with_validated_nickname"]["nicknames"].array {
+            if let who = Parser.idString(n["igid"]), let name = n["nickname"].string, !name.isEmpty { out[who] = name }
+        }
+        return out
+    }
+
     /// Adds `emoji` to a message, or removes `previous` when `emoji` is nil.
     func react(_ emoji: String?, previous: String? = nil, to messageId: String, thread id: String) async throws {
         let value = (emoji ?? previous ?? "").unicodeScalars.filter { $0.value != 0xFE0F }.map(String.init).joined()
@@ -279,6 +308,10 @@ extension IGClient {
         "useIGDUnpinMessageOffMsysMutation": "26919110827778778",
         "useIGDMarkThreadAsReadValidationMutation": "35211594988486314",
         "IGDMessageUnsendDialogOffMsysMutation": "26948700068153789",
+        // Recorded 2026-11-13: chat pin, mute, nicknames.
+        "useIGDPinThreadMutation": "26491513390471063",
+        "useIGDMuteThreadMutation": "27113115288379422",
+        "useIGDEditNicknameMutation": "26698632706416151",
     ]
 }
 

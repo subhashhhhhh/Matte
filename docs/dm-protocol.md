@@ -794,3 +794,15 @@ Minimal "it works" milestone = 1–6 (+5): ~1.5–2 weeks for one developer **(e
 4. **Fingerprint consistency**: mixing a Chrome UA with Apple's TLS stack/Safari-captured cookies may increase checkpoint risk (inferred).
 5. **Delta schema drift**: unknown `__typename`s must be tolerated (bridge logs and ignores them).
 6. **Video upload** may fail on some accounts via web (bridge falls back to Android rupload).
+
+
+## 13. Chat settings (recorded from instagram.com, 2026-11-13)
+
+- Pin a chat: `useIGDPinThreadMutation` `{thread_fbid, pin: true}` → `xig_direct_pin_thread.is_pin`. (Unpinning sends `pin: false`; only pinning was recorded.)
+  The inbox marks pinned chats with `is_pin`; `IGDThreadListActionsPopoverOffMsysPinnedThreadsQuery` lists them (`pinned_threads_v2`).
+- Mute: `useIGDMuteThreadMutation` `{thread_fbid, mute_seconds, offline_threading_id}`: 3600 / 28800 / 86400, -1 "until I change it", 0 unmutes
+  → `xig_direct_mute_thread_with_fbid.{is_muted, mute_until}`.
+- Nickname: `useIGDEditNicknameMutation` `{metadata: {ig_thread_igid: <long thread id>}, data: {nickname, user_igid: <pk>}}` → the chat's
+  `nicknames` `[{nickname, igid, eimu_id}]` (the inbox sends the same list on each thread). Clearing one wasn't recorded.
+- Pinned messages: the thread's `pinned_messages: [{message_id, …}]` (thread detail query).
+- Double-click like: `IGDirectReactionSendMutation` with `emoji: "❤"` (bare U+2764, no U+FE0F), `reaction_status: "created"`.

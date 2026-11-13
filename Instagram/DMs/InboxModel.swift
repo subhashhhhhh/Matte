@@ -287,6 +287,51 @@ final class InboxModel {
     func report(_ error: Error) { app?.report(error) }
     func show(_ message: String) { app?.show(message) }
 
+    // MARK: Chat settings (pin, mute)
+
+    /// Changes one chat here and in the open conversation; pinned chats stay on top.
+    func update(_ id: String, _ change: (inout DMThread) -> Void) {
+        if let i = threads.firstIndex(where: { $0.id == id }) {
+            var list = threads
+            change(&list[i])
+            threads = list.sorted {
+                if $0.isPinned != $1.isPinned { return $0.isPinned }
+                return ($0.lastActivity ?? .distantPast) > ($1.lastActivity ?? .distantPast)
+            }
+        }
+        if conversation?.thread.id == id { conversation?.apply(change) }
+    }
+
+    func setPinned(_ pin: Bool, _ thread: DMThread) {
+        let before = thread.isPinned
+        update(thread.id) { $0.isPinned = pin }
+        Task {
+            do {
+                try await client.setThreadPinned(pin, thread: thread.id)
+                show(pin ? "Pinned" : "Unpinned")
+            } catch {
+                update(thread.id) { $0.isPinned = before }
+                report(error)
+            }
+        }
+    }
+
+    /// Mutes for `seconds` (-1: until you change it; 0: unmutes).
+    func mute(_ thread: DMThread, seconds: Int) {
+        let before = thread.isMuted
+        update(thread.id) { $0.isMuted = seconds != 0 }
+        Task {
+            do {
+                let muted = try await client.setThreadMuted(seconds: seconds, thread: thread.id)
+                update(thread.id) { $0.isMuted = muted }
+                show(muted ? "Muted" : "Unmuted")
+            } catch {
+                update(thread.id) { $0.isMuted = before }
+                report(error)
+            }
+        }
+    }
+
     // MARK: Real-time
 
     private func startRealtime() {
@@ -458,7 +503,7 @@ final class ConversationModel {
     @ObservationIgnored private var sentTyping: (on: Bool, at: Date)?
 
     @ObservationIgnored private var olderCursor: String?
-    @ObservationIgnored private weak var inbox: InboxModel?
+    @ObservationIgnored private(set) weak var inbox: InboxModel?
     @ObservationIgnored private let client: IGClient
     @ObservationIgnored private var markedReadUpTo: String?
 
@@ -470,6 +515,40 @@ final class ConversationModel {
     }
 
     var viewerId: String? { thread.viewerMessagingId }
+
+    /// A change to the chat made from the inbox (pin, mute, nicknames).
+    func apply(_ change: (inout DMThread) -> Void) { change(&thread) }
+
+    /// Messages shown in the pinned bar: the loaded ones that are pinned, newest pin last.
+    var pinnedMessages: [DMMessage] {
+        thread.pinnedMessageIds.compactMap { id in messages.first { $0.id == id } }
+    }
+
+    /// The bar asks the list to bring a message into view.
+    var scrollRequest: String?
+
+    /// Sets (or, with an empty name, clears) someone's nickname in this chat.
+    func setNickname(_ name: String, for user: User) async {
+        guard let longId = thread.longId else { return }
+        do {
+            let all = try await client.setNickname(name.trimmingCharacters(in: .whitespaces), userId: user.id, longThreadId: longId)
+            inbox?.update(thread.id) { $0.nicknames = all.isEmpty ? nil : all }
+            if inbox?.conversation !== self { thread.nicknames = all.isEmpty ? nil : all }
+            retitle()
+            inbox?.show("Nickname updated")
+        } catch {
+            inbox?.report(error)
+        }
+    }
+
+    /// A one-to-one chat is called by the other person's nickname (or their name again once
+    /// it's cleared).
+    private func retitle() {
+        guard !thread.isGroup, let other = thread.users.first else { return }
+        let name = thread.nicknames?[other.id] ?? other.displayName
+        thread.title = name
+        inbox?.update(thread.id) { $0.title = name }
+    }
 
     func user(for messagingId: String) -> User? {
         thread.users.first { $0.messagingId == messagingId }

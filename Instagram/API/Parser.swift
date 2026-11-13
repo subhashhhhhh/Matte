@@ -260,8 +260,10 @@ nonisolated enum Parser {
             if let who = idString(n["igid"]), let name = n["nickname"].string, !name.isEmpty { nicknames[who] = name }
         }
         if !nicknames.isEmpty { thread.nicknames = nicknames }
-        // Untitled chats are named after the people in them, by their nickname when set.
+        // Untitled chats are named after the people in them, by their nickname when set; a
+        // one-to-one chat goes by the other person's nickname, as Instagram's apps show it.
         if thread.title.isEmpty { thread.title = users.map(thread.name(of:)).joined(separator: ", ") }
+        if !thread.isGroup, let other = users.first, let nick = nicknames[other.id] { thread.title = nick }
         thread.lastActivity = ms(t["last_activity_timestamp_ms"])
         thread.isMuted = t["is_muted"].bool ?? false
         thread.isPinned = t["is_pin"].bool ?? false

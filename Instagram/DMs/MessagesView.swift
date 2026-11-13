@@ -278,6 +278,32 @@ private struct ThreadList: View {
         ThreadRow(thread: thread, selected: model.selectedId == thread.id, presence: model.presence(for: thread),
                   selection: selection)
             .onTapGesture { withAnimation(Motion.slide) { model.selectedId = thread.id } }
+            .contextMenu { ChatSettingsMenu(thread: thread, model: model) }
+    }
+}
+
+/// Pin and mute, as instagram.com's chat menu offers them (recorded).
+struct ChatSettingsMenu: View {
+    let thread: DMThread
+    let model: InboxModel
+    var nicknames: (() -> Void)?
+
+    var body: some View {
+        Button(thread.isPinned ? "Unpin Chat" : "Pin Chat") { model.setPinned(!thread.isPinned, thread) }
+        if thread.isMuted {
+            Button("Unmute") { model.mute(thread, seconds: 0) }
+        } else {
+            Menu("Mute") {
+                Button("For 1 hour") { model.mute(thread, seconds: 3600) }
+                Button("For 8 hours") { model.mute(thread, seconds: 28800) }
+                Button("For 24 hours") { model.mute(thread, seconds: 86400) }
+                Button("Until I change it") { model.mute(thread, seconds: -1) }
+            }
+        }
+        if let nicknames {
+            Divider()
+            Button("Nicknames…", action: nicknames)
+        }
     }
 }
 
@@ -318,6 +344,7 @@ private struct ThreadRow: View {
                 .font(.system(size: 12.5))
             }
             Spacer(minLength: 0)
+            if thread.isPinned { Image(systemName: "pin.fill").font(.system(size: 10)).rotationEffect(.degrees(45)).foregroundStyle(.secondary) }
             if thread.isMuted { Image(systemName: "bell.slash").font(.system(size: 11)).foregroundStyle(.secondary) }
             if thread.isUnread { Circle().fill(Theme.link).frame(width: 8, height: 8) }
         }
@@ -371,6 +398,7 @@ struct ConversationView: View {
     @Environment(\.sharedPaneToggle) private var togglePane
     @Environment(\.sharedPaneShown) private var paneShown
     @State private var atBottom = true
+    @State private var editingNicknames = false
     /// Whether the chat sticks to the newest message: on until you scroll up, back on when you
     /// scroll to the bottom. Loading content never turns it off.
     @State private var following = true
@@ -385,6 +413,7 @@ struct ConversationView: View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(Theme.hairline).frame(height: 1)
+            if !model.thread.pinnedMessageIds.isEmpty { PinnedBar(model: model) }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 2) {
@@ -458,6 +487,11 @@ struct ConversationView: View {
                 }
                 // Your scrolling decides: starting to scroll stops following; stopping at the
                 // bottom starts it again.
+                .onChange(of: model.scrollRequest) {
+                    guard let id = model.scrollRequest else { return }
+                    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
+                    model.scrollRequest = nil
+                }
                 .onScrollPhaseChange { _, phase, context in
                     let g = context.geometry
                     let atEnd = g.contentOffset.y + g.containerSize.height >= g.contentSize.height - 60
@@ -524,6 +558,13 @@ struct ConversationView: View {
                     .allowsHitTesting(false)
             }
         }
+        .overlay {
+            if editingNicknames {
+                NicknamesPanel(model: model) { editingNicknames = false }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: editingNicknames)
     }
 
     @State private var dropTargeted = false
@@ -568,6 +609,19 @@ struct ConversationView: View {
             if let togglePane {
                 ChromeButton(paneShown ? "Hide Shared" : "Show Shared", symbol: "sidebar.right", shortcut: "s", modifiers: [.command, .shift],
                              action: togglePane)
+            }
+            if let inbox = model.inbox {
+                Menu {
+                    ChatSettingsMenu(thread: model.thread, model: inbox) { editingNicknames = true }
+                } label: {
+                    Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30).contentShape(Rectangle())
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Chat settings")
             }
         }
         .padding(.horizontal, 16)
@@ -658,5 +712,112 @@ extension Presence {
         if s < 86_400 { return "Active \(Int(s / 3600))h ago" }
         if s < 2 * 86_400 { return "Active yesterday" }
         return nil
+    }
+}
+
+
+/// The chat's pinned messages, as a bar under the header: the newest pin, and clicking steps
+/// through them, bringing each into view (when it's loaded).
+private struct PinnedBar: View {
+    let model: ConversationModel
+    @State private var index = 0
+    @State private var hovering = false
+
+    var body: some View {
+        let ids = model.thread.pinnedMessageIds
+        let pinned = model.pinnedMessages
+        let shown = pinned.isEmpty ? nil : pinned[min(index, pinned.count - 1)]
+        Button {
+            guard !pinned.isEmpty else { return }
+            index = (index + 1) % pinned.count
+            model.scrollRequest = pinned[index].id
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "pin.fill").font(.system(size: 11)).rotationEffect(.degrees(45))
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ids.count > 1 ? "\(ids.count) pinned messages" : "Pinned message")
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                    Text(shown.map { "\(model.senderName($0.senderId)): \($0.previewText)" } ?? "Scroll up to load it")
+                        .font(.system(size: 12.5)).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .background(hovering ? Theme.hover : Theme.panel)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.hairline).frame(height: 1) }
+    }
+}
+
+/// Nicknames in this chat, as instagram.com's dialog sets them (recorded): one field per person.
+struct NicknamesPanel: View {
+    let model: ConversationModel
+    let close: () -> Void
+    @Environment(AppModel.self) private var app
+    @State private var drafts: [String: String] = [:]
+
+    private var people: [User] { model.thread.users + (app.me.map { [$0] } ?? []) }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.4).ignoresSafeArea().onTapGesture(perform: close)
+            VStack(spacing: 0) {
+                ZStack {
+                    Text("Nicknames").font(.system(size: 15, weight: .semibold))
+                    HStack { Spacer(); ChromeButton("Close", symbol: "xmark", action: close).keyboardShortcut(.cancelAction) }
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 48)
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(people) { user in row(user) }
+                    }
+                    .padding(12)
+                }
+                .scrollIndicators(.never)
+            }
+            .frame(width: 420, height: min(560, CGFloat(people.count) * 64 + 80))
+            .background(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous).fill(Theme.background))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous).strokeBorder(Theme.panelStroke))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
+            .shadow(color: .black.opacity(0.3), radius: 30, y: 10)
+        }
+    }
+
+    private func row(_ user: User) -> some View {
+        let current = model.thread.nicknames?[user.id] ?? ""
+        let draft = Binding(get: { drafts[user.id] ?? current }, set: { drafts[user.id] = $0 })
+        let changed = (drafts[user.id] ?? current) != current
+        return HStack(spacing: 12) {
+            Avatar(url: user.avatar, size: 40)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(user.id == app.me?.id ? "\(user.username) (you)" : user.username)
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                TextField("Set nickname", text: draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13.5))
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.placeholder))
+                    .onSubmit { save(user, draft.wrappedValue) }
+            }
+            Button("Save") { save(user, draft.wrappedValue) }
+                .buttonStyle(.prominentCompact)
+                .disabled(!changed || draft.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func save(_ user: User, _ name: String) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        drafts[user.id] = nil
+        Task { await model.setNickname(name, for: user) }
     }
 }
