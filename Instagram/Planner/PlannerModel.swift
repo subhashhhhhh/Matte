@@ -12,6 +12,9 @@ final class PlannerModel {
     private(set) var problem: String?
     /// The first day of the month on screen.
     var month: Date = Calendar.current.dateInterval(of: .month, for: .now)?.start ?? .now
+    /// The scheduled post being edited (caption and time).
+    var editing: ScheduledPost?
+    private(set) var savingEdit = false
     /// The scheduled post whose "Cancel?" is being confirmed.
     var confirmingCancel: ScheduledPost?
     private(set) var cancelling: Set<String> = []
@@ -31,6 +34,25 @@ final class PlannerModel {
 
     func loadIfNeeded() async {
         guard !loaded else { return }
+        #if DEBUG
+        // `-IGPlannerSample YES`: a made-up scheduled reel, opened for editing (screenshots).
+        // With `-IGDryRunWrites <dir>` and `-IGPlannerSave YES` it saves a new caption and a
+        // time a day later, so the requests land in the dry run (nothing is sent).
+        if UserDefaults.standard.bool(forKey: "IGPlannerSample") {
+            let sample = ScheduledPost(id: "1617060876274799", publishAt: .now.addingTimeInterval(3 * 86_400), caption: "sample caption",
+                                       kind: .reel, thumbnail: nil, mediaId: "4037231283162991222_7785693251")
+            posts = [sample]
+            loaded = true
+            editing = sample
+            if UserDefaults.standard.bool(forKey: "IGPlannerSave"), UserDefaults.standard.string(forKey: "IGDryRunWrites") != nil {
+                try? await Task.sleep(for: .seconds(2))
+                // `-IGPlannerSaveCaption YES`: only the caption changes (the dry run stops at the first write).
+                let moveBy: TimeInterval = UserDefaults.standard.bool(forKey: "IGPlannerSaveCaption") ? 0 : 86_400
+                _ = await save(sample, caption: "edited sample caption", publishAt: sample.publishAt.addingTimeInterval(moveBy))
+            }
+            return
+        }
+        #endif
         await reload()
     }
 
@@ -103,6 +125,36 @@ final class PlannerModel {
         } catch {
             confirmingCancel = nil
             app?.report(error)
+        }
+    }
+
+    /// Saves an edit: a new time (reschedule) and/or a new caption, each only if it changed.
+    func save(_ post: ScheduledPost, caption: String, publishAt: Date) async -> Bool {
+        guard !savingEdit else { return false }
+        savingEdit = true
+        defer { savingEdit = false }
+        do {
+            let moved = abs(publishAt.timeIntervalSince(post.publishAt)) >= 60
+            if moved {
+                guard SchedulePicker.isAllowed(publishAt) else { throw IGError.api("Pick a time between 15 minutes and 75 days from now.") }
+                try await client.reschedule(id: post.id, to: publishAt)
+            }
+            if caption != post.caption {
+                guard let mediaId = post.mediaId else { throw IGError.api("This scheduled post's caption can't be changed here.") }
+                try await client.editScheduledCaption(caption, mediaId: mediaId)
+            }
+            if let i = posts.firstIndex(where: { $0.id == post.id }) {
+                posts[i].caption = caption
+                posts[i].publishAt = moved ? publishAt : post.publishAt
+                posts.sort { $0.publishAt < $1.publishAt }
+            }
+            app?.cache?.remove(Self.cacheKey)
+            app?.show(moved ? "Moved to " + publishAt.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute()) : "Caption saved")
+            editing = nil
+            return true
+        } catch {
+            app?.report(error)
+            return false
         }
     }
 

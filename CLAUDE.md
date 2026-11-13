@@ -40,7 +40,9 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `Instagram/Planner/` (Manager mode): the Planner page (month calendar + upcoming list of the account's
   scheduled posts, cancel) and `SchedulePicker`. Scheduling is Instagram's own (`API/Endpoints+Schedule.swift`,
   docs/create-protocol.md "Scheduling"); the create sheet's Schedule switch sets `PostOptions.scheduledAt`.
-  Photos and reels can be scheduled (recorded); carousels not yet.
+  Photos and reels can be scheduled (recorded); carousels not yet. A scheduled post's caption and time can be
+  edited (click it in the Planner). `-IGPlannerSample YES` shows a made-up scheduled reel in the edit dialog;
+  `-IGPlannerSave YES [-IGPlannerSaveCaption YES] -IGDryRunWrites <dir>` saves it in the dry run.
 - `Instagram/Replies/` (Manager mode): comments on the account's last 12 posts, newest first, "Needs reply"
   (no reply from you yet; checks the replies of up to 25 comments per refresh) and "All", reply inline
   (the "@name" is added on send), like, mark done, saved replies (UserDefaults `savedReplies`).

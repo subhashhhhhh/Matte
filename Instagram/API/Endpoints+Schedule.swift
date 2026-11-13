@@ -23,6 +23,7 @@ extension IGClient {
     nonisolated static let scheduleDocIds: [String: String] = [
         "PolarisScheduledContentCalendarQuery": "28886777017638780",
         "PolarisScheduledContentMutationsDeleteMutation": "26836322409389162",
+        "PolarisScheduledContentMutationsRescheduleMutation": "35280980241549136",
     ]
 
     /// How far ahead Instagram lets you schedule, and the soonest Matte offers (Instagram's own
@@ -65,6 +66,32 @@ extension IGClient {
                                  thumbnail: thumb.flatMap(URL.init(string:)), mediaId: media["id"].string,
                                  carouselCount: children.count)
         }
+    }
+
+    /// Moves a scheduled post to another time (recorded: the scheduled item's id and the time in
+    /// Unix seconds, as a number, in the usual mutation input).
+    func reschedule(id: String, to date: Date) async throws {
+        await prepare()
+        let name = "PolarisScheduledContentMutationsRescheduleMutation"
+        let doc = knownOperations()[name] ?? Self.scheduleDocIds[name]
+        let seconds = Int64(date.timeIntervalSince1970.rounded(.down))
+        let data = try await graphQL(name, variables: .object(["input": mutationInput([
+            "scheduled_content_id": .string(id), "scheduled_publish_time": .integer(seconds),
+        ])]), docId: doc)
+        guard data["xig_reschedule_scheduled_ig_content"]["scheduled_content"]["id"].string == id else {
+            throw IGError.api("Instagram didn't move the scheduled post.")
+        }
+    }
+
+    /// Changes a scheduled post's caption (recorded: `edit_media` as for a published post, a JSON
+    /// body of `include_unpublished` true, `caption_text` and the page tokens; nothing else).
+    func editScheduledCaption(_ text: String, mediaId: String) async throws {
+        let pk = mediaId.split(separator: "_").first.map(String.init) ?? mediaId
+        guard !pk.isEmpty, pk.allSatisfy(\.isNumber) else { throw IGError.api("This scheduled post has no media id.") }
+        let tokens = formTokens()
+        let body = OrderedJSON.object([("include_unpublished", .bool(true)), ("caption_text", .string(text)),
+                                       ("jazoest", .string(tokens["jazoest"] ?? "")), ("fb_dtsg", .string(tokens["fb_dtsg"] ?? ""))])
+        _ = try await createPost("/api/v1/media/\(pk)/edit_media/", json: body, name: "media/edit_media")
     }
 
     /// Cancels a scheduled post (recorded: the scheduled item's id, in the usual mutation input).

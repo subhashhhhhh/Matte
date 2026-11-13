@@ -60,6 +60,8 @@ Instagram holds the post and publishes it itself (Matte needn't be running).
 |---|---|---|
 | Scheduled photo (**R**) | `POST /api/v1/media/configure/` (as a photo post) | the photo-post form plus `async_publish=1`, `content_scheduling_metadata={"scheduled_publish_time":"<unix s>"}` (a JSON string, the time as a string), `publish_mode=scheduled` |
 | List (**R**) | GraphQL `PolarisScheduledContentCalendarQuery` (doc 28886777017638780), variables `{}` | `data.viewer.xdt_user.all_scheduled_ig_content[]`: `id` (the scheduled item), `scheduled_publish_time`, `caption_text`, `carousel_children`, `media{id, product_type, image_versions2}` |
+| Reschedule (**R**) | GraphQL `PolarisScheduledContentMutationsRescheduleMutation` (doc 35280980241549136) | `input: {actor_id, client_mutation_id, scheduled_content_id, scheduled_publish_time}` (the time a number) → `xig_reschedule_scheduled_ig_content.scheduled_content{id, scheduled_publish_time}` |
+| Edit caption (**R**) | `POST /api/v1/media/<pk>/edit_media/`, JSON | `{"include_unpublished":true,"caption_text":…,"jazoest":…,"fb_dtsg":…}` (nothing else; usertags only when tags change) |
 | Cancel (**R**) | GraphQL `PolarisScheduledContentMutationsDeleteMutation` (doc 26836322409389162) | `input: {actor_id, client_mutation_id, scheduled_content_id}` → `xig_delete_scheduled_ig_content.deleted_id` |
 
 - The web app sends both GraphQL requests to `/api/graphql`; Matte's `/graphql/query` works for them too.

@@ -40,7 +40,15 @@ struct PlannerView: View {
                     .transition(.opacity)
             }
         }
+        .overlay {
+            if let post = model.editing {
+                EditScheduledSheet(model: model, post: post)
+                    .id(post.id)
+                    .transition(.opacity)
+            }
+        }
         .animation(.easeOut(duration: 0.14), value: model.confirmingCancel == nil)
+        .animation(.easeOut(duration: 0.14), value: model.editing == nil)
     }
 
     private var header: some View {
@@ -133,7 +141,8 @@ private struct DayCell: View {
                 }
             }
             ForEach(posts.prefix(3)) { post in
-                ScheduledChip(post: post)
+                Button { model.editing = post } label: { ScheduledChip(post: post) }
+                    .buttonStyle(.pressable)
             }
             if posts.count > 3 {
                 Text("+\(posts.count - 3) more").font(.system(size: 10.5, weight: .medium)).foregroundStyle(.secondary)
@@ -229,6 +238,12 @@ private struct UpcomingRow: View {
             }
             Spacer(minLength: 0)
             if hovering || model.cancelling.contains(post.id) {
+                Button { model.editing = post } label: {
+                    Image(systemName: "pencil").font(.system(size: 11, weight: .bold))
+                        .frame(width: 24, height: 24).background(Circle().fill(Theme.selected))
+                }
+                .buttonStyle(.pressable)
+                .help("Edit caption or time")
                 Button { model.confirmingCancel = post } label: {
                     Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
                         .frame(width: 24, height: 24).background(Circle().fill(Theme.selected))
@@ -239,8 +254,72 @@ private struct UpcomingRow: View {
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(hovering ? Theme.hover : .clear))
+        .contentShape(Rectangle())
+        .onTapGesture { model.editing = post }
         .onHover { hovering = $0 }
     }
+}
+
+/// Edit a scheduled post: its caption and when it goes up (each saved only if changed).
+private struct EditScheduledSheet: View {
+    let model: PlannerModel
+    let post: ScheduledPost
+    @State private var caption: String
+    @State private var publishAt: Date
+    @FocusState private var focused: Bool
+
+    init(model: PlannerModel, post: ScheduledPost) {
+        self.model = model
+        self.post = post
+        _caption = State(initialValue: post.caption)
+        _publishAt = State(initialValue: post.publishAt)
+    }
+
+    private var changed: Bool { caption != post.caption || abs(publishAt.timeIntervalSince(post.publishAt)) >= 60 }
+
+    var body: some View {
+        DialogCard(width: 640, close: close) {
+            VStack(spacing: 0) {
+                HStack {
+                    Button("Cancel", action: close).buttonStyle(.secondaryPill).keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Text("Edit scheduled \(post.kind.title.lowercased())").font(.system(size: 15, weight: .bold))
+                    Spacer()
+                    Button {
+                        Task { _ = await model.save(post, caption: caption, publishAt: publishAt) }
+                    } label: {
+                        if model.savingEdit { Spinner(size: 13).frame(width: 40) } else { Text("Save") }
+                    }
+                    .buttonStyle(.prominentCompact)
+                    .disabled(!changed || model.savingEdit || caption.count > CreateModel.captionLimit)
+                    .keyboardShortcut(.return, modifiers: .command)
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 52)
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+                HStack(alignment: .top, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        RemoteImage(url: post.thumbnail)
+                            .frame(width: 200, height: post.kind == .reel ? 300 : 200)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        Text("Goes up \(publishAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                            .frame(width: 200, alignment: .leading)
+                    }
+                    VStack(alignment: .trailing, spacing: 12) {
+                        CaptionField(text: $caption, focused: $focused, height: 120)
+                        CaptionCounter(count: caption.count)
+                        SchedulePicker(date: $publishAt)
+                            .padding(12)
+                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.panel))
+                    }
+                }
+                .padding(18)
+            }
+        }
+    }
+
+    private func close() { if !model.savingEdit { model.editing = nil } }
 }
 
 extension ScheduledPost.Kind {

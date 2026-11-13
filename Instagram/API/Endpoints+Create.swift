@@ -215,7 +215,7 @@ extension IGClient {
     // MARK: Publishing
 
     /// A JSON or form POST to `/api/v1/…` with the given header set, dry-run aware.
-    private func createPost(_ path: String, form: [String: String]? = nil, json: OrderedJSON? = nil,
+    func createPost(_ path: String, form: [String: String]? = nil, json: OrderedJSON? = nil,
                             headers set: HeaderSet = .standard, extraHeaders: [String: String] = [:], name: String) async throws -> JSON {
         await prepare()
         var r = URLRequest(url: URL(string: Self.origin + path)!)
