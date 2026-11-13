@@ -10,6 +10,10 @@
   <a href="https://matte.subhashh.tech">matte.subhashh.tech</a>
 </p>
 
+<p align="center">
+  <img src="docs/images/hero.jpg" alt="Matte's home feed on a Mac: posts in three columns, stories down the side, a reel playing in the mini player and a message notification">
+</p>
+
 ---
 
 Matte is a Mac app for Instagram. It is made for the desktop, not a phone app stretched to fit.
@@ -68,6 +72,13 @@ The Homebrew install does not need these steps.
 - **Everything else.** Profiles, Explore, search with your recent searches, saved posts and collections, who liked a post, tagged people, several accounts, and light and dark mode.
 - **Ghost mode.** Watch stories without marking them seen, read messages without sending "Seen", and type without showing "typing…". Each one is optional.
 - **For business and creator accounts:** a planner for scheduled posts, and a list of comments that need a reply.
+
+<img src="docs/images/messages.jpg" alt="Messages: the chat list and a conversation with a shared reel, a voice note and a reaction">
+<img src="docs/images/reels.jpg" alt="Reels: a reel with its comments, and another reel in the mini player">
+<img src="docs/images/planner.jpg" alt="The planner: a month calendar of scheduled posts and reels, and the upcoming list">
+<img src="docs/images/ghost.jpg" alt="Ghost mode: watch stories, read messages and type without being seen">
+
+<sub>The images are drawn from Matte's layout with made-up accounts (docs/graphics: <code>npm install && npm run render</code>).</sub>
 
 ## 3. Updates
 
