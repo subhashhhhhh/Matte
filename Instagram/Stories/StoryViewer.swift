@@ -112,7 +112,8 @@ final class StoryViewerModel {
         guard !markedSeen.contains(item.pk), reel.user.id != app?.viewerId else { return }
         #if DEBUG
         // Test launches never mark the user's stories as watched (only with `-IGMarkSeen YES`).
-        guard UserDefaults.standard.bool(forKey: "IGMarkSeen") else { return }
+        // The Debug copy installed in /Applications ("Matte Debug") is the user's: it does.
+        guard UserDefaults.standard.bool(forKey: "IGMarkSeen") || Bundle.main.bundlePath.hasPrefix("/Applications/") else { return }
         #endif
         seenTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1))

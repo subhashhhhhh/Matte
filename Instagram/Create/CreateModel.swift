@@ -386,7 +386,9 @@ final class CreateModel {
         status = "Adding to your story…"
         progress = 0.9
         guard let id = uploaded[item.id] else { return nil }
-        return try await client.configureStory(uploadId: id, isVideo: item.source.isVideo)
+        return try await client.configureStory(uploadId: id, isVideo: item.source.isVideo) { [weak self] in
+            Task { @MainActor in self?.status = "Instagram is processing the video…" }
+        }
     }
 
     private func progressReporter(start: Int64, total: Int64) -> @Sendable (Int64) -> Void {

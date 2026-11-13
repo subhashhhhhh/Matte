@@ -325,7 +325,34 @@ extension IGClient {
     /// Publishes an uploaded story. A photo (recorded in phone mode): caption and Facebook
     /// fields empty, `configure_mode` 1. A video (from the scripts): only `configure_mode` and
     /// the upload id.
-    func configureStory(uploadId: String, isVideo: Bool) async throws -> Media? {
+    ///
+    /// A video is transcoded by Instagram after the upload; until it's done the publish fails
+    /// with "Transcode not finished yet." (seen 2026-11-13, a 57 s story). Ask again, as the
+    /// reel publish does for its 202: after 3, 6, 12, then every 15 s, for about 4 minutes.
+    func configureStory(uploadId: String, isVideo: Bool, onWaiting: (@Sendable () -> Void)? = nil) async throws -> Media? {
+        var attempt = 0
+        while true {
+            do {
+                return try await configureStoryOnce(uploadId: uploadId, isVideo: isVideo)
+            } catch where isVideo && Self.isTranscodePending(error) && attempt < 20 {
+                onWaiting?()
+                try await Task.sleep(for: .milliseconds(min(3000 << attempt, 15000)))
+                attempt += 1
+            }
+        }
+    }
+
+    /// Instagram's "the video isn't ready yet" answer, however it arrives (error status or body).
+    nonisolated static func isTranscodePending(_ error: Error) -> Bool {
+        let text: String = switch error as? IGError {
+        case .http(_, let body): body
+        case .api(let message): message
+        default: error.localizedDescription
+        }
+        return text.localizedCaseInsensitiveContains("transcode not finished")
+    }
+
+    private func configureStoryOnce(uploadId: String, isVideo: Bool) async throws -> Media? {
         var form = formTokens()
         form["configure_mode"] = "1"
         form["upload_id"] = uploadId
