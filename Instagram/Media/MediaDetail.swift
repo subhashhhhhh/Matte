@@ -253,6 +253,10 @@ struct MediaStage: View {
     /// The first photo, already decoded (handed over by the photo flight), so it shows at once.
     var initialImage: CGImage? = nil
     @State private var page = 0
+    @Environment(AppModel.self) private var app
+    @State private var track: MusicTrack?
+    @State private var holder = UUID()
+    @State private var music = PostMusic.shared
 
     private var items: [Media] { media.children.isEmpty ? [media] : media.children }
 
@@ -287,7 +291,34 @@ struct MediaStage: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay(alignment: .topLeading) {
+            if let track {
+                HStack(spacing: 8) {
+                    MusicLine(track: track, fontSize: 12, playing: music.playingPk == media.pk)
+                        .foregroundStyle(.white)
+                        .environment(\.colorScheme, .dark)
+                    MuteButton()
+                }
+                .padding(.leading, 12)
+                .padding(.trailing, 4)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(.black.opacity(0.45)))
+                .padding(12)
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: track)
         .onChange(of: media.pk) { page = 0 }
+        // A photo post's song plays while it's open.
+        .task(id: media.pk) {
+            track = nil
+            PostMusic.shared.release(holder)
+            guard !media.isVideo, media.expiresAt == nil else { return }
+            guard let found = await PostMusic.shared.track(for: media, client: app.client), !Task.isCancelled else { return }
+            track = found
+            PostMusic.shared.play(found, for: media.pk, holder: holder)
+        }
+        .onDisappear { PostMusic.shared.release(holder) }
     }
 
     private func pageArrow(_ symbol: String, action: @escaping () -> Void) -> some View {

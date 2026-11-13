@@ -53,6 +53,17 @@ nonisolated struct StorySticker: Hashable, Sendable {
     }
 }
 
+/// A song on a photo post: the part the poster picked (`audio_asset_start_time_in_ms`,
+/// `overlap_duration_in_ms`) of `progressive_download_url`.
+nonisolated struct MusicTrack: Hashable, Sendable {
+    var title: String
+    var artist: String
+    var url: URL
+    var startMs: Int
+    var durationMs: Int
+    var cover: URL?
+}
+
 nonisolated struct RepostNote: Hashable, Sendable {
     var id: String
     var userId: String
@@ -114,6 +125,8 @@ nonisolated struct Media: Hashable, Sendable, Identifiable {
     var hasUsertags: Bool?
     /// Stories: what can be tapped on it (a shared post, a mention, a link, a hashtag).
     var storyStickers: [StorySticker] = []
+    /// A photo post's song (`music_metadata`; only the post's own info has it, not the feed).
+    var music: MusicTrack?
 
     /// A shortcode's media pk (the code is the pk in Instagram's URL-safe base 64; longer
     /// codes of private posts carry extra characters after the first 11).
@@ -384,6 +397,7 @@ extension Media.Kind: Codable {}
 extension RepostNote: Codable {}
 extension StorySticker.Kind: Codable {}
 extension StorySticker: Codable {}
+extension MusicTrack: Codable {}
 extension Media: Codable {}
 extension StoryReel: Codable {}
 extension DMThread: Codable {}

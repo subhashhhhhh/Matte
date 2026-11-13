@@ -120,5 +120,5 @@ final class LoopingVideo {
 @Observable
 final class SoundSetting {
     static let shared = SoundSetting()
-    var muted = false
+    var muted = false { didSet { PostMusic.shared.setMuted(muted) } }
 }

@@ -20,6 +20,18 @@ nonisolated enum Parser {
                     latestStory: j["latest_reel_media"].int.flatMap { $0 > 0 ? $0 : nil })
     }
 
+    /// A photo post's song (`music_metadata.music_info`, seen in `media/<pk>/info/`).
+    static func music(_ info: JSON) -> MusicTrack? {
+        let asset = info["music_asset_info"], use = info["music_consumption_info"]
+        guard let raw = asset["progressive_download_url"].string ?? asset["fast_start_progressive_download_url"].string,
+              let url = URL(string: raw) else { return nil }
+        if use["should_mute_audio"].bool == true { return nil }
+        return MusicTrack(title: asset["title"].string ?? "", artist: asset["display_artist"].string ?? "", url: url,
+                          startMs: use["audio_asset_start_time_in_ms"].int ?? asset["highlight_start_times_in_ms"].array.first?.int ?? 0,
+                          durationMs: use["overlap_duration_in_ms"].int ?? 15000,
+                          cover: asset["cover_artwork_thumbnail_uri"].string.flatMap(URL.init(string:)))
+    }
+
     /// A story item's tappable stickers (shapes as seen in story responses, 2026-11-13).
     static func storyStickers(_ j: JSON) -> [StorySticker] {
         func place(_ s: JSON, _ kind: StorySticker.Kind) -> StorySticker? {
@@ -96,6 +108,7 @@ nonisolated enum Parser {
                               text: n["text"].string.flatMap { $0.isEmpty ? nil : $0 })
         }
         m.storyStickers = storyStickers(j)
+        m.music = music(j["music_metadata"]["music_info"])
         m.trackingToken = j["organic_tracking_token"].string
         m.loggingToken = j["logging_info_token"].string
         m.images = renditions(j["image_versions2"]["candidates"])

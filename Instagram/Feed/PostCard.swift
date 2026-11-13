@@ -12,6 +12,12 @@ struct PostTile: View {
 
     @State private var hovering = false
     @State private var hoverTask: Task<Void, Never>?
+    @Environment(AppModel.self) private var app
+    /// The post's song, once known (asked when you rest on it).
+    @State private var track: MusicTrack?
+    @State private var musicTask: Task<Void, Never>?
+    @State private var holder = UUID()
+    @State private var music = PostMusic.shared
 
     /// Instagram's own limits: no taller than 4:5, no wider than 1.91:1.
     static func mediaAspect(_ post: Media) -> CGFloat { min(1.91, max(0.8, post.aspect)) }
@@ -40,9 +46,12 @@ struct PostTile: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: open)
         .contextMenu { PostMenu(media: post, open: open) }
+        .onAppear { if track == nil { track = PostMusic.shared.cached(post.pk) } }
+        .onDisappear { musicTask?.cancel(); PostMusic.shared.release(holder) }
         .onHover { inside in
             hovering = inside
             hoverTask?.cancel()
+            hoverMusic(inside)
             guard previewVideo != nil else { return }
             if inside {
                 hoverTask = Task {
@@ -57,11 +66,34 @@ struct PostTile: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            AuthorLine(media: post, avatarSize: 24, fontSize: 12.5)
+            VStack(alignment: .leading, spacing: 2) {
+                AuthorLine(media: post, avatarSize: 24, fontSize: 12.5)
+                if let track {
+                    MusicLine(track: track, fontSize: 11, playing: music.playingPk == post.pk)
+                        .padding(.leading, 32)
+                        .transition(.opacity)
+                }
+            }
             Spacer(minLength: 0)
             if let t = post.takenAt {
                 Text(t.shortAge).font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
+        }
+        .animation(.easeOut(duration: 0.2), value: track)
+    }
+
+    /// Resting on a photo post plays its song (asked once), as the feed plays it on the phone.
+    private func hoverMusic(_ inside: Bool) {
+        musicTask?.cancel()
+        guard inside else { PostMusic.shared.release(holder); return }
+        guard previewVideo == nil, !post.isVideo else { return }
+        musicTask = Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+            let found = await PostMusic.shared.track(for: post, client: app.client)
+            guard !Task.isCancelled else { return }
+            track = found
+            if let found, hovering { PostMusic.shared.play(found, for: post.pk, holder: holder) }
         }
     }
 
@@ -82,6 +114,8 @@ struct PostTile: View {
                 badge("square.on.square.fill", text: "\(post.children.count)")
             } else if post.isVideo, !isPreviewing {
                 badge("play.fill", text: nil)
+            } else if music.playingPk == post.pk {
+                MuteButton().padding(8)
             }
         }
     }
