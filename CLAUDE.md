@@ -12,8 +12,9 @@ memory (the website uses 4–5 GB on an 8 GB Mac).
   `nonisolated`; `IGClient`, `IGSession`, `ImagePipeline` are actors.
 - Debug build: `xcodebuild -project Instagram.xcodeproj -scheme Instagram -configuration Debug -derivedDataPath <scratchpad>/dd build`
 - The app is **Matte** (`PRODUCT_NAME`, Matte.app); the code module stays `Instagram`.
-- Install: `xcodebuild … -configuration Release -derivedDataPath <scratchpad>/dd-release build`, quit the
-  running app, `ditto <…>/Release/Matte.app /Applications/Matte.app`.
+- Install: **Debug only** (Release builds take too long): build Debug as above, quit the running app
+  (bundle id `com.subhash.Instagram`), `ditto <…>/Debug/Matte.app "/Applications/Matte Debug.app"`, open it.
+  Debug-only test guards skip copies running from `/Applications/` (that copy marks stories seen).
 - Tests: `xcodebuild test -project Instagram.xcodeproj -scheme Instagram -derivedDataPath <scratchpad>/dd-test`.
   Read the whole result, including the trailing summary.
 - **Commit and push after every working step** (private repo, `main`). The Mac shuts down
