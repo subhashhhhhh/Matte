@@ -329,11 +329,12 @@ extension IGClient {
     /// A video is transcoded by Instagram after the upload; until it's done the publish fails
     /// with "Transcode not finished yet." (seen 2026-11-13, a 57 s story). Ask again, as the
     /// reel publish does for its 202: after 3, 6, 12, then every 15 s, for about 4 minutes.
-    func configureStory(uploadId: String, isVideo: Bool, onWaiting: (@Sendable () -> Void)? = nil) async throws -> Media? {
+    func configureStory(uploadId: String, isVideo: Bool, reshare: StoryReshare? = nil,
+                        onWaiting: (@Sendable () -> Void)? = nil) async throws -> Media? {
         var attempt = 0
         while true {
             do {
-                return try await configureStoryOnce(uploadId: uploadId, isVideo: isVideo)
+                return try await configureStoryOnce(uploadId: uploadId, isVideo: isVideo, reshare: reshare)
             } catch where isVideo && Self.isTranscodePending(error) && attempt < 20 {
                 onWaiting?()
                 try await Task.sleep(for: .milliseconds(min(3000 << attempt, 15000)))
@@ -352,8 +353,9 @@ extension IGClient {
         return text.localizedCaseInsensitiveContains("transcode not finished")
     }
 
-    private func configureStoryOnce(uploadId: String, isVideo: Bool) async throws -> Media? {
+    private func configureStoryOnce(uploadId: String, isVideo: Bool, reshare: StoryReshare?) async throws -> Media? {
         var form = formTokens()
+        if let reshare { form.merge(Self.reshareFields(reshare)) { $1 } }
         form["configure_mode"] = "1"
         form["upload_id"] = uploadId
         if !isVideo {
@@ -364,6 +366,21 @@ extension IGClient {
         }
         let json = try await createPost("/api/v1/media/configure_to_story/", form: form, headers: .mobile, name: "media/configure_to_story")
         return Parser.media(json["media"])
+    }
+
+    /// A post or reel on the story as a tappable sticker (instagrapi's `photo_configure_to_story`
+    /// with `medias`; the web app has no such request). Numbers as fractions of the story.
+    nonisolated static func reshareFields(_ r: StoryReshare) -> [String: String] {
+        func n(_ v: Double) -> String { String(format: "%.7f", min(max(v, 0), 4)) }
+        let p = r.placement
+        let tap = "[{" + [
+            "\"x\":\(n(p.x))", "\"y\":\(n(p.y))", "\"z\":0",
+            "\"width\":\(n(p.width))", "\"height\":\(n(p.height))", "\"rotation\":0.0",
+            "\"type\":\"feed_media\"", "\"media_id\":\(OrderedJSON.quote(r.mediaPk))",
+            "\"media_owner_id\":\(OrderedJSON.quote(r.ownerId))", "\"product_type\":\"feed\"",
+            "\"is_sticker\":true", "\"tap_state\":0", "\"tap_state_str_id\":\"feed_post_sticker_square\"",
+        ].joined(separator: ",") + "}]"
+        return ["reshared_media_id": r.mediaPk, "tap_models": tap]
     }
 
     // MARK: Your posts

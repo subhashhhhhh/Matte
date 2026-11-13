@@ -56,6 +56,20 @@ struct ShareSheet: View {
                 }
             }
             Spacer()
+            if !isStory {
+                Button { app.addToStory(media) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill").font(.system(size: 13))
+                        Text("Add to story").font(.system(size: 13, weight: .semibold))
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .background(Capsule().fill(Theme.panel))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.pressable)
+                .help("Add this \(media.productType == "clips" ? "reel" : "post") to your story")
+            }
             Button(action: close) {
                 Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)).frame(width: 30, height: 30)
             }

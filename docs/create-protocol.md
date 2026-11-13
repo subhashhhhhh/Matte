@@ -105,3 +105,18 @@ through the unchanged story path above (`CreateModel.shareFinishedStory` → `up
   Instagram fills it. Filters are colour-only, so the screen-size preview matches the export.
 - Dry run (`-IGProbeCreate`, "story editor photo/video"): the same requests, headers, rupload
   params and form fields as "story photo/video", with 1080×1920 sizes.
+
+## Post or reel to your story (Matte)
+
+instagram.com can't do this (only the phone app), so nothing could be recorded. Written from
+instagrapi's `photo_configure_to_story` (`medias`), **unverified until the user tries it**:
+the photo story form above plus `reshared_media_id=<pk>` and
+`tap_models=[{"x","y","z":0,"width","height","rotation":0.0,"type":"feed_media","media_id","media_owner_id",
+"product_type":"feed","is_sticker":true,"tap_state":0,"tap_state_str_id":"feed_post_sticker_square"}]`
+(x/y = the sticker's centre, width/height = its size, all as fractions of the story).
+The card (author + picture, `StoryEditor/StoryReshare.swift`) is the editor's picture, so moving or
+zooming it moves the tap area with it (`StoryEditorModel.placedReshare`). Entry: "Add to story" in
+the Send to… sheet. Debug: `-IGAddToStory YES [-IGStoryShare YES -IGDryRunWrites <dir>]`.
+
+Background sharing: Share in the sheet or the story editor closes it and hands the work to an
+`UploadJob` (`Create/Uploads.swift`), shown as a ring in the window's bottom-right corner.

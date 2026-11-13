@@ -61,6 +61,8 @@ final class CreateModel {
     /// Stories have their own editor: the sheet offers only Post and Reel. The story editor
     /// (and the debug dry runs) turn this on to share a story through the same steps.
     @ObservationIgnored var allowsStory = false
+    /// A post or reel added to the story (a tappable sticker over its card).
+    @ObservationIgnored private var storyReshare: StoryReshare?
     /// Called after a successful share in place of closing the create sheet (the story editor).
     @ObservationIgnored var onShared: (() -> Void)?
 
@@ -238,8 +240,9 @@ final class CreateModel {
     /// Shares a story that's already finished (the story editor's flattened 1080×1920 file):
     /// no crop or re-encode, straight to the same upload and `configure_to_story` as before.
     /// Try Again after a failure is `share()`, which keeps the finished uploads.
-    func shareFinishedStory(_ media: PreparedMedia, isVideo: Bool) {
+    func shareFinishedStory(_ media: PreparedMedia, isVideo: Bool, reshare: StoryReshare? = nil) {
         guard !isSharing else { return }
+        storyReshare = reshare
         allowsStory = true
         resetWork()
         let source = CreateSource(url: media.file, isVideo: isVideo, width: media.width, height: media.height, durationMs: media.durationMs)
@@ -386,7 +389,7 @@ final class CreateModel {
         status = "Adding to your story…"
         progress = 0.9
         guard let id = uploaded[item.id] else { return nil }
-        return try await client.configureStory(uploadId: id, isVideo: item.source.isVideo) { [weak self] in
+        return try await client.configureStory(uploadId: id, isVideo: item.source.isVideo, reshare: storyReshare) { [weak self] in
             Task { @MainActor in self?.status = "Instagram is processing the video…" }
         }
     }

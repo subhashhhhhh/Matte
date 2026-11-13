@@ -152,6 +152,23 @@ final class AppModel {
         if let raw = UserDefaults.standard.string(forKey: "IGStartPage"), let d = Destination(rawValue: raw) {
             destination = d
         }
+        // `-IGAddToStory YES`: "Add to story" for the first photo post in the feed (share only with a dry run).
+        if UserDefaults.standard.bool(forKey: "IGAddToStory") {
+            Task {
+                for _ in 0..<60 {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    if let post = feed?.posts.first(where: { !$0.isVideo }) {
+                        addToStory(post)
+                        // `-IGStoryShare YES` with `-IGDryRunWrites`: presses Share once the card is in.
+                        if UserDefaults.standard.bool(forKey: "IGStoryShare"), UserDefaults.standard.string(forKey: "IGDryRunWrites") != nil {
+                            while storyEditor?.reshare == nil { try? await Task.sleep(for: .milliseconds(200)) }
+                            storyEditor?.share()
+                        }
+                        break
+                    }
+                }
+            }
+        }
         // `-IGShowSwitcher YES`: open the ⌘K switcher at launch.
         showSwitcher = UserDefaults.standard.bool(forKey: "IGShowSwitcher")
         // `-IGOpenSettings YES`: open Settings at launch.
@@ -294,6 +311,17 @@ final class AppModel {
         if let url { Task { await model.load(url) } }
     }
 
+    /// "Add to story" for a post or reel: the story editor with the post as a card.
+    func addToStory(_ media: Media) {
+        guard let client, storyEditor == nil else { return }
+        sharing = nil
+        stories?.close()
+        if creating?.isSharing != true { creating = nil }
+        let model = StoryEditorModel(app: self, client: client)
+        storyEditor = model
+        Task { await model.loadReshare(media) }
+    }
+
     func closeStoryEditor() {
         storyEditor?.tearDown()
         storyEditor = nil
@@ -425,9 +453,9 @@ final class AppModel {
     }
 
     /// Share pressed in the story editor: the editor closes, the story exports and uploads in the corner.
-    func shareStoryInBackground(source: CreateSource, doc: StoryDoc, gradient: StoryExport.Gradient) {
+    func shareStoryInBackground(source: CreateSource, doc: StoryDoc, gradient: StoryExport.Gradient, reshare: StoryReshare? = nil) {
         guard let client else { return }
-        uploads.append(UploadJob(story: source, doc: doc, gradient: gradient, app: self, client: client))
+        uploads.append(UploadJob(story: source, doc: doc, gradient: gradient, reshare: reshare, app: self, client: client))
         closeStoryEditor()
     }
 

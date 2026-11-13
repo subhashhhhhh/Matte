@@ -19,7 +19,7 @@ final class UploadJob: Identifiable {
     @ObservationIgnored private let client: IGClient
     @ObservationIgnored private var task: Task<Void, Never>?
     /// The story editor's work, kept so Try Again doesn't export again.
-    @ObservationIgnored private var story: (source: CreateSource, doc: StoryDoc, gradient: StoryExport.Gradient)?
+    @ObservationIgnored private var story: (source: CreateSource, doc: StoryDoc, gradient: StoryExport.Gradient, reshare: StoryReshare?)?
     @ObservationIgnored private var exported: PreparedMedia?
 
     var progress: Double {
@@ -48,11 +48,12 @@ final class UploadJob: Identifiable {
     }
 
     /// A story from the editor: exports the canvas, then uploads it.
-    init(story source: CreateSource, doc: StoryDoc, gradient: StoryExport.Gradient, app: AppModel?, client: IGClient) {
+    init(story source: CreateSource, doc: StoryDoc, gradient: StoryExport.Gradient, reshare: StoryReshare? = nil,
+         app: AppModel?, client: IGClient) {
         self.app = app
         self.client = client
         title = "Story"
-        story = (source, doc, gradient)
+        story = (source, doc, gradient, reshare)
         loadThumbnail(source)
         start()
     }
@@ -115,7 +116,7 @@ final class UploadJob: Identifiable {
                 let model = CreateModel(app: app, client: client)
                 attach(model)
                 sharer = model
-                model.shareFinishedStory(media, isVideo: story.source.isVideo)
+                model.shareFinishedStory(media, isVideo: story.source.isVideo, reshare: story.reshare)
                 watch()
             } catch is CancellationError {
             } catch {

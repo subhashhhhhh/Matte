@@ -76,6 +76,9 @@ final class StoryEditorModel {
         self.client = client
     }
 
+    /// Adding a post or reel to your story: the card is the picture, with a tappable sticker over it.
+    private(set) var reshare: StoryReshare?
+
     var hasMedia: Bool { source != nil }
     var isVideo: Bool { source?.isVideo ?? false }
     var hasEdits: Bool { doc != original }
@@ -129,6 +132,22 @@ final class StoryEditorModel {
         } catch {
             notice = error.localizedDescription
         }
+    }
+
+    /// Starts a story from a post or reel: its card (author and picture), a little smaller than
+    /// the story's width, on a gradient from its colours.
+    func loadReshare(_ media: Media) async {
+        loading = true
+        guard let file = await PostStoryCard.render(media) else {
+            loading = false
+            notice = "Couldn't load this post."
+            return
+        }
+        await load(file)
+        guard source != nil else { return }
+        doc.bgScale = PostStoryCard.width / StoryDoc.size.width
+        original = doc
+        reshare = StoryReshare(mediaPk: media.pk, ownerId: media.user?.id ?? "")
     }
 
     @concurrent
@@ -413,7 +432,15 @@ final class StoryEditorModel {
         mode = .normal
         selection = nil
         video?.pause()
-        app?.shareStoryInBackground(source: source, doc: doc, gradient: gradient)
+        app?.shareStoryInBackground(source: source, doc: doc, gradient: gradient, reshare: placedReshare)
+    }
+
+    /// The reshare with the card's place on the finished story (where it was moved and zoomed to).
+    private var placedReshare: StoryReshare? {
+        guard var reshare, let source else { return nil }
+        let r = doc.bgRect(aspect: source.aspect), c = StoryDoc.size
+        reshare.placement = .init(x: r.midX / c.width, y: r.midY / c.height, width: r.width / c.width, height: r.height / c.height)
+        return reshare
     }
 
     func cancelShare() {
@@ -451,7 +478,7 @@ final class StoryEditorModel {
     func shareAndWait() async {
         // The same background upload, without an app (the create probe).
         guard let source else { return }
-        let job = UploadJob(story: source, doc: doc, gradient: gradient, app: nil, client: client)
+        let job = UploadJob(story: source, doc: doc, gradient: gradient, reshare: placedReshare, app: nil, client: client)
         await job.waitUntilDone()
         sharer = job.sharer
         if job.sharer == nil, case .failed(let m) = job.state { export = .failed(m) }
