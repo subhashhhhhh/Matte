@@ -17,7 +17,7 @@ struct InstagramApp: App {
             let model = app
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(300))
-                let view = WelcomeView().environment(model).frame(width: 1180, height: 780)
+                let view = WelcomeView(animated: false).environment(model).frame(width: 1180, height: 780)
                     .environment(\.colorScheme, .dark).background(Theme.background)
                 let r = ImageRenderer(content: view)
                 r.scale = 2
