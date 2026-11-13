@@ -159,6 +159,13 @@ final class AppModel {
                     try? await Task.sleep(for: .milliseconds(500))
                     if let post = feed?.posts.first(where: { !$0.isVideo }) {
                         addToStory(post)
+                        // `-IGReshareLook photo` / `-IGStoryMode background`: set up the editor for screenshots.
+                        let d = UserDefaults.standard
+                        if d.string(forKey: "IGReshareLook") == "photo" || d.string(forKey: "IGStoryMode") == "background" {
+                            while storyEditor?.reshare == nil { try? await Task.sleep(for: .milliseconds(200)) }
+                            if d.string(forKey: "IGReshareLook") == "photo" { storyEditor?.toggleCardStyle() }
+                            if d.string(forKey: "IGStoryMode") == "background" { storyEditor?.setMode(.background) }
+                        }
                         // `-IGStoryShare YES` with `-IGDryRunWrites`: presses Share once the card is in.
                         if UserDefaults.standard.bool(forKey: "IGStoryShare"), UserDefaults.standard.string(forKey: "IGDryRunWrites") != nil {
                             while storyEditor?.reshare == nil { try? await Task.sleep(for: .milliseconds(200)) }

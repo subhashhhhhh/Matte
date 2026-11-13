@@ -243,6 +243,7 @@ private struct RoundTool: View {
                 .foregroundStyle(active ? .black : .white)
                 .frame(width: 42, height: 42)
                 Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))
+                    .fixedSize()
             }
             .contentShape(Rectangle())
         }
@@ -763,7 +764,7 @@ private struct BackgroundStrip: View {
     let model: StoryEditorModel
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             swatch(.blur, label: "Blur") {
                 if let image = model.backdropPreview, model.doc.background == .blur {
                     Image(decorative: image, scale: 1).resizable().aspectRatio(contentMode: .fill)
@@ -777,7 +778,7 @@ private struct BackgroundStrip: View {
                 LinearGradient(colors: [Color(cgColor: model.gradient.top.cg), Color(cgColor: model.gradient.bottom.cg)],
                                startPoint: .top, endPoint: .bottom)
             }
-            Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 34)
+            Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 46)
             ForEach(StoryColor.palette, id: \.self) { c in
                 let selected = model.doc.background == .color(c)
                 Button { model.setBackground(.color(c)) } label: {
@@ -786,7 +787,7 @@ private struct BackgroundStrip: View {
                         .overlay(Circle().strokeBorder(.white, lineWidth: 2))
                         .scaleEffect(selected ? 1.25 : 1)
                         .shadow(color: .black.opacity(0.3), radius: 2)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 28, height: 46)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.pressable)
@@ -805,6 +806,7 @@ private struct BackgroundStrip: View {
                     .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .strokeBorder(selected ? Color.white : .white.opacity(0.25), lineWidth: selected ? 2 : 1))
                 Text(label).font(.system(size: 10.5, weight: .medium)).foregroundStyle(.white.opacity(selected ? 1 : 0.6))
+                    .fixedSize()
             }
             .contentShape(Rectangle())
         }

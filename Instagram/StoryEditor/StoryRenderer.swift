@@ -315,7 +315,7 @@ nonisolated enum StoryRenderer {
                 .transformed(by: CGAffineTransform(translationX: -inner.midX, y: -inner.midY)
                     .concatenating(CGAffineTransform(scaleX: fill, y: fill))
                     .concatenating(CGAffineTransform(translationX: canvas.width / 2, y: canvas.height / 2)))
-            blur.radius = 70
+            blur.radius = 120
             let dim = CIFilter.colorControls()
             dim.inputImage = blur.outputImage
             dim.brightness = -0.06

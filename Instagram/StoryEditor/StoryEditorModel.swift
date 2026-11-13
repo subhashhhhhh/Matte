@@ -163,6 +163,11 @@ final class StoryEditorModel {
         await load(file)
         guard source != nil else { return }
         doc.bgScale = PostStoryCard.width / StoryDoc.size.width
+        // The colours from the photo, not the card's white edges.
+        if let small, let middle = small.cropping(to: CGRect(x: small.width / 5, y: small.height / 4,
+                                                            width: small.width * 3 / 5, height: small.height / 2)) {
+            gradient = StoryRenderer.gradient(from: middle)
+        }
         doc.background = .blur
         original = doc
         reshare = StoryReshare(mediaPk: media.pk, ownerId: media.user?.id ?? "")
