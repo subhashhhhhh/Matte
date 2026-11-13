@@ -391,11 +391,15 @@ final class CreateModel {
         guard let id = uploaded[item.id] else { return nil }
         // A shared post: the phone app's endpoint keeps the tappable sticker (instagram.com's
         // drops it). If the phone request fails, publish the normal way and say so.
-        if let reshare = storyReshare, !item.source.isVideo {
+        if let reshare = storyReshare {
             do {
                 let media = prepared[item.id]
-                return try await client.configureReshareStoryByPhone(uploadId: id, width: media?.width ?? 1080,
-                                                                     height: media?.height ?? 1920, reshare: reshare)
+                return try await client.configureReshareStoryByPhone(
+                    uploadId: id, width: media?.width ?? 1080, height: media?.height ?? 1920,
+                    durationMs: item.source.isVideo ? (media?.durationMs ?? item.source.durationMs ?? 15000) : nil,
+                    reshare: reshare) { [weak self] in
+                    Task { @MainActor in self?.status = "Instagram is processing the video…" }
+                }
             } catch {
                 if error is CancellationError { throw error }
                 #if DEBUG

@@ -41,8 +41,26 @@ extension IGClient {
         }
     }
 
-    /// Publishes an uploaded photo as a story with `reshare` as a tappable post sticker.
-    func configureReshareStoryByPhone(uploadId: String, width: Int, height: Int, reshare: StoryReshare) async throws -> Media? {
+    /// Publishes an uploaded photo (or, with `durationMs`, video) as a story with `reshare` as a
+    /// tappable post sticker. A video is still being transcoded right after its upload: Instagram
+    /// answers "Transcode not finished yet." and instagrapi asks again; so does this.
+    func configureReshareStoryByPhone(uploadId: String, width: Int, height: Int, durationMs: Int? = nil,
+                                      reshare: StoryReshare, onWaiting: (@Sendable () -> Void)? = nil) async throws -> Media? {
+        var attempt = 0
+        while true {
+            do {
+                return try await configureReshareStoryByPhoneOnce(uploadId: uploadId, width: width, height: height,
+                                                                  durationMs: durationMs, reshare: reshare)
+            } catch where durationMs != nil && Self.isTranscodePending(error) && attempt < 20 {
+                onWaiting?()
+                try await Task.sleep(for: .milliseconds(min(3000 << attempt, 15000)))
+                attempt += 1
+            }
+        }
+    }
+
+    private func configureReshareStoryByPhoneOnce(uploadId: String, width: Int, height: Int, durationMs: Int?,
+                                                  reshare: StoryReshare) async throws -> Media? {
         guard let userId = await session.userId, let sessionId = await session.cookie("sessionid") else { throw IGError.signedOut }
         let phone = PhoneIdentity(userId: userId)
         let now = Int(Date.now.timeIntervalSince1970)
@@ -61,7 +79,7 @@ extension IGClient {
         func text(_ o: Any) -> String {
             String(decoding: (try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys])) ?? Data("[]".utf8), as: UTF8.self)
         }
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "supported_capabilities_new": text(capabilities),
             "has_original_sound": "1",
             "camera_session_id": UUID().uuidString.lowercased(),
@@ -93,12 +111,37 @@ extension IGClient {
             "tap_models": text(tap),
             "reshared_media_id": reshare.mediaPk,
         ]
+        let path: String
+        if let durationMs {
+            // instagrapi `video_configure_to_story`: the video fields instead of the photo ones.
+            let seconds = Double(durationMs) / 1000
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.dateFormat = "yyyyMMdd'T'HHmmss'.000Z'"
+            for k in ["media_folder", "imported_taken_at", "story_sticker_ids", "scene_capture_type",
+                      "rich_text_format_types", "app_attribution_android_namespace", "edits"] { body[k] = nil }
+            body["original_media_type"] = "video"
+            body["source_type"] = "3"
+            body["filter_type"] = "0"
+            body["video_result"] = ""
+            body["camera_position"] = "back"
+            body["camera_entry_point"] = "35"
+            body["client_shared_at"] = String(now - 7)
+            body["date_time_original"] = f.string(from: .now)
+            body["length"] = seconds
+            body["clips"] = [["length": seconds, "source_type": "3", "camera_position": "back"]]
+            body["audio_muted"] = false
+            body["poster_frame_index"] = 0
+            path = "media/configure_to_story/?video=1"
+        } else {
+            path = "media/configure_to_story/"
+        }
         let json = text(body)
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-._~")
         let encoded = json.addingPercentEncoding(withAllowedCharacters: allowed) ?? json
 
-        var r = URLRequest(url: URL(string: "https://i.instagram.com/api/v1/media/configure_to_story/")!)
+        var r = URLRequest(url: URL(string: "https://i.instagram.com/api/v1/" + path)!)
         r.httpMethod = "POST"
         r.timeoutInterval = 60
         r.httpShouldHandleCookies = false
@@ -135,7 +178,8 @@ extension IGClient {
         let answer = (try? JSON(data: data)) ?? .null
         guard status == 200, answer["status"].string == "ok" else {
             let message = answer["message"].string ?? answer["error_title"].string ?? "HTTP \(status)"
-            throw IGError.api("Phone publish refused: \(message)")
+            // Kept as Instagram worded it, so "Transcode not finished yet." is retried.
+            throw IGError.api(message.localizedCaseInsensitiveContains("transcode") ? message : "Phone publish refused: \(message)")
         }
         return Parser.media(answer["media"])
     }
