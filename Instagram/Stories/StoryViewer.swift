@@ -42,10 +42,7 @@ final class StoryViewerModel {
     private func prepare(fromUnseen: Bool = true) async {
         await fetch(around: reelIndex)
         // Like Instagram: open an account at the first story you haven't seen.
-        if fromUnseen, itemIndex == 0, let marker = reel.seenUpTo,
-           let first = reel.items.firstIndex(where: { ($0.takenAt ?? .distantFuture) > marker }) {
-            itemIndex = first
-        }
+        if fromUnseen, itemIndex == 0 { itemIndex = reel.startIndex }
         #if DEBUG
         // `-IGStickerTest bubble|open`: start at the first item with a tappable sticker.
         if UserDefaults.standard.string(forKey: "IGStickerTest") != nil,
@@ -774,8 +771,9 @@ private struct NeighborCard: View {
     var body: some View {
         ZStack {
             Color(white: 0.12)
-            if let first = reel.items.first {
-                RemoteImage(url: first.image(minWidth: size.width * 2), contentMode: .fill)
+            // The story the viewer will open them at (their first unseen one), not their first.
+            if reel.items.indices.contains(reel.startIndex) {
+                RemoteImage(url: reel.items[reel.startIndex].image(minWidth: size.width * 2), contentMode: .fill)
             }
             Color.black.opacity(hovering ? 0.25 : 0.45)
             VStack(spacing: 8) {

@@ -213,6 +213,13 @@ nonisolated struct StoryReel: Hashable, Sendable, Identifiable {
     var seenUpTo: Date?
     /// Filled when the reel is opened.
     var items: [Media] = []
+
+    /// Where the viewer opens this account, as Instagram does: the first story posted after
+    /// your seen marker; the first one when you've seen them all (or there's no marker).
+    var startIndex: Int {
+        guard let marker = seenUpTo else { return 0 }
+        return items.firstIndex { ($0.takenAt ?? .distantFuture) > marker } ?? 0
+    }
 }
 
 /// A page of results and where the next one starts.
