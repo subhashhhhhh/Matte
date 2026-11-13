@@ -5,6 +5,8 @@ enum Destination: String, CaseIterable, Identifiable {
     case home, explore, reels, messages
     /// Manager mode only: the calendar of scheduled posts.
     case planner
+    /// Manager mode only: comments on your recent posts that wait for an answer.
+    case replies
     var id: String { rawValue }
 
     var title: String {
@@ -14,6 +16,7 @@ enum Destination: String, CaseIterable, Identifiable {
         case .reels: "Reels"
         case .messages: "Messages"
         case .planner: "Planner"
+        case .replies: "Replies"
         }
     }
 
@@ -24,6 +27,7 @@ enum Destination: String, CaseIterable, Identifiable {
         case .reels: "play.rectangle.on.rectangle"
         case .messages: "paperplane"
         case .planner: "calendar"
+        case .replies: "bubble.left.and.text.bubble.right"
         }
     }
 
@@ -34,10 +38,11 @@ enum Destination: String, CaseIterable, Identifiable {
         case .reels: (.reels, .reelsFilled)
         case .messages: (.direct, .directFilled)
         case .planner: (.calendar, .calendarFilled)
+        case .replies: (.comment, .commentFilled)
         }
     }
 
-    var managerOnly: Bool { self == .planner }
+    var managerOnly: Bool { self == .planner || self == .replies }
 
     var shortcut: KeyEquivalent {
         switch self {
@@ -46,6 +51,7 @@ enum Destination: String, CaseIterable, Identifiable {
         case .reels: "3"
         case .messages: "4"
         case .planner: "5"
+        case .replies: "6"
         }
     }
 }
@@ -185,6 +191,7 @@ final class AppModel {
     var confirmingDelete: Media?
 
     private(set) var planner: PlannerModel?
+    private(set) var replies: RepliesModel?
     private(set) var feed: FeedModel?
     private(set) var reels: ReelsModel?
     private(set) var inbox: InboxModel?
@@ -317,6 +324,7 @@ final class AppModel {
         authState = .signedIn
         feed = FeedModel(app: self, client: client)
         planner = PlannerModel(app: self, client: client)
+        replies = RepliesModel(app: self, client: client)
         reels = ReelsModel(app: self, client: client)
         inbox = InboxModel(app: self, client: client)
         actions = PostActions(app: self, client: client)
@@ -656,6 +664,7 @@ final class AppModel {
         inbox?.stop()
         client = nil
         planner = nil
+        replies = nil
         feed = nil
         reels = nil
         inbox = nil

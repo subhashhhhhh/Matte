@@ -40,6 +40,12 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `Instagram/Planner/` (Manager mode): the Planner page (month calendar + upcoming list of the account's
   scheduled posts, cancel) and `SchedulePicker`. Scheduling is Instagram's own (`API/Endpoints+Schedule.swift`,
   docs/create-protocol.md "Scheduling"); the create sheet's Schedule switch sets `PostOptions.scheduledAt`.
+  Photos and reels can be scheduled (recorded); carousels not yet.
+- `Instagram/Replies/` (Manager mode): comments on the account's last 12 posts, newest first, "Needs reply"
+  (no reply from you yet; checks the replies of up to 25 comments per refresh) and "All", reply inline
+  (the "@name" is added on send), like, mark done, saved replies (UserDefaults `savedReplies`).
+  `-IGRepliesUser <username>` reads another public account's comments, `-IGRepliesOpen YES` opens the
+  first reply box (screenshots; nothing is sent).
 - `Instagram/Images/` — `ImagePipeline` (downsampled decode, cost-limited cache), `RemoteImage`.
 - `Instagram/App/` — `AppModel`, `MemoryRelief`, `ResponseCache`, debug tools.
 - `ResponseCache`: last good first pages (feed per source, tray, reels, Explore, inbox, 20 recent

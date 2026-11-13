@@ -116,9 +116,11 @@ final class CreateModel {
             && (!isScheduling || scheduleAt.map(SchedulePicker.isAllowed) == true)
     }
 
-    /// What can be scheduled so far: a single photo post (the only scheduled publish recorded),
-    /// in Manager mode.
-    var canSchedule: Bool { app?.managerMode == true && target == .post && items.count <= 1 && !isVideo }
+    /// What can be scheduled so far (recorded): a single photo post or a reel, in Manager mode.
+    var canSchedule: Bool {
+        guard app?.managerMode == true else { return false }
+        return target == .reel || (target == .post && items.count <= 1 && !isVideo)
+    }
     /// This share is a scheduled one.
     var isScheduling: Bool { canSchedule && scheduleAt != nil && !items.isEmpty }
 
@@ -355,7 +357,7 @@ final class CreateModel {
                                          mediaType: 2, progress: progressReporter(start: videoBytes, total: total))
             uploaded[item.id] = id
         }
-        status = "Sharing…"
+        status = options.scheduledAt == nil ? "Sharing…" : "Scheduling…"
         progress = 0.88
         guard let id = uploaded[item.id] else { return nil }
         return try await client.configureClips(uploadId: id, options: options) { [weak self] in

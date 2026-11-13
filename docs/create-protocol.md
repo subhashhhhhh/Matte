@@ -64,7 +64,8 @@ Instagram holds the post and publishes it itself (Matte needn't be running).
 
 - The web app sends both GraphQL requests to `/api/graphql`; Matte's `/graphql/query` works for them too.
 - The configure response has the media `is_in_profile_grid: false`, `integrity_review_decision: pending`.
-- Carousel and reel scheduling aren't recorded yet: Matte refuses them (only a single photo can be scheduled).
+- Scheduled reel (**R**, 2026-11-13): `configure_to_clips` with the same three fields, in the form and in
+  `signed_body` (alphabetical with the rest). Carousel scheduling isn't recorded yet: Matte refuses it.
 - Window offered in Matte: 15 minutes to 75 days ahead, on 5-minute marks (`IGClient.scheduleWindow`).
 
 ## Your posts

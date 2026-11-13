@@ -29,13 +29,14 @@ extension IGClient {
     /// apps say 75 days and need a few minutes' notice).
     nonisolated static let scheduleWindow: (min: TimeInterval, max: TimeInterval) = (15 * 60, 75 * 86_400)
 
-    /// The configure fields that make a publish a scheduled one (recorded: `async_publish` 1,
-    /// `content_scheduling_metadata` with the time in Unix seconds, `publish_mode` "scheduled").
+    /// The configure fields that make a publish a scheduled one, appended after the usual ones in
+    /// this order (recorded in a reel's `signed_body`): `content_scheduling_metadata` with the time
+    /// in Unix seconds, `publish_mode` "scheduled", `async_publish` 1.
     nonisolated static func scheduleFields(_ date: Date) -> [(String, OrderedJSON)] {
         let seconds = String(Int64(date.timeIntervalSince1970.rounded(.down)))
-        return [("async_publish", .string("1")),
-                ("content_scheduling_metadata", .string(#"{"scheduled_publish_time":""# + seconds + #""}"#)),
-                ("publish_mode", .string("scheduled"))]
+        return [("content_scheduling_metadata", .string(#"{"scheduled_publish_time":""# + seconds + #""}"#)),
+                ("publish_mode", .string("scheduled")),
+                ("async_publish", .string("1"))]
     }
 
     /// Everything the account has scheduled, soonest first.

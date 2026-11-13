@@ -162,6 +162,10 @@ struct RootView: View {
                 PlannerView(model: planner).pageVisibility(app.destination == .planner)
                     .environment(\.onScreen, onScreen(.planner))
             }
+            if let replies = app.replies, app.managerMode, app.visited.contains(.replies) {
+                RepliesView(model: replies).pageVisibility(app.destination == .replies)
+                    .environment(\.onScreen, onScreen(.replies))
+            }
             // A profile opened from anywhere covers the page until you go back.
             if let page = app.profiles.last {
                 StackPageView(page: page)
