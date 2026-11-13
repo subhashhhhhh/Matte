@@ -56,6 +56,10 @@ does it.
   Cloudflare Worker (`site/wrangler.jsonc`). Version and changelog come from `docs/releases/*.md` at build time.
   `cd site && npm install && npm run build`. Its window screenshots and the README images are drawn in React
   (`docs/graphics/app.jsx`, made-up accounts) and rendered by `docs/graphics/render.jsx` (`npm run render` there; macOS).
+- Feed refresh: Following and Favorites look for newer posts every 3 min while on screen and Matte is active
+  (`FeedModel.refreshLive`); scrolled down they wait behind a "N new posts" pill. For You isn't refreshed that way
+  (it's re-ranked each load). `-IGFeedRefreshSeconds N` checks every N s and logs `FEED check/live` to stderr.
+  A post opened >60 s after its comments were read (hover prewarm) reloads them and its counts (`refreshIfStale`).
 - `Instagram/Images/` — `ImagePipeline` (downsampled decode, cost-limited cache), `RemoteImage`.
 - `Instagram/App/` — `AppModel`, `MemoryRelief`, `ResponseCache`, debug tools.
 - `ResponseCache`: last good first pages (feed per source, tray, reels, Explore, inbox, 20 recent

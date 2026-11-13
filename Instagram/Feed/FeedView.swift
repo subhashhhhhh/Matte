@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FeedView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.onScreen) private var onScreen
     let model: FeedModel
     @State private var flight = PhotoFlight()
 
@@ -53,6 +54,7 @@ struct FeedView: View {
                         .zIndex(1)
                     Rectangle().fill(Theme.hairline).frame(width: 1)
                 }
+                ScrollViewReader { scroller in
                 ScrollView {
                     VStack(spacing: 16) {
                         if !storiesColumn, !model.tray.isEmpty || app.me != nil {
@@ -65,9 +67,22 @@ struct FeedView: View {
                     .padding(.horizontal, 24)
                     .padding(.vertical, 16)
                     .frame(maxWidth: .infinity)
+                    .id("feedTop")
                 }
                 .scrollIndicators(.never)
                 .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y > 60 } action: { model.scrolledAway = $1 }
+                .onChange(of: model.scrollToTopRequest) {
+                    withAnimation(.easeOut(duration: 0.35)) { scroller.scrollTo("feedTop", anchor: .top) }
+                }
+                .overlay(alignment: .top) {
+                    if !model.pending.isEmpty {
+                        NewPostsPill(count: model.pending.count) { model.showPending() }
+                            .padding(.top, 14)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .animation(.easeOut(duration: 0.25), value: model.pending.isEmpty)
+                }
             }
         }
         .overlay {
@@ -98,6 +113,21 @@ struct FeedView: View {
         .task { await runScenario() }
         #endif
         .task { await model.loadIfNeeded() }
+        // Newer posts while the feed is on screen and Matte is in front: every three minutes,
+        // and soon after you come back to it (Following and Favorites; see `refreshLive`).
+        .task(id: onScreen) {
+            guard onScreen else { return }
+            var every: TimeInterval = 180
+            #if DEBUG
+            // `-IGFeedRefreshSeconds N`: check that often (and log each check).
+            let n = UserDefaults.standard.double(forKey: "IGFeedRefreshSeconds")
+            if n > 0 { every = n }
+            #endif
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(min(20, every)))
+                if NSApp.isActive, Date.now.timeIntervalSince(model.lastFetched) > every { await model.refreshLive() }
+            }
+        }
     }
 }
 
@@ -290,7 +320,10 @@ struct PostLightbox: View {
         }
         .onKeyPress(.leftArrow) { if canPrevious { step(-1) }; return .handled }
         .onKeyPress(.rightArrow) { if canNext { step(1) }; return .handled }
-        .task { await model.start() }
+        .task {
+            await model.start()
+            await model.refreshIfStale()
+        }
     }
 
     private func arrow(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
@@ -496,4 +529,23 @@ extension Theme {
         colors: [Color(red: 0.98, green: 0.69, blue: 0.21), Color(red: 0.96, green: 0.27, blue: 0.36),
                  Color(red: 0.78, green: 0.16, blue: 0.62), Color(red: 0.98, green: 0.69, blue: 0.21)],
         center: .center)
+}
+
+/// "3 new posts": newer posts are waiting above; clicking puts them on top and scrolls up.
+private struct NewPostsPill: View {
+    let count: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up").font(.system(size: 11, weight: .bold))
+                Text(count == 1 ? "1 new post" : "\(count) new posts")
+            }
+            .font(.system(size: 13, weight: .semibold))
+        }
+        .buttonStyle(.prominentCompact)
+        .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+        .accessibilityLabel(count == 1 ? "Show 1 new post" : "Show \(count) new posts")
+    }
 }

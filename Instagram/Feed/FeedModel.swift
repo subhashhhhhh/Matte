@@ -55,6 +55,7 @@ final class FeedModel {
             guard source != oldValue else { return }
             UserDefaults.standard.set(source.rawValue, forKey: "feedSource")
             closeOpened()
+            pending = []
             // Each feed keeps what it had loaded: switching back shows it at once.
             saved[oldValue] = SourceState(posts: posts, cursor: cursor, hasMore: hasMore, fetchedAt: fetchedAt, stale: stale)
             let restored = saved[source]
@@ -104,6 +105,55 @@ final class FeedModel {
     }
     @ObservationIgnored private var saved: [FeedSource: SourceState] = [:]
     @ObservationIgnored private var fetchedAt = Date.distantPast
+
+    /// Newer posts found while you were scrolled down or had a post open: held back so nothing
+    /// moves under you, until the "New posts" pill puts them on top.
+    private(set) var pending: [Media] = []
+    /// Bumped to ask the view to scroll to the top.
+    private(set) var scrollToTopRequest = 0
+    /// When the shown feed was last read from Instagram.
+    var lastFetched: Date { fetchedAt }
+
+    /// Looks for newer posts in a newest-first feed (Following, Favorites) while it's on screen.
+    /// At the top they go in above the others; scrolled down (or with a post open) they wait
+    /// in `pending`. Posts already shown get their fresh counts either way. For You isn't
+    /// refreshed like this: it's re-ranked on every load, so it would reshuffle under you.
+    func refreshLive() async {
+        #if DEBUG
+        if UserDefaults.standard.double(forKey: "IGFeedRefreshSeconds") > 0 {
+            FileHandle.standardError.write(Data("FEED check: \(source.rawValue) loading=\(isLoading) stale=\(stale) posts=\(posts.count)\n".utf8))
+        }
+        #endif
+        guard source != .forYou, !isLoading, !isLoadingMore, !stale, !posts.isEmpty else { return }
+        let requested = source
+        guard let page = try? await client.homeFeed(source: requested), requested == source else { return }
+        fetchedAt = .now
+        let byPk = Dictionary(page.items.map { ($0.pk, $0) }, uniquingKeysWith: { a, _ in a })
+        posts = posts.map { byPk[$0.pk] ?? $0 }
+        let known = Set((posts + pending).map(\.pk))
+        let newest = (posts + pending).compactMap(\.takenAt).max() ?? .distantPast
+        let new = page.items.filter { !known.contains($0.pk) && ($0.takenAt ?? .distantPast) > newest }
+        #if DEBUG
+        if UserDefaults.standard.double(forKey: "IGFeedRefreshSeconds") > 0 {
+            FileHandle.standardError.write(Data("FEED live: \(page.items.count) read, \(new.count) new, \(scrolledAway || opened != nil ? "held" : "on top")\n".utf8))
+        }
+        #endif
+        guard !new.isEmpty else { return }
+        if scrolledAway || opened != nil {
+            pending = new + pending
+        } else {
+            posts = new + posts
+        }
+        cache?.save(posts.cacheable(Self.cachedPosts), "feed-" + requested.rawValue)
+    }
+
+    /// The "New posts" pill: the held-back posts go on top and the feed scrolls up to them.
+    func showPending() {
+        let known = Set(pending.map(\.pk))
+        posts = pending + posts.filter { !known.contains($0.pk) }
+        pending = []
+        scrollToTopRequest += 1
+    }
 
     /// Starts loading a post's comments ahead of a likely click (its tile is hovered).
     func prewarm(_ media: Media) {
@@ -159,7 +209,7 @@ final class FeedModel {
     /// (unchanged posts keep their identity, so their tiles stay put).
     /// Returns whether the shown list was replaced.
     private func adopt(_ fresh: [Media]) -> Bool {
-        defer { stale = false }
+        defer { stale = false; pending = [] }
         if !posts.isEmpty, scrolledAway || opened != nil {
             // Kept in place, but brought up to date (a cached post may lack what's new, e.g. its
             // song's name).

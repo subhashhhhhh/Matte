@@ -11,6 +11,8 @@ final class MediaDetailModel: Identifiable {
     private(set) var loadingMedia = false
     private(set) var loadingComments = false
     private(set) var failed = false
+    /// The comments couldn't be read (shown as such, not as "No comments").
+    private(set) var commentsFailed = false
     /// Off for a photo or video sent straight into a chat: there is nothing to fetch.
     let isRemote: Bool
     /// Where "Open on Instagram" goes when the media itself has no link yet.
@@ -20,6 +22,8 @@ final class MediaDetailModel: Identifiable {
     @ObservationIgnored private var hasMore = true
     @ObservationIgnored private let client: IGClient?
     @ObservationIgnored private var started = false
+    /// When the first page of comments was read (a hover can load it long before a click).
+    @ObservationIgnored private var commentsLoadedAt: Date?
 
     var id: String { pk }
     var webURL: URL? { media?.webURL ?? fallbackURL }
@@ -82,14 +86,59 @@ final class MediaDetailModel: Identifiable {
         loadingComments = true
         defer { loadingComments = false }
         do {
+            let first = cursor == nil
             let page = try await client.comments(pk: pk, cursor: cursor)
             let known = Set(comments.map(\.id))
             comments += page.items.filter { !known.contains($0.id) }
             cursor = page.cursor
             hasMore = page.hasMore
+            commentsFailed = false
+            if first { commentsLoadedAt = .now }
         } catch {
             let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
-            if !cancelled { hasMore = false }
+            if !cancelled {
+                hasMore = false
+                if comments.isEmpty { commentsFailed = true }
+            }
+        }
+    }
+
+    /// Opened again a while after its comments were read (or after a hover warmed it): the
+    /// first page of comments and the post's counts are read again, so a new post doesn't sit
+    /// at "No comments" and yesterday's numbers.
+    func refreshIfStale(maxAge: TimeInterval = 60) async {
+        guard let client, started, !loadingComments else { return }
+        if let at = commentsLoadedAt, Date.now.timeIntervalSince(at) < maxAge, !commentsFailed { return }
+        await reloadComments(client: client)
+    }
+
+    /// "Try again" after the comments failed to load.
+    func retryComments() async {
+        guard let client, !loadingComments else { return }
+        await reloadComments(client: client)
+    }
+
+    private func reloadComments(client: IGClient) async {
+        loadingComments = true
+        defer { loadingComments = false }
+        async let info = try? client.mediaInfo(pk: pk)
+        do {
+            let page = try await client.comments(pk: pk)
+            comments = page.items
+            cursor = page.cursor
+            hasMore = page.hasMore
+            commentsLoadedAt = .now
+            commentsFailed = false
+        } catch {
+            let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
+            if !cancelled, comments.isEmpty { commentsFailed = true }
+        }
+        // Only the numbers change: the media itself (and where its carousel is) stays.
+        if let fresh = await info, media != nil {
+            media?.likeCount = fresh.likeCount ?? media?.likeCount
+            media?.commentCount = fresh.commentCount ?? media?.commentCount
+            media?.repostCount = fresh.repostCount ?? media?.repostCount
+            media?.viewCount = fresh.viewCount ?? media?.viewCount
         }
     }
 
@@ -530,7 +579,15 @@ struct MediaDetailsColumn: View {
                 if model.isRemote {
                     Rectangle().fill(Theme.hairline).frame(height: 1)
                     if model.comments.isEmpty, !model.loadingComments {
-                        Text("No comments").font(.system(size: 12.5)).foregroundStyle(.secondary)
+                        if model.commentsFailed {
+                            HStack(spacing: 10) {
+                                Text("Couldn't load comments").font(.system(size: 12.5)).foregroundStyle(.secondary)
+                                Button("Try Again") { Task { await model.retryComments() } }
+                                    .buttonStyle(.secondaryPill)
+                            }
+                        } else {
+                            Text("No comments").font(.system(size: 12.5)).foregroundStyle(.secondary)
+                        }
                     }
                     ForEach(model.comments) { comment in
                         CommentThread(comment: comment, model: model)
