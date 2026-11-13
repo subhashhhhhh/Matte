@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// Settings (⌘,): the accounts signed in on this Mac, and Manager mode.
+/// Settings (⌘,): the accounts signed in on this Mac. (The manager tools follow the account
+/// type: they show for a professional account.)
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        @Bindable var app = app
         DialogCard(width: 520, close: close) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
@@ -30,25 +30,6 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 10)
                             .padding(.top, 6)
-                    }
-
-                    section("Manager mode") {
-                        HStack(alignment: .top, spacing: 14) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Tools for running accounts")
-                                    .font(.system(size: 14, weight: .medium))
-                                Text("Plan and schedule posts, reels and stories on a calendar, answer comments and messages from every account in one place, and see insights. Turning it off only hides these; nothing scheduled is deleted.")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer(minLength: 0)
-                            PillSwitch(isOn: $app.managerMode)
-                                .padding(.top, 2)
-                                .accessibilityLabel("Manager mode")
-                        }
-                        .padding(12)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.panel))
                     }
                 }
                 .padding(20)
@@ -89,8 +70,10 @@ private struct AccountRow: View {
                 Text(account.username.isEmpty ? account.handle : account.username)
                     .font(.system(size: 14, weight: .medium))
                     .lineLimit(1)
-                if !account.fullName.isEmpty {
-                    Text(account.fullName)
+                // "Professional" says why this account has the Planner and Replies.
+                let detail = [account.fullName, account.professional == true ? "Professional" : ""].filter { !$0.isEmpty }.joined(separator: " · ")
+                if !detail.isEmpty {
+                    Text(detail)
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

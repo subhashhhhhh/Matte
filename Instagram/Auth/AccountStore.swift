@@ -8,12 +8,18 @@ nonisolated struct AccountSummary: Codable, Hashable, Sendable, Identifiable {
     var username: String
     var fullName: String = ""
     var avatar: URL?
+    /// A business or creator account (the manager tools show for it). Nil until its profile has
+    /// loaded once.
+    var professional: Bool?
 
-    init(id: String, username: String = "", fullName: String = "", avatar: URL? = nil) {
+    init(id: String, username: String = "", fullName: String = "", avatar: URL? = nil, professional: Bool? = nil) {
         self.id = id; self.username = username; self.fullName = fullName; self.avatar = avatar
+        self.professional = professional
     }
 
-    init(_ user: User) { self.init(id: user.id, username: user.username, fullName: user.fullName, avatar: user.avatar) }
+    init(_ user: User, professional: Bool? = nil) {
+        self.init(id: user.id, username: user.username, fullName: user.fullName, avatar: user.avatar, professional: professional)
+    }
 
     /// "@name", or the id until the profile has loaded once.
     var handle: String { username.isEmpty ? "Account \(id)" : "@" + username }
@@ -69,6 +75,7 @@ nonisolated struct AccountStore: Sendable {
             var merged = account
             // A summary made before the profile loaded mustn't wipe the name we had.
             if merged.username.isEmpty { merged = list[i] }
+            if merged.professional == nil { merged.professional = list[i].professional }
             list[i] = merged
         } else {
             list.append(account)

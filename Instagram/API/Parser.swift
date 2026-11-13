@@ -20,6 +20,14 @@ nonisolated enum Parser {
                     latestStory: j["latest_reel_media"].int.flatMap { $0 > 0 ? $0 : nil })
     }
 
+    /// A business or creator account: `is_professional_account`, or `account_type` 2 (business) /
+    /// 3 (creator); 1 is personal (seen in PolarisProfilePageContentQuery, 2026-11-13).
+    static func isProfessional(_ j: JSON) -> Bool {
+        if j["is_professional_account"].bool == true || j["is_business"].bool == true { return true }
+        if let type = j["account_type"].int { return type == 2 || type == 3 }
+        return false
+    }
+
     /// A photo post's song (`music_metadata.music_info`, seen in `media/<pk>/info/`).
     static func music(_ info: JSON) -> MusicTrack? {
         let asset = info["music_asset_info"], use = info["music_consumption_info"]

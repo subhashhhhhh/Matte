@@ -372,6 +372,9 @@ nonisolated struct Profile: Hashable, Sendable {
     var followingCount: Int?
     var mutualFollowers: Int?
     var isPrivate = false
+    /// A business or creator account (what Instagram's scheduling and insights need). Nil in
+    /// profiles cached before this was read.
+    var isProfessional: Bool?
     var following = false
     var followedBy = false
     /// A follow request to this (private) account is waiting.

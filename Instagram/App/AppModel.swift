@@ -202,15 +202,13 @@ final class AppModel {
     private(set) var accounts: [AccountSummary] = []
     /// Parking one account and starting another (the switcher waits).
     private(set) var switchingAccount = false
-    /// Manager mode: planning, scheduling, replies and insights, for people who run accounts.
-    /// Off by default; turning it off only hides those (nothing scheduled is deleted).
-    var managerMode = UserDefaults.standard.bool(forKey: "managerMode") {
-        didSet {
-            UserDefaults.standard.set(managerMode, forKey: "managerMode")
-            if !managerMode, destination.managerOnly { destination = .home }
-        }
+    /// The manager tools (planner, scheduling, replies, insights): on for a professional (business
+    /// or creator) account, which is what Instagram's scheduling needs; off for a personal one.
+    /// Read from the account's profile (remembered in `accounts.json` for the next launch).
+    private(set) var managerMode = false {
+        didSet { if !managerMode, destination.managerOnly { destination = .home } }
     }
-    /// The pages the sidebar shows (Manager mode adds the Planner).
+    /// The pages the sidebar shows (a professional account adds the Planner and Replies).
     var destinations: [Destination] { Destination.allCases.filter { managerMode || !$0.managerOnly } }
     /// The Settings page, when open.
     var showSettings = false
@@ -226,7 +224,8 @@ final class AppModel {
     @ObservationIgnored private let log = Logger(subsystem: "com.subhash.Instagram", category: "App")
 
     init() {
-        if destination.managerOnly, !managerMode { destination = .home }
+        // Manager mode used to be a switch in Settings; it now follows the account type.
+        UserDefaults.standard.removeObject(forKey: "managerMode")
         if let session = IGSession.restore() {
             if let id = session.accountId {
                 // Left parked by a switch that didn't finish: the current copy wins.
@@ -351,11 +350,24 @@ final class AppModel {
         #endif
     }
 
+    /// Shows or hides the manager tools. Debug builds: `-IGForceManager YES` shows them for a
+    /// personal account too (screenshots, dry runs).
+    private func setManagerMode(_ professional: Bool) {
+        var on = professional
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "IGForceManager") { on = true }
+        #endif
+        if managerMode != on { managerMode = on }
+    }
+
     private func start(_ client: IGClient) {
         self.client = client
         generation += 1
         cache = ResponseCache(account: client.session.accountId)
         authState = .signedIn
+        // What the account was last time, until its profile says.
+        setManagerMode(accounts.first { $0.id == client.session.accountId }?.professional ?? false)
+        if destination.managerOnly, !managerMode { destination = .home }
         feed = FeedModel(app: self, client: client)
         planner = PlannerModel(app: self, client: client)
         replies = RepliesModel(app: self, client: client)
@@ -384,12 +396,14 @@ final class AppModel {
             guard let id = await client.session.userId else { return }
             guard self.client === client else { return }
             viewerId = id
-            let loaded = try? await client.profile(id: id).user
+            let profile = try? await client.profile(id: id)
             // Switched again while this loaded: it belongs to the other account.
             guard self.client === client else { return }
+            let loaded = profile?.user
             me = loaded
+            if let profile, let professional = profile.isProfessional { setManagerMode(professional) }
             if let loaded, AccountStore.isValid(loaded.id) {
-                accounts = AccountStore.shared.upsert(AccountSummary(loaded))
+                accounts = AccountStore.shared.upsert(AccountSummary(loaded, professional: profile?.isProfessional))
             }
             #if DEBUG
             // `-IGOpenMyStory YES`: open your own story (to check the viewer list).

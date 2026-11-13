@@ -62,6 +62,7 @@ extension IGClient {
         p.followingCount = u["following_count"].int
         p.mutualFollowers = u["mutual_followers_count"].int
         p.isPrivate = u["is_private"].bool ?? false
+        p.isProfessional = Parser.isProfessional(u)
         p.following = u["friendship_status"]["following"].bool ?? false
         p.followedBy = u["friendship_status"]["followed_by"].bool ?? false
         p.requested = u["friendship_status"]["outgoing_request"].bool ?? false

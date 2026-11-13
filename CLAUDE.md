@@ -34,9 +34,10 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `Instagram/Auth/` — `IGSession` (cookies, `csrftoken`, `ds_user_id`), `SignInView`, `AccountStore`
   (several accounts: the current one is `session.json`, the others are parked in `accounts/<id>.json`,
   `accounts.json` lists names/avatars; switching parks the current one and rebuilds every model).
-- Settings (⌘,, `Views/SettingsView.swift`, an in-window card): accounts and **Manager mode**
-  (`AppModel.managerMode`, off by default). Manager-only features (planner, scheduling, replies, insights)
-  appear only when it's on.
+- Settings (⌘,, `Views/SettingsView.swift`, an in-window card): the accounts. **Manager tools**
+  (`AppModel.managerMode`) follow the account type, no switch: on for a professional (business/creator) account
+  (`Parser.isProfessional`: `is_professional_account` / `account_type` 2|3 in the profile query, remembered as
+  `AccountSummary.professional`). Manager-only features (planner, scheduling, replies, insights) appear only then.
 - `Instagram/Planner/` (Manager mode): the Planner page (month calendar + upcoming list of the account's
   scheduled posts, cancel) and `SchedulePicker`. Scheduling is Instagram's own (`API/Endpoints+Schedule.swift`,
   docs/create-protocol.md "Scheduling"); the create sheet's Schedule switch sets `PostOptions.scheduledAt`.
@@ -81,7 +82,7 @@ code; don't edit their tests. **Commit only `Instagram/`, `Support/`, `docs/`,
 - `-IGProbeRest <path> [-IGProbeQuery 'a=1']`, `-IGProbeGQL <Name> [-IGProbeVars '{…}'] [-IGProbeDoc id]`,
   `-IGProbePage YES` — with `-IGProbeOut <file>`; read-only, then quit.
 - `-IGRawDir <dir>` — raw responses and the (redacted) GraphQL form for each request.
-- `-IGOpenSettings YES` — open Settings at launch. `-managerMode YES` turns Manager mode on for that launch;
+- `-IGOpenSettings YES` — open Settings at launch. `-IGForceManager YES` shows the manager tools for a personal account too;
   `-IGStartPage planner` opens the Planner; `-IGCreateScheduleDays N` (with `-IGCreateFiles`) sets the sheet to
   publish in N days (dry-run it with `-IGCreateShare YES -IGDryRunWrites <dir>`). `-IGCaptureAccount <username>`
   records as a parked account. `-IGSwitchAccount YES` — switch to the next signed-in account 5 s after launch.
