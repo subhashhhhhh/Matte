@@ -56,7 +56,7 @@ struct GridTile: View {
             .overlay {
                 RemoteImage(url: media.image(minWidth: 480), contentMode: .fill)
                     .scaleEffect(hovering && !Motion.reduced ? 1.04 : 1)
-                if isPreviewing, let url = previewVideo { HoverPreview(url: url) }
+                if isPreviewing, let url = previewVideo { HoverPreview(url: url, sound: false) }
             }
             .clipped()
             .animation(.easeOut(duration: 0.35), value: hovering)

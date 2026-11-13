@@ -65,6 +65,8 @@ struct PostTile: View {
         // Paged onto a video while resting on the card: preview it (and stop on a photo).
         .onChange(of: page) {
             if hovering, previewVideo != nil { setPreviewing(true) } else if isPreviewing, previewVideo == nil { setPreviewing(false) }
+            // A carousel's song gives way to a video page's own sound, and comes back on a photo.
+            if previewVideo != nil { musicTask?.cancel(); PostMusic.shared.release(holder) } else if hovering { hoverMusic(true) }
             prefetchNeighbours()
         }
         .onHover { inside in
@@ -148,8 +150,12 @@ struct PostTile: View {
                 badge("square.on.square.fill", text: page > 0 ? "\(page + 1)/\(post.children.count)" : "\(post.children.count)")
             } else if post.isVideo, !isPreviewing {
                 badge("play.fill", text: nil)
-            } else if music.playingPk == post.pk {
-                MuteButton().padding(8)
+            }
+        }
+        // Sound on: the hovered video, or a photo post's song (carousels too).
+        .overlay(alignment: .bottomTrailing) {
+            if isPreviewing && previewVideo != nil || music.playingPk == post.pk {
+                MuteButton().padding(8).transition(.opacity)
             }
         }
     }
@@ -227,7 +233,11 @@ struct PostTile: View {
 /// A silent looping preview while the pointer rests on a video post.
 struct HoverPreview: View {
     let url: URL
+    /// With sound (the app's sound setting), as the phone's feed plays it; muted in grids.
+    var sound = true
     @State private var video: LoopingVideo?
+    @State private var setting = SoundSetting.shared
+    @Environment(\.onScreen) private var onScreen
 
     var body: some View {
         ZStack {
@@ -235,10 +245,12 @@ struct HoverPreview: View {
         }
         .allowsHitTesting(false)
         .onAppear {
-            let v = LoopingVideo(url: url, muted: true)
-            v.play()
+            let v = LoopingVideo(url: url, muted: !sound || setting.muted)
+            if onScreen { v.play() }
             video = v
         }
+        .onChange(of: setting.muted) { video?.isMuted = !sound || setting.muted }
+        .onChange(of: onScreen) { if onScreen { video?.play() } else { video?.pause() } }
         .onDisappear {
             video?.tearDown()
             video = nil
