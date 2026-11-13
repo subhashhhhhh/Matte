@@ -27,6 +27,10 @@ struct InstagramApp: App {
                 Button("Settings…") { app.showSettings = true }
                     .keyboardShortcut(",")
             }
+            CommandGroup(before: .toolbar) {
+                Button(app.isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar") { app.toggleSidebar() }
+                    .keyboardShortcut("s", modifiers: [.control, .command])
+            }
         }
     }
 }

@@ -328,7 +328,7 @@ private struct StoriesColumn: View {
                     }
                 }
                 ChromeButton(collapsed ? "Show stories" : "Hide stories",
-                             symbol: collapsed ? "sidebar.left" : "chevron.left.2") {
+                             symbol: collapsed ? "chevron.right.2" : "chevron.left.2") {
                     withAnimation(.smooth(duration: 0.25)) { collapsed.toggle() }
                 }
             }

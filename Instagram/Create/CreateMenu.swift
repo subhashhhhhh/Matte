@@ -6,7 +6,8 @@ struct CreateMenu: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        GeometryReader { geo in
+        ZStack(alignment: .topLeading) {
             Color.black.opacity(0.001).ignoresSafeArea()
                 .onTapGesture { app.showCreateMenu = false }
             VStack(alignment: .leading, spacing: 2) {
@@ -26,8 +27,10 @@ struct CreateMenu: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.panelStroke))
             .shadow(color: .black.opacity(0.22), radius: 18, y: 6)
             .popIn(from: 0.9)
-            .padding(.leading, 72 + 6)
-            .padding(.bottom, 66)
+            .padding(.leading, app.sidebarWidth + 6)
+            // Level with the sidebar's Create item.
+            .padding(.top, max(8, app.createItemFrame.minY - geo.frame(in: .global).minY - 8))
+        }
         }
         .background {
             Button("") { app.showCreateMenu = false }.keyboardShortcut(.cancelAction).opacity(0)

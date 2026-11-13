@@ -210,6 +210,18 @@ final class AppModel {
     }
     /// The pages the sidebar shows (a professional account adds the Planner and Replies).
     var destinations: [Destination] { Destination.allCases.filter { managerMode || !$0.managerOnly } }
+    /// The sidebar is a narrow rail of icons (⌃⌘S), remembered across launches.
+    var isSidebarCollapsed = UserDefaults.standard.bool(forKey: "sidebarCollapsed") {
+        didSet { UserDefaults.standard.set(isSidebarCollapsed, forKey: "sidebarCollapsed") }
+    }
+    /// Where the sidebar's Create item is (window coordinates): the create menu opens beside it.
+    @ObservationIgnored var createItemFrame: CGRect = .zero
+    /// The sidebar column's width now (the panel and its inset).
+    var sidebarWidth: CGFloat { isSidebarCollapsed ? SidebarMetrics.railWidth : SidebarMetrics.fullWidth }
+
+    func toggleSidebar() {
+        withAnimation(.smooth(duration: 0.3)) { isSidebarCollapsed.toggle() }
+    }
     /// The Settings page, when open.
     var showSettings = false
     /// Bumped each time a session starts (sign-in, switch): the pages take it as their identity,
