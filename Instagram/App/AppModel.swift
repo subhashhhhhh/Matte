@@ -446,6 +446,8 @@ final class AppModel {
 
     func openProfile(_ user: User) {
         guard let client else { return }
+        // Picked from a likes list: the list's done.
+        peopleList = nil
         // The open post or reel shrinks into the corner and keeps playing.
         shrinkOpenPost(from: .init(destination: destination, profiles: profiles))
         activity?.isOpen = false
@@ -459,6 +461,24 @@ final class AppModel {
     func openPost(pk: String) {
         guard let client else { return }
         openedPost = MediaDetailModel.cached(pk: pk, client: client)
+    }
+
+    /// Who liked a post or comment, in the followers-list panel over everything.
+    var peopleList: FollowListModel?
+
+    func showLikers(_ media: Media) {
+        guard let client else { return }
+        let pk = media.pk
+        peopleList = FollowListModel(title: "Likes", client: client, app: self) { _ in
+            Page(items: try await client.likers(pk: pk), cursor: nil, hasMore: false)
+        }
+    }
+
+    func showCommentLikers(_ commentId: String) {
+        guard let client else { return }
+        peopleList = FollowListModel(title: "Likes", client: client, app: self) { cursor in
+            try await client.commentLikers(commentId: commentId, after: cursor)
+        }
     }
 
     /// A profile from just a username (a story mention): looked up by search, exact match only.
@@ -476,6 +496,7 @@ final class AppModel {
 
     /// A hashtag's page ("travel" or "#travel").
     func openHashtag(_ name: String) {
+        peopleList = nil
         guard let client else { return }
         stories?.close()
         let page = StackPage.hashtag(HashtagModel(name: name, app: self, client: client))

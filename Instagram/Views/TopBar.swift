@@ -58,6 +58,9 @@ private struct SearchField: View {
     @Environment(AppModel.self) private var app
     @FocusState private var focused: Bool
     @State private var highlighted = 0
+    /// Recent searches show once you click into the box or press ⌘F (the box also gets the
+    /// keyboard when the window opens; that alone shouldn't open them).
+    @State private var showRecent = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -66,10 +69,11 @@ private struct SearchField: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 14))
                 .focused($focused)
+                .simultaneousGesture(TapGesture().onEnded { showRecent = true; model.loadRecent() })
                 .onSubmit { openHighlighted() }
                 .onKeyPress(.downArrow) { highlighted = min(highlighted + 1, max(0, rows - 1)); return .handled }
                 .onKeyPress(.upArrow) { highlighted = max(highlighted - 1, 0); return .handled }
-                .onKeyPress(.escape) { model.clear(); focused = false; return .handled }
+                .onKeyPress(.escape) { model.clear(); showRecent = false; focused = false; return .handled }
             if model.isSearching { Spinner(size: 12) }
             if !model.query.isEmpty {
                 Button { model.clear() } label: {
@@ -87,22 +91,91 @@ private struct SearchField: View {
                 results
                     .offset(y: 42)
                     .transition(.opacity)
+            } else if focused, showRecent, model.query.isEmpty, !model.recent.isEmpty {
+                recentPanel
+                    .offset(y: 42)
+                    .transition(.opacity)
             }
         }
         .background {
             // ⌘F jumps to search; ⌘K opens the quick switcher.
             Group {
-                Button("") { focused = true }.keyboardShortcut("f")
+                Button("") { focused = true; showRecent = true; model.loadRecent() }.keyboardShortcut("f")
                 Button("") { app.showSwitcher = true }.keyboardShortcut("k")
             }
             .opacity(0)
             .allowsHitTesting(false)
         }
         .onChange(of: model.query) { highlighted = 0 }
-        .onChange(of: focused) { if focused { model.sessionId = UUID().uuidString.lowercased() } }
+        .onChange(of: focused) {
+            if focused { model.sessionId = UUID().uuidString.lowercased() } else { showRecent = false }
+        }
     }
 
-    private var rows: Int { min(model.results.users.count, 8) + min(model.results.hashtags.count, 4) }
+    private var rows: Int {
+        model.query.isEmpty ? min(model.recent.count, 12) : min(model.results.users.count, 8) + min(model.results.hashtags.count, 4)
+    }
+
+    /// Recent searches, before you type: click one to go back to it.
+    private var recentPanel: some View {
+        let items = Array(model.recent.prefix(12))
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("Recent")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.top, 4)
+                .padding(.bottom, 2)
+            ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
+                row(i) {
+                    switch item {
+                    case .user(let user):
+                        StoryRing(seen: user.latestStory == nil, lineWidth: 2) { Avatar(url: user.avatar, size: 34) }
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 4) {
+                                Text(user.username).font(.system(size: 13.5, weight: .semibold))
+                                if user.isVerified { VerifiedBadge(size: 11) }
+                            }
+                            if !user.fullName.isEmpty {
+                                Text(user.fullName).font(.system(size: 12)).foregroundStyle(.secondary)
+                            }
+                        }
+                    case .hashtag(let tag):
+                        Text("#").font(.system(size: 18, weight: .semibold))
+                            .frame(width: 40, height: 40)
+                            .background(Circle().strokeBorder(Theme.panelStroke))
+                        Text("#\(tag.name)").font(.system(size: 13.5, weight: .semibold))
+                    case .keyword(let word):
+                        IGGlyph(icon: .search, size: 15)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().strokeBorder(Theme.panelStroke))
+                        Text(word).font(.system(size: 13.5)).lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button { model.removeRecent(word) } label: {
+                            Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                                .frame(width: 24, height: 24).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove from recent searches")
+                    }
+                } action: { open(item) }
+            }
+        }
+        .padding(6)
+        .frame(width: 420, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.background))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.panelStroke))
+        .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
+    }
+
+    private func open(_ item: RecentSearch) {
+        switch item {
+        case .user(let u): open(u)
+        case .hashtag(let t): open(t)
+        case .keyword(let w): model.query = w
+        }
+    }
 
     private var results: some View {
         let users = Array(model.results.users.prefix(8))
@@ -155,6 +228,11 @@ private struct SearchField: View {
     }
 
     private func openHighlighted() {
+        if model.query.isEmpty {
+            let items = Array(model.recent.prefix(12))
+            if items.indices.contains(highlighted) { open(items[highlighted]) }
+            return
+        }
         let users = Array(model.results.users.prefix(8))
         if users.indices.contains(highlighted) { open(users[highlighted]); return }
         let j = highlighted - users.count

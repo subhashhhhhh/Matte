@@ -181,6 +181,7 @@ enum DebugProbe {
                     ("collection add", { try await client.addToCollection("17900000000000001", media: post) }),
                     ("collection remove", { try await client.removeFromCollection("17900000000000001", media: post) }),
                     ("collection create", { _ = try await client.createCollection(named: "c", with: post) }),
+                    ("recent search remove", { try await client.removeRecentKeyword("test") }),
                     ("repost", { _ = try await client.repost(media: post) }),
                     ("unrepost", { try await client.deleteRepost(noteId: "900000000000001") }),
                     ("repost text", { try await client.updateRepost(noteId: "900000000000001", text: "t") }),

@@ -71,6 +71,12 @@ struct RootView: View {
                     .transition(app.openedPostFromMini ? .asymmetric(insertion: .identity, removal: .opacity) : .opacity)
                     .zIndex(15)
             }
+            if let list = app.peopleList {
+                FollowListPanel(model: list) { app.peopleList = nil }
+                    .id(list.id)
+                    .transition(.opacity)
+                    .zIndex(18)
+            }
             if app.showCreateMenu, app.authState == .signedIn {
                 CreateMenu()
                     .transition(.opacity)
@@ -113,6 +119,7 @@ struct RootView: View {
         .animation(.easeOut(duration: 0.16), value: app.creating == nil)
         .animation(.easeOut(duration: 0.2), value: app.storyEditor == nil)
         .animation(.easeOut(duration: 0.12), value: app.showCreateMenu)
+        .animation(.easeOut(duration: 0.16), value: app.peopleList?.id)
         .animation(.easeOut(duration: 0.14), value: app.droppedFiles == nil)
         .animation(.easeOut(duration: 0.14), value: app.editingCaption == nil)
         .animation(.easeOut(duration: 0.14), value: app.confirmingDelete == nil)

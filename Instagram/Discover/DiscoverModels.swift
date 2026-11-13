@@ -185,4 +185,22 @@ final class SearchModel {
         query = ""
         sessionId = UUID().uuidString.lowercased()
     }
+
+    /// Your recent searches (Instagram's, shared with the app and the website), shown in the
+    /// empty search box.
+    private(set) var recent: [RecentSearch] = []
+
+    func loadRecent() {
+        Task { if let found = try? await client.recentSearches() { recent = found } }
+    }
+
+    /// Removes a typed search from the history (people and hashtags can't be removed yet:
+    /// only removing a typed search has been recorded).
+    func removeRecent(_ word: String) {
+        let before = recent
+        recent.removeAll { $0 == .keyword(word) }
+        Task {
+            do { try await client.removeRecentKeyword(word) } catch { recent = before }
+        }
+    }
 }

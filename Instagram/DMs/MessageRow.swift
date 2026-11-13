@@ -289,7 +289,7 @@ struct ShareCard: View {
                 Text(eyebrow).font(.system(size: 11)).foregroundStyle(.secondary).padding([.horizontal, .top], 10)
             }
             if let caption = share.caption ?? share.subtitle, !caption.isEmpty {
-                Text(caption).font(.system(size: 12)).lineLimit(3).padding(10)
+                RichText(caption).font(.system(size: 12)).lineLimit(3).padding(10)
             }
         }
         .frame(width: 220, alignment: .leading)

@@ -44,7 +44,8 @@ struct FollowListPanel: View {
                 } else if model.failed {
                     EmptyState(symbol: "wifi.exclamationmark", title: "Couldn't load this list")
                 } else {
-                    EmptyState(symbol: "person.2", title: model.followers ? "No followers yet" : "Not following anyone")
+                    EmptyState(symbol: model.isFollowList ? "person.2" : "heart",
+                               title: !model.isFollowList ? "No likes yet" : model.followers ? "No followers yet" : "Not following anyone")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -57,7 +58,7 @@ struct FollowListPanel: View {
                     }
                     if model.isLoading {
                         Spinner().padding(16)
-                    } else if !model.hasMore, !model.isMine {
+                    } else if !model.hasMore, !model.isMine, model.isFollowList {
                         Text("Instagram shows only part of other people's lists.")
                             .font(.system(size: 12))
                             .foregroundStyle(.tertiary)

@@ -242,7 +242,7 @@ struct PostTile: View {
             PostActionBar(media: post, size: 20, onComment: open)
             LikedByLine(media: post, avatarSize: 18, fontSize: 12)
             if let caption = post.caption, !caption.isEmpty {
-                Text(caption).font(.system(size: 12.5)).lineLimit(2).foregroundStyle(.primary.opacity(0.85))
+                RichText(caption).font(.system(size: 12.5)).lineLimit(2).foregroundStyle(.primary.opacity(0.85))
             }
         }
     }

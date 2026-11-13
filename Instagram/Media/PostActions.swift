@@ -360,7 +360,9 @@ struct PostActionBar: View {
             HStack(spacing: size * 0.65) {
                 HStack(spacing: 5) {
                     LikeButton(liked: state.liked, size: size) { actions.toggleLike(media) }
-                    if !media.countsHidden, let n = state.likeCount, n > 0 { count(n) }
+                    if !media.countsHidden, let n = state.likeCount, n > 0 {
+                        count(n).contentShape(Rectangle()).onTapGesture { app.showLikers(media) }.help("See who liked this")
+                    }
                 }
                 HStack(spacing: 5) {
                     iconButton(.comment, help: "Comments") { onComment?() }
@@ -491,6 +493,7 @@ struct LikedByLine: View {
     let media: Media
     var avatarSize: CGFloat = 20
     var fontSize: CGFloat = 12.5
+    @Environment(AppModel.self) private var app
 
     private var name: (text: String, user: User?)? {
         if let u = media.likedBy.first(where: { !$0.username.isEmpty }) { return (u.username, u) }
@@ -517,6 +520,10 @@ struct LikedByLine: View {
                     if (media.likedByCount ?? media.likeCount ?? 2) > 1 {
                         Text(" and ").foregroundStyle(.secondary)
                         Text("others").fontWeight(.semibold)
+                            .contentShape(Rectangle())
+                            .onTapGesture { app.showLikers(media) }
+                            .pointingHand()
+                            .help("See who liked this")
                     }
                 }
                 .font(.system(size: fontSize))

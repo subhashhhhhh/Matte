@@ -518,7 +518,7 @@ struct MediaDetailsColumn: View {
                 if let media = model.media {
                     if showsHeader { author(media) }
                     if let caption = media.caption, !caption.isEmpty {
-                        Text(caption)
+                        RichText(caption)
                             .font(.system(size: 13))
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
@@ -616,6 +616,7 @@ struct CommentRow: View {
     let comment: IGComment
     let model: MediaDetailModel
     var avatarSize: CGFloat = 28
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -628,7 +629,7 @@ struct CommentRow: View {
                     }
                 }
                 if !comment.text.isEmpty {
-                    Text(comment.text)
+                    RichText(comment.text)
                         .font(.system(size: 12.5))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
@@ -636,7 +637,11 @@ struct CommentRow: View {
                 if let gif = comment.gif { GIFView(gif: gif) }
                 HStack(spacing: 12) {
                     if comment.likeCount > 0 {
-                        Text("\(comment.likeCount.compact) \(comment.likeCount == 1 ? "like" : "likes")")
+                        Button("\(comment.likeCount.compact) \(comment.likeCount == 1 ? "like" : "likes")") {
+                            app.showCommentLikers(comment.id)
+                        }
+                        .buttonStyle(.plain)
+                        .help("See who liked this comment")
                     }
                     if !comment.id.hasPrefix("local-") {
                         Button("Reply") { model.replyingTo = comment }

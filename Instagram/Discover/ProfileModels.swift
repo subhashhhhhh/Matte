@@ -436,8 +436,26 @@ final class FollowListModel: Identifiable {
     @ObservationIgnored private let client: IGClient
     @ObservationIgnored private weak var app: AppModel?
 
-    var id: String { owner.id + (followers ? "/followers" : "/following") }
-    var title: String { followers ? "Followers" : "Following" }
+    /// Another list of people in the same panel (who liked a post or a comment).
+    @ObservationIgnored private var loader: ((String?) async throws -> Page<User>)?
+    @ObservationIgnored private var customTitle: String?
+    @ObservationIgnored private var listId = UUID().uuidString
+    /// A followers/following list (not likers).
+    var isFollowList: Bool { loader == nil }
+
+    var id: String { isFollowList ? owner.id + (followers ? "/followers" : "/following") : listId }
+    var title: String { customTitle ?? (followers ? "Followers" : "Following") }
+
+    /// People who liked something: `load` gets the next page (nil cursor: the first).
+    init(title: String, client: IGClient, app: AppModel?, load: @escaping (String?) async throws -> Page<User>) {
+        owner = User(id: "", username: "", fullName: "")
+        followers = false
+        isMine = false
+        self.client = client
+        self.app = app
+        loader = load
+        customTitle = title
+    }
 
     init(owner: User, followers: Bool, isMine: Bool, client: IGClient, app: AppModel?) {
         self.owner = owner
@@ -457,7 +475,10 @@ final class FollowListModel: Identifiable {
         isLoading = true
         defer { isLoading = false }
         do {
-            let page = try await client.followList(userId: owner.id, followers: followers, maxId: cursor)
+            let page: Page<User>
+            if let loader { page = try await loader(cursor) } else {
+                page = try await client.followList(userId: owner.id, followers: followers, maxId: cursor)
+            }
             let known = Set(users.map(\.id))
             let fresh = page.items.filter { !known.contains($0.id) }
             users += fresh

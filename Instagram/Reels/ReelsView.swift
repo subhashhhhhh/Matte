@@ -253,7 +253,7 @@ struct ReelsView: View {
                     .foregroundStyle(.white.opacity(0.85))
             }
             if showsCaption, let caption = reel.caption, !caption.isEmpty {
-                Text(caption).font(.system(size: 12.5)).lineLimit(2)
+                RichText(caption).font(.system(size: 12.5)).lineLimit(2)
             }
         }
         .foregroundStyle(.white)
