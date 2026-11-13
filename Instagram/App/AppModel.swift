@@ -308,6 +308,35 @@ final class AppModel {
                 }
             }
         }
+        // `-IGLogScroll YES`: log every scroll event with the views under the pointer, to
+        // ~/Library/Logs/Matte-scroll.log (finding what swallows scrolling).
+        if UserDefaults.standard.bool(forKey: "IGLogScroll") {
+            let url = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Logs/Matte-scroll.log")
+            try? Data().write(to: url)
+            let handle = try? FileHandle(forWritingTo: url)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { e in
+                guard let window = e.window, let content = window.contentView else { return e }
+                let p = content.convert(e.locationInWindow, from: nil)
+                var chain: [String] = []
+                var v = content.hitTest(p)
+                while let view = v, chain.count < 14 { chain.append(String(describing: type(of: view))); v = view.superview }
+                let line = String(format: "%.3f dy=%.1f phase=%lu momentum=%lu full=%d win=%.0fx%.0f at=%.0f,%.0f | ",
+                                  e.timestamp, e.scrollingDeltaY, e.phase.rawValue, e.momentumPhase.rawValue,
+                                  window.styleMask.contains(.fullScreen) ? 1 : 0, window.frame.width, window.frame.height, p.x, p.y)
+                    + chain.joined(separator: " < ") + "\n"
+                handle?.seekToEndOfFile()
+                handle?.write(Data(line.utf8))
+                return e
+            }
+            }
+        }
+        // `-IGFullScreen YES`: put the window in full screen 1 s after launch.
+        if UserDefaults.standard.bool(forKey: "IGFullScreen") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                NSApp.windows.first { $0.isVisible && $0.canBecomeMain }?.toggleFullScreen(nil)
+            }
+        }
         // `-IGShowSwitcher YES`: open the ⌘K switcher at launch.
         showSwitcher = UserDefaults.standard.bool(forKey: "IGShowSwitcher")
         // `-IGOpenSettings YES`: open Settings at launch.
